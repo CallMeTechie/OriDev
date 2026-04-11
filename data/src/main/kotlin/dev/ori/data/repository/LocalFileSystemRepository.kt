@@ -11,7 +11,18 @@ class LocalFileSystemRepository @Inject constructor() : FileSystemRepository {
 
     override suspend fun listFiles(path: String): List<FileItem> = withContext(Dispatchers.IO) {
         val dir = File(path)
-        dir.listFiles()?.map { it.toFileItem() } ?: emptyList()
+        val files = dir.listFiles()?.map { it.toFileItem() } ?: emptyList()
+
+        // Attempt to enrich with git status for local repositories
+        val gitStatuses = GitStatusParser.parseStatus(dir)
+        if (gitStatuses.isEmpty()) {
+            files
+        } else {
+            files.map { item ->
+                val status = gitStatuses[item.path]
+                if (status != null) item.copy(gitStatus = status) else item
+            }
+        }
     }
 
     override suspend fun deleteFile(path: String): Unit = withContext(Dispatchers.IO) {
