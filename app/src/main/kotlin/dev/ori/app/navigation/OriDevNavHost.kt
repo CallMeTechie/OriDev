@@ -11,7 +11,9 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import dev.ori.feature.connections.navigation.CONNECTIONS_ROUTE
+import dev.ori.feature.connections.navigation.addConnectionScreen
 import dev.ori.feature.connections.navigation.connectionsScreen
+import dev.ori.feature.connections.navigation.editConnectionScreen
 import dev.ori.feature.filemanager.navigation.fileManagerScreen
 import dev.ori.feature.terminal.navigation.terminalScreen
 
@@ -25,7 +27,11 @@ fun OriDevNavHost(
         startDestination = CONNECTIONS_ROUTE,
         modifier = modifier,
     ) {
-        connectionsScreen()
+        connectionsScreen(navController)
+
+        addConnectionScreen(navController)
+
+        editConnectionScreen(navController)
 
         fileManagerScreen()
 

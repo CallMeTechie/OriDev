@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,10 +30,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -44,13 +49,22 @@ import dev.ori.core.ui.component.ProtocolBadge
 import dev.ori.core.ui.component.StatusDot
 import dev.ori.domain.model.ConnectionStatus
 import dev.ori.domain.model.ServerProfile
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConnectionListScreen(
+    onNavigateToAdd: () -> Unit = {},
+    onNavigateToEdit: (Long) -> Unit = {},
     viewModel: ConnectionListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    // Bottom sheet state
+    var selectedProfile by remember { mutableStateOf<ServerProfile?>(null) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
@@ -59,13 +73,45 @@ fun ConnectionListScreen(
         }
     }
 
+    // Show bottom sheet when a profile is selected
+    selectedProfile?.let { profile ->
+        val isConnected = uiState.activeConnections.any {
+            it.profileId == profile.id && it.status == ConnectionStatus.CONNECTED
+        }
+        ConnectionDetailSheet(
+            profile = profile,
+            isConnected = isConnected,
+            sheetState = sheetState,
+            onDismiss = { selectedProfile = null },
+            onConnect = {
+                viewModel.onEvent(ConnectionListEvent.Connect(profile.id))
+                selectedProfile = null
+            },
+            onDisconnect = {
+                viewModel.onEvent(ConnectionListEvent.Disconnect(profile.id))
+                selectedProfile = null
+            },
+            onEdit = {
+                scope.launch { sheetState.hide() }
+                selectedProfile = null
+                onNavigateToEdit(profile.id)
+            },
+            onDelete = {
+                viewModel.onEvent(ConnectionListEvent.Delete(profile))
+                selectedProfile = null
+            },
+            onOpenTerminal = { /* TODO: navigate to terminal */ },
+            onOpenFileManager = { /* TODO: navigate to file manager */ },
+        )
+    }
+
     Scaffold(
         topBar = {
             OriDevTopBar(title = "Connections")
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { /* Add connection -- coming soon */ },
+                onClick = onNavigateToAdd,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
             ) {
@@ -145,16 +191,7 @@ fun ConnectionListScreen(
                                 ServerProfileCard(
                                     profile = profile,
                                     isConnected = isConnected,
-                                    onConnect = {
-                                        viewModel.onEvent(
-                                            ConnectionListEvent.Connect(profile.id),
-                                        )
-                                    },
-                                    onDisconnect = {
-                                        viewModel.onEvent(
-                                            ConnectionListEvent.Disconnect(profile.id),
-                                        )
-                                    },
+                                    onClick = { selectedProfile = profile },
                                     onToggleFavorite = {
                                         viewModel.onEvent(
                                             ConnectionListEvent.ToggleFavorite(profile),
@@ -174,8 +211,7 @@ fun ConnectionListScreen(
 private fun ServerProfileCard(
     profile: ServerProfile,
     isConnected: Boolean,
-    onConnect: () -> Unit,
-    onDisconnect: () -> Unit,
+    onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -183,7 +219,7 @@ private fun ServerProfileCard(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .clickable { if (isConnected) onDisconnect() else onConnect() },
+            .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
