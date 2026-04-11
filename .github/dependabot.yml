@@ -8,13 +8,48 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - dependencies
+      - automated
+    reviewers:
+      - CallMeTechie
     groups:
-      compose:
-        patterns:
-          - "androidx.compose*"
       kotlin:
         patterns:
           - "org.jetbrains.kotlin*"
+        update-types:
+          - "minor"
+          - "patch"
+      compose:
+        patterns:
+          - "androidx.compose*"
+        update-types:
+          - "minor"
+          - "patch"
+      hilt:
+        patterns:
+          - "com.google.dagger*"
+        update-types:
+          - "minor"
+          - "patch"
+      androidx:
+        patterns:
+          - "androidx.*"
+        exclude-patterns:
+          - "androidx.compose*"
+        update-types:
+          - "minor"
+          - "patch"
+      testing:
+        patterns:
+          - "org.junit*"
+          - "io.mockk*"
+          - "app.cash.turbine*"
+          - "com.google.truth*"
+    commit-message:
+      prefix: "chore(deps)"
+    ignore:
+      # Don't auto-update Hilt past 2.58 (AGP 8.x compat)
+      - dependency-name: "com.google.dagger:*"
+        versions: [">=2.59"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -22,3 +57,6 @@ updates:
       interval: weekly
     labels:
       - ci
+      - automated
+    commit-message:
+      prefix: "ci(deps)"
