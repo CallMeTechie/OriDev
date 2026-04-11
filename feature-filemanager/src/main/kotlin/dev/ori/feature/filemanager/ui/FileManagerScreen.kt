@@ -54,6 +54,14 @@ fun FileManagerScreen(
         viewModel.onEvent(FileManagerEvent.SetFoldState(isFolded))
     }
 
+    // Show transfer snackbar
+    LaunchedEffect(uiState.transferSnackbar) {
+        uiState.transferSnackbar?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearTransferSnackbar()
+        }
+    }
+
     // Show errors via snackbar
     LaunchedEffect(uiState.leftPane.error, uiState.rightPane.error) {
         val leftError = uiState.leftPane.error
@@ -144,6 +152,7 @@ fun FileManagerScreen(
                 UnfoldedContent(
                     uiState = uiState,
                     onEvent = viewModel::onEvent,
+                    viewModel = viewModel,
                 )
             }
         }
@@ -223,15 +232,18 @@ private fun FoldedContent(
 private fun UnfoldedContent(
     uiState: FileManagerUiState,
     onEvent: (FileManagerEvent) -> Unit,
+    viewModel: FileManagerViewModel,
 ) {
     DualPaneLayout(
         splitRatio = uiState.splitRatio,
         onSplitRatioChange = { onEvent(FileManagerEvent.UpdateSplitRatio(it)) },
+        dragState = uiState.dragState,
         leftPane = {
             PaneContent(
                 paneState = uiState.leftPane,
                 pane = ActivePane.LEFT,
                 onEvent = onEvent,
+                viewModel = viewModel,
             )
         },
         rightPane = {
@@ -239,6 +251,7 @@ private fun UnfoldedContent(
                 paneState = uiState.rightPane,
                 pane = ActivePane.RIGHT,
                 onEvent = onEvent,
+                viewModel = viewModel,
             )
         },
     )
@@ -249,6 +262,7 @@ private fun PaneContent(
     paneState: PaneState,
     pane: ActivePane,
     onEvent: (FileManagerEvent) -> Unit,
+    viewModel: FileManagerViewModel? = null,
 ) {
     FileListPane(
         paneState = paneState,
@@ -269,5 +283,22 @@ private fun PaneContent(
             onEvent(FileManagerEvent.DeleteSelected(pane))
         },
         onChmod = { /* Chmod dialog -- handled by parent in future iteration */ },
+        onDragStart = { filePath ->
+            val selectedPaths = paneState.selectedFiles.toList().ifEmpty { listOf(filePath) }
+            viewModel?.setDragState(
+                DragState(isDragging = true, sourcePane = pane, draggedPaths = selectedPaths),
+            )
+        },
+        onDragEnd = {
+            viewModel?.setDragState(DragState())
+        },
+        onDrop = {
+            viewModel?.let { vm ->
+                val dragState = vm.uiState.value.dragState
+                if (dragState.isDragging && dragState.sourcePane != null && dragState.sourcePane != pane) {
+                    onEvent(FileManagerEvent.InitiateTransfer(dragState.draggedPaths, dragState.sourcePane))
+                }
+            }
+        },
     )
 }

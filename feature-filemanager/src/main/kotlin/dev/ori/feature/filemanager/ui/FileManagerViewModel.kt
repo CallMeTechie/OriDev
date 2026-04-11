@@ -67,6 +67,7 @@ class FileManagerViewModel @Inject constructor(
             is FileManagerEvent.ClearError -> clearError(event.pane)
             is FileManagerEvent.AddBookmark -> { /* Bookmark persistence -- deferred */ }
             is FileManagerEvent.RemoveBookmark -> { /* Bookmark persistence -- deferred */ }
+            is FileManagerEvent.InitiateTransfer -> initiateTransfer(event.sourcePaths, event.sourcePane)
         }
     }
 
@@ -215,6 +216,26 @@ class FileManagerViewModel @Inject constructor(
 
     private fun clearError(pane: ActivePane) {
         updatePaneState(pane) { it.copy(error = null) }
+    }
+
+    private fun initiateTransfer(sourcePaths: List<String>, sourcePane: ActivePane) {
+        if (sourcePaths.isEmpty()) return
+        val count = sourcePaths.size
+        _uiState.update {
+            it.copy(
+                transferSnackbar = "Transfer queued: $count file${if (count > 1) "s" else ""}",
+                dragState = DragState(),
+            )
+        }
+        // Actual transfer logic deferred to Phase 5 TransferWorker
+    }
+
+    fun setDragState(dragState: DragState) {
+        _uiState.update { it.copy(dragState = dragState) }
+    }
+
+    fun clearTransferSnackbar() {
+        _uiState.update { it.copy(transferSnackbar = null) }
     }
 
     private fun loadBookmarks() {

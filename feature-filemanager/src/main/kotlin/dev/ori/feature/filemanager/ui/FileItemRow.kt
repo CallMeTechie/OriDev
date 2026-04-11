@@ -3,6 +3,7 @@ package dev.ori.feature.filemanager.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ori.core.common.extension.toHumanReadableSize
@@ -46,6 +48,9 @@ fun FileItemRow(
     onLongClick: () -> Unit,
     onToggleSelection: () -> Unit,
     modifier: Modifier = Modifier,
+    onDragStart: () -> Unit = {},
+    onDragEnd: () -> Unit = {},
+    onDrop: () -> Unit = {},
 ) {
     val backgroundColor = if (isSelected) Indigo50 else Color.Transparent
 
@@ -57,6 +62,17 @@ fun FileItemRow(
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
+            .pointerInput(Unit) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { onDragStart() },
+                    onDragEnd = {
+                        onDrop()
+                        onDragEnd()
+                    },
+                    onDragCancel = { onDragEnd() },
+                    onDrag = { change, _ -> change.consume() },
+                )
+            }
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
