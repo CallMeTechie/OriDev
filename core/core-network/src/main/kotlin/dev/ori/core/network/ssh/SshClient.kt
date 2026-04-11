@@ -36,4 +36,10 @@ interface SshClient {
     suspend fun mkdir(sessionId: String, path: String)
 
     suspend fun chmod(sessionId: String, path: String, permissions: Int)
+
+    suspend fun openShell(
+        sessionId: String,
+        cols: Int = 80,
+        rows: Int = 24,
+    ): ShellHandle
 }
