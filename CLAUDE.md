@@ -70,6 +70,6 @@ Multi-module Android project: Kotlin, Jetpack Compose, Material 3, Hilt, Room, M
 
 - SSH/SFTP: SSHJ (com.hierynomus:sshj)
 - FTP: Apache Commons Net
-- Terminal: Termux terminal-view (Apache 2.0 -- verify license)
+- Terminal: ConnectBot termlib (Apache 2.0, org.connectbot:termlib)
 - Editor: Sora-Editor (io.github.Rosemoe.sora-editor)
 - Proxmox API: OkHttp + Moshi
