@@ -64,6 +64,8 @@ class TerminalViewModel @Inject constructor(
             is TerminalEvent.SetFontSize -> setFontSize(event.size)
             is TerminalEvent.ResizeTerminal -> resizeTerminal(event.cols, event.rows)
             is TerminalEvent.ClearError -> clearError()
+            is TerminalEvent.ToggleServerPicker -> toggleServerPicker()
+            is TerminalEvent.SelectServer -> selectServer(event.profileId, event.serverName)
         }
     }
 
@@ -269,6 +271,29 @@ class TerminalViewModel @Inject constructor(
 
     private fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    private fun toggleServerPicker() {
+        val currentlyShowing = _uiState.value.showServerPicker
+        if (!currentlyShowing) {
+            viewModelScope.launch {
+                connectionRepository.getAllProfiles().collect { profiles ->
+                    _uiState.update {
+                        it.copy(
+                            showServerPicker = true,
+                            availableServers = profiles,
+                        )
+                    }
+                }
+            }
+        } else {
+            _uiState.update { it.copy(showServerPicker = false) }
+        }
+    }
+
+    private fun selectServer(profileId: Long, serverName: String) {
+        _uiState.update { it.copy(showServerPicker = false) }
+        createTab(profileId, serverName)
     }
 
     private fun getActiveTab(): TerminalTabState? {

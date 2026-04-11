@@ -1,6 +1,7 @@
 package dev.ori.feature.terminal.ui
 
 import dev.ori.domain.model.CommandSnippet
+import dev.ori.domain.model.ServerProfile
 
 data class TerminalTabState(
     val id: String,
@@ -23,6 +24,8 @@ data class TerminalUiState(
     val showPreferences: Boolean = false,
     val terminalFontSize: Float = 14f,
     val error: String? = null,
+    val showServerPicker: Boolean = false,
+    val availableServers: List<ServerProfile> = emptyList(),
 )
 
 sealed class TerminalEvent {
@@ -46,4 +49,6 @@ sealed class TerminalEvent {
     data class SetFontSize(val size: Float) : TerminalEvent()
     data class ResizeTerminal(val cols: Int, val rows: Int) : TerminalEvent()
     data object ClearError : TerminalEvent()
+    data object ToggleServerPicker : TerminalEvent()
+    data class SelectServer(val profileId: Long, val serverName: String) : TerminalEvent()
 }
