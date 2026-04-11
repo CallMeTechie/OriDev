@@ -104,11 +104,10 @@ class TerminalViewModelTest {
 
         viewModel.onEvent(TerminalEvent.CloseTab(tabId))
 
-        viewModel.uiState.test {
-            val state = awaitItem()
-            assertThat(state.tabs).isEmpty()
-            assertThat(state.activeTabIndex).isEqualTo(0)
-        }
+        // Check state directly to avoid race with async IO coroutine
+        val state = viewModel.uiState.value
+        assertThat(state.tabs).isEmpty()
+        assertThat(state.activeTabIndex).isEqualTo(0)
     }
 
     @Test
@@ -121,10 +120,9 @@ class TerminalViewModelTest {
 
         viewModel.onEvent(TerminalEvent.SwitchTab(0))
 
-        viewModel.uiState.test {
-            val state = awaitItem()
-            assertThat(state.activeTabIndex).isEqualTo(0)
-        }
+        // Check state directly to avoid race with async IO coroutine
+        val state = viewModel.uiState.value
+        assertThat(state.activeTabIndex).isEqualTo(0)
     }
 
     @Test
@@ -134,10 +132,9 @@ class TerminalViewModelTest {
 
         viewModel.onEvent(TerminalEvent.Paste("single line text"))
 
-        viewModel.uiState.test {
-            val state = awaitItem()
-            assertThat(state.showPasteConfirmation).isNull()
-        }
+        // Check state directly to avoid race with async IO coroutine
+        val state = viewModel.uiState.value
+        assertThat(state.showPasteConfirmation).isNull()
     }
 
     @Test
@@ -222,11 +219,10 @@ class TerminalViewModelTest {
 
         viewModel.onEvent(TerminalEvent.ExecuteSnippet("ls -la"))
 
-        viewModel.uiState.test {
-            val state = awaitItem()
-            // Snippets panel should be closed after execution
-            assertThat(state.showSnippets).isFalse()
-        }
+        // Check state directly to avoid race with async IO coroutine
+        val state = viewModel.uiState.value
+        // Snippets panel should be closed after execution
+        assertThat(state.showSnippets).isFalse()
     }
 
     @Test
