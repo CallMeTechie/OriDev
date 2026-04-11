@@ -4,6 +4,8 @@ import dev.ori.core.network.model.RemoteFile
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.sftp.SFTPClient
 import net.schmizz.sshj.userauth.keyprovider.PKCS8KeyFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
 import java.util.UUID
@@ -13,7 +15,8 @@ import javax.inject.Singleton
 
 @Singleton
 class SshClientImpl @Inject constructor(
-    private val hostKeyVerifier: OriDevHostKeyVerifier
+    private val hostKeyVerifier: OriDevHostKeyVerifier,
+    private val shellManager: SshShellManager,
 ) : SshClient {
 
     private val sessions = ConcurrentHashMap<String, SSHClient>()
@@ -138,6 +141,15 @@ class SshClientImpl @Inject constructor(
         withSftpClient(sessionId) { sftp ->
             sftp.chmod(path, permissions)
         }
+    }
+
+    override suspend fun openShell(
+        sessionId: String,
+        cols: Int,
+        rows: Int,
+    ): ShellHandle = withContext(Dispatchers.IO) {
+        val client = getClient(sessionId)
+        shellManager.openShell(client, cols, rows)
     }
 
     private fun getClient(sessionId: String): SSHClient {
