@@ -6,6 +6,12 @@ plugins {
     alias(libs.plugins.room)
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+    }
+}
+
 android {
     namespace = "dev.ori.data"
     compileSdk = 36
@@ -20,9 +26,6 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
-    kotlinOptions {
-        jvmTarget = "21"
-    }
 }
 
 tasks.withType<Test> {
