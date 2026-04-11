@@ -4,13 +4,16 @@ import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.ori.core.common.model.TransferDirection
 import dev.ori.core.common.result.getAppError
+import dev.ori.domain.model.TransferRequest
 import dev.ori.domain.repository.FileSystemRepository
 import dev.ori.domain.repository.LocalFileSystem
 import dev.ori.domain.repository.RemoteFileSystem
 import dev.ori.domain.usecase.ChmodUseCase
 import dev.ori.domain.usecase.CreateDirectoryUseCase
 import dev.ori.domain.usecase.DeleteFileUseCase
+import dev.ori.domain.usecase.EnqueueTransferUseCase
 import dev.ori.domain.usecase.GetBookmarksUseCase
 import dev.ori.domain.usecase.ListFilesUseCase
 import dev.ori.domain.usecase.RenameFileUseCase
@@ -35,6 +38,7 @@ class FileManagerViewModel @Inject constructor(
     private val createDirectoryUseCase: CreateDirectoryUseCase,
     private val chmodUseCase: ChmodUseCase,
     private val getBookmarksUseCase: GetBookmarksUseCase,
+    private val enqueueTransferUseCase: EnqueueTransferUseCase,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FileManagerUiState())
@@ -218,17 +222,40 @@ class FileManagerViewModel @Inject constructor(
         updatePaneState(pane) { it.copy(error = null) }
     }
 
-    @Suppress("UnusedParameter")
     private fun initiateTransfer(sourcePaths: List<String>, sourcePane: ActivePane) {
         if (sourcePaths.isEmpty()) return
-        val count = sourcePaths.size
-        _uiState.update {
-            it.copy(
-                transferSnackbar = "Transfer queued: $count file${if (count > 1) "s" else ""}",
-                dragState = DragState(),
-            )
+
+        val direction = when (sourcePane) {
+            ActivePane.LEFT -> TransferDirection.UPLOAD
+            ActivePane.RIGHT -> TransferDirection.DOWNLOAD
         }
-        // Actual transfer logic deferred to Phase 5 TransferWorker
+
+        val destinationPath = when (sourcePane) {
+            ActivePane.LEFT -> _uiState.value.rightPane.currentPath
+            ActivePane.RIGHT -> _uiState.value.leftPane.currentPath
+        }
+
+        viewModelScope.launch {
+            for (path in sourcePaths) {
+                val fileName = path.substringAfterLast('/')
+                val destFullPath = "$destinationPath/$fileName"
+                val request = TransferRequest(
+                    serverProfileId = 1L,
+                    sourcePath = path,
+                    destinationPath = destFullPath,
+                    direction = direction,
+                )
+                enqueueTransferUseCase(request)
+            }
+
+            val count = sourcePaths.size
+            _uiState.update {
+                it.copy(
+                    transferSnackbar = "$count transfer${if (count > 1) "s" else ""} queued",
+                    dragState = DragState(),
+                )
+            }
+        }
     }
 
     fun setDragState(dragState: DragState) {

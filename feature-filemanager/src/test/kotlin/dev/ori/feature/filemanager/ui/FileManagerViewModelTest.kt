@@ -9,6 +9,7 @@ import dev.ori.domain.repository.FileSystemRepository
 import dev.ori.domain.usecase.ChmodUseCase
 import dev.ori.domain.usecase.CreateDirectoryUseCase
 import dev.ori.domain.usecase.DeleteFileUseCase
+import dev.ori.domain.usecase.EnqueueTransferUseCase
 import dev.ori.domain.usecase.GetBookmarksUseCase
 import dev.ori.domain.usecase.ListFilesUseCase
 import dev.ori.domain.usecase.RenameFileUseCase
@@ -46,6 +47,7 @@ class FileManagerViewModelTest {
     private val createDirectoryUseCase = CreateDirectoryUseCase()
     private val chmodUseCase = ChmodUseCase()
     private val getBookmarksUseCase = GetBookmarksUseCase(bookmarkRepository)
+    private val enqueueTransferUseCase: EnqueueTransferUseCase = mockk(relaxed = true)
 
     private val sampleFiles = listOf(
         FileItem(name = "Documents", path = "/storage/emulated/0/Documents", isDirectory = true, size = 0),
@@ -81,6 +83,7 @@ class FileManagerViewModelTest {
             createDirectoryUseCase = createDirectoryUseCase,
             chmodUseCase = chmodUseCase,
             getBookmarksUseCase = getBookmarksUseCase,
+            enqueueTransferUseCase = enqueueTransferUseCase,
         )
 
     @Test
