@@ -34,6 +34,8 @@ data class FileManagerUiState(
     val splitRatio: Float = 0.5f,
     val showFileInfo: FileItem? = null,
     val contextMenuFile: FileItem? = null,
+    val dragState: DragState = DragState(),
+    val transferSnackbar: String? = null,
 )
 
 sealed class FileManagerEvent {
@@ -56,4 +58,11 @@ sealed class FileManagerEvent {
     data class ClearError(val pane: ActivePane) : FileManagerEvent()
     data class AddBookmark(val bookmark: Bookmark) : FileManagerEvent()
     data class RemoveBookmark(val bookmark: Bookmark) : FileManagerEvent()
+    data class InitiateTransfer(val sourcePaths: List<String>, val sourcePane: ActivePane) : FileManagerEvent()
 }
+
+data class DragState(
+    val isDragging: Boolean = false,
+    val sourcePane: ActivePane? = null,
+    val draggedPaths: List<String> = emptyList(),
+)

@@ -53,6 +53,9 @@ fun FileListPane(
     onDelete: (FileItem) -> Unit,
     onChmod: (FileItem) -> Unit,
     modifier: Modifier = Modifier,
+    onDragStart: (String) -> Unit = {},
+    onDragEnd: () -> Unit = {},
+    onDrop: () -> Unit = {},
 ) {
     var contextMenuFile by remember { mutableStateOf<FileItem?>(null) }
 
@@ -192,6 +195,9 @@ fun FileListPane(
                                 onShowContextMenu(file)
                             },
                             onToggleSelection = { onToggleSelection(file.path) },
+                            onDragStart = { onDragStart(file.path) },
+                            onDragEnd = onDragEnd,
+                            onDrop = onDrop,
                         )
 
                         if (contextMenuFile == file) {
