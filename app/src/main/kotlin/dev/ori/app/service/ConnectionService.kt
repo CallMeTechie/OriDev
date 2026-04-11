@@ -1,5 +1,6 @@
 package dev.ori.app.service
 
+import dev.ori.app.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -79,7 +80,7 @@ class ConnectionService : Service() {
                 if (sessionCount > 0) "$sessionCount active session${if (sessionCount > 1) "s" else ""}"
                 else "Connected",
             )
-            .setSmallIcon(android.R.drawable.ic_dialog_info) // TODO: replace with app icon
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .build()
