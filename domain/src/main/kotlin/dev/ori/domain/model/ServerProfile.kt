@@ -21,5 +21,5 @@ data class ServerProfile(
     val isFavorite: Boolean = false,
     val lastConnected: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
-    val sortOrder: Int = 0
+    val sortOrder: Int = 0,
 )

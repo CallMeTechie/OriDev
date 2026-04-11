@@ -76,7 +76,9 @@ fun TerminalTabBar(
                                     strokeWidth = 3.dp.toPx(),
                                 )
                             }
-                        } else Modifier
+                        } else {
+                            Modifier
+                        },
                     )
                     .clickable { onTabSelect(index) }
                     .padding(horizontal = 8.dp),

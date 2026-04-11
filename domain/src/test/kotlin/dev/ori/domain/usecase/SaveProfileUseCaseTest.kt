@@ -27,7 +27,7 @@ class SaveProfileUseCaseTest {
         protocol = Protocol.SSH,
         username = "user",
         authMethod = AuthMethod.PASSWORD,
-        credentialRef = "cred-ref"
+        credentialRef = "cred-ref",
     )
 
     @BeforeEach

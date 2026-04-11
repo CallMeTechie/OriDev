@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import dev.ori.domain.model.FileItem
 
 @Composable
+@Suppress("UnusedParameter")
 fun FileContextMenu(
     file: FileItem,
     expanded: Boolean,
@@ -35,28 +36,43 @@ fun FileContextMenu(
     ) {
         DropdownMenuItem(
             text = { Text("Info") },
-            onClick = { onInfo(); onDismiss() },
+            onClick = {
+                onInfo()
+                onDismiss()
+            },
             leadingIcon = { Icon(Icons.Default.Info, null) },
         )
         DropdownMenuItem(
             text = { Text("Rename") },
-            onClick = { onRename(); onDismiss() },
+            onClick = {
+                onRename()
+                onDismiss()
+            },
             leadingIcon = { Icon(Icons.Default.DriveFileRenameOutline, null) },
         )
         DropdownMenuItem(
             text = { Text("Permissions") },
-            onClick = { onChmod(); onDismiss() },
+            onClick = {
+                onChmod()
+                onDismiss()
+            },
             leadingIcon = { Icon(Icons.Default.Lock, null) },
         )
         DropdownMenuItem(
             text = { Text("Transfer") },
-            onClick = { onTransfer(); onDismiss() },
+            onClick = {
+                onTransfer()
+                onDismiss()
+            },
             leadingIcon = { Icon(Icons.Default.SwapHoriz, null) },
         )
         HorizontalDivider()
         DropdownMenuItem(
             text = { Text("Delete", color = MaterialTheme.colorScheme.error) },
-            onClick = { onDelete(); onDismiss() },
+            onClick = {
+                onDelete()
+                onDismiss()
+            },
             leadingIcon = {
                 Icon(
                     Icons.Default.Delete,

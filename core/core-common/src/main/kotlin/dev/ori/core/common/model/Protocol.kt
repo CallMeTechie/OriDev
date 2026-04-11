@@ -6,7 +6,8 @@ enum class Protocol(val displayName: String, val defaultPort: Int) {
     SCP("SCP", 22),
     FTP("FTP", 21),
     FTPS("FTPS", 990),
-    PROXMOX("Proxmox API", 8006);
+    PROXMOX("Proxmox API", 8006),
+    ;
 
     val isSshBased: Boolean get() = this in setOf(SSH, SFTP, SCP)
     val requiresEncryption: Boolean get() = this != FTP

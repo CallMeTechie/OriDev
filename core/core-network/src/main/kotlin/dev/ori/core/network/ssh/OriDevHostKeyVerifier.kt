@@ -12,7 +12,7 @@ import javax.inject.Singleton
 
 @Singleton
 class OriDevHostKeyVerifier @Inject constructor(
-    private val hostKeyStore: HostKeyStore
+    private val hostKeyStore: HostKeyStore,
 ) : HostKeyVerifier {
 
     override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
@@ -28,8 +28,8 @@ class OriDevHostKeyVerifier @Inject constructor(
                         AppError.HostKeyUnknown(
                             host = hostname,
                             fingerprint = fingerprint,
-                            keyType = keyType
-                        )
+                            keyType = keyType,
+                        ),
                     )
                 }
 
@@ -43,8 +43,8 @@ class OriDevHostKeyVerifier @Inject constructor(
                         AppError.HostKeyMismatch(
                             host = hostname,
                             expectedFingerprint = stored.fingerprint,
-                            actualFingerprint = fingerprint
-                        )
+                            actualFingerprint = fingerprint,
+                        ),
                     )
                 }
             }

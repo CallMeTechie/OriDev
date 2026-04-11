@@ -1,6 +1,5 @@
 package dev.ori.app.service
 
-import dev.ori.app.R
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -12,6 +11,7 @@ import android.os.Binder
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import dagger.hilt.android.AndroidEntryPoint
+import dev.ori.app.R
 import dev.ori.core.network.ssh.SshShellManager
 import javax.inject.Inject
 
@@ -77,8 +77,11 @@ class ConnectionService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Ori:Dev")
             .setContentText(
-                if (sessionCount > 0) "$sessionCount active session${if (sessionCount > 1) "s" else ""}"
-                else "Connected",
+                if (sessionCount > 0) {
+                    "$sessionCount active session${if (sessionCount > 1) "s" else ""}"
+                } else {
+                    "Connected"
+                },
             )
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(pendingIntent)

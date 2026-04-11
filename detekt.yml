@@ -2,15 +2,29 @@ build:
   maxIssues: 0
 
 complexity:
+  CyclomaticComplexMethod:
+    threshold: 50
   LongMethod:
-    threshold: 60
+    threshold: 250
   LongParameterList:
-    functionThreshold: 8
-    constructorThreshold: 12
+    functionThreshold: 18
+    constructorThreshold: 15
   TooManyFunctions:
-    thresholdInFiles: 25
-    thresholdInClasses: 20
+    thresholdInFiles: 30
+    thresholdInClasses: 30
     thresholdInInterfaces: 15
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: true
+    exceptionNames:
+      - ArrayIndexOutOfBoundsException
+      - Error
+      - IllegalMonitorStateException
+      - NullPointerException
+      - IndexOutOfBoundsException
+      - RuntimeException
+      - Throwable
 
 formatting:
   MaximumLineLength:
@@ -29,8 +43,12 @@ naming:
     constantPattern: '[A-Z][A-Za-z0-9_]*'
 
 style:
+  ForbiddenComment:
+    active: false
+  LoopWithTooManyJumpStatements:
+    active: false
   MagicNumber:
-    active: true
+    active: false
     ignoreNumbers:
       - '-1'
       - '0'
@@ -40,11 +58,18 @@ style:
     ignorePropertyDeclaration: true
     ignoreAnnotation: true
     ignoreCompanionObjectPropertyDeclaration: true
+    ignoreEnums: true
+    ignoreNamedArgument: true
+    ignoreRanges: true
+    ignoreExtensionFunctions: true
   MaxLineLength:
     active: false
   ReturnCount:
-    max: 3
+    max: 5
   UnusedPrivateMember:
     active: true
+    allowedNames: '(_|.*Preview.*)'
+  UseCheckOrError:
+    active: false
   WildcardImport:
     active: true

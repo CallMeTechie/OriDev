@@ -8,11 +8,11 @@ data class FileItem(
     val lastModified: Long = 0,
     val permissions: String? = null,
     val owner: String? = null,
-    val gitStatus: GitStatus? = null
+    val gitStatus: GitStatus? = null,
 )
 
 enum class GitStatus {
     STAGED,
     MODIFIED,
-    UNTRACKED
+    UNTRACKED,
 }

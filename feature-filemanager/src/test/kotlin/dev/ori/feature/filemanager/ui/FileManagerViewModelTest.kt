@@ -3,7 +3,6 @@ package dev.ori.feature.filemanager.ui
 import android.os.Environment
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
-import dev.ori.domain.model.Bookmark
 import dev.ori.domain.model.FileItem
 import dev.ori.domain.repository.BookmarkRepository
 import dev.ori.domain.repository.FileSystemRepository

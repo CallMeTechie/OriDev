@@ -12,7 +12,7 @@ class SshSessionTest {
             profileId = 42L,
             host = "example.com",
             port = 22,
-            connectedAt = 1000L
+            connectedAt = 1000L,
         )
 
         assertThat(session.sessionId).isEqualTo("test-id")
@@ -46,7 +46,7 @@ class SshSessionTest {
         val result = CommandResult(
             exitCode = 0,
             stdout = "hello world",
-            stderr = ""
+            stderr = "",
         )
 
         assertThat(result.exitCode).isEqualTo(0)
@@ -59,7 +59,7 @@ class SshSessionTest {
         val result = CommandResult(
             exitCode = 1,
             stdout = "",
-            stderr = "command not found"
+            stderr = "command not found",
         )
 
         assertThat(result.exitCode).isEqualTo(1)

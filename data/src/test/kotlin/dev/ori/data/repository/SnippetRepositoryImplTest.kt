@@ -70,7 +70,7 @@ class SnippetRepositoryImplTest {
                     category = "deploy",
                     isWatchQuickCommand = false,
                     sortOrder = 0,
-                )
+                ),
             )
         }
     }

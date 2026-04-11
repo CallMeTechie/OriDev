@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.KeyboardHide
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -26,7 +27,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +49,7 @@ import org.connectbot.terminal.TerminalEmulator
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
+@Suppress("UnusedParameter")
 fun TerminalScreen(
     initialProfileId: Long? = null,
     viewModel: TerminalViewModel = hiltViewModel(),
@@ -170,7 +171,7 @@ fun TerminalScreen(
                                 detectVerticalDragGestures { _, dragAmount ->
                                     val delta = dragAmount / size.height.toFloat()
                                     viewModel.onEvent(
-                                        TerminalEvent.UpdateSplitRatio(uiState.splitRatio + delta)
+                                        TerminalEvent.UpdateSplitRatio(uiState.splitRatio + delta),
                                     )
                                 }
                             },

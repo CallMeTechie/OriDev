@@ -7,5 +7,5 @@ data class RemoteFile(
     val size: Long,
     val lastModified: Long,
     val permissions: String,
-    val owner: String
+    val owner: String,
 )

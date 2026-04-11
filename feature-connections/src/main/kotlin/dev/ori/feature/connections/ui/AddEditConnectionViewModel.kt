@@ -7,9 +7,9 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.ori.core.common.model.AuthMethod
 import dev.ori.core.common.model.Protocol
 import dev.ori.core.common.result.getAppError
+import dev.ori.domain.model.ServerProfile
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.usecase.SaveProfileUseCase
-import dev.ori.domain.model.ServerProfile
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow

@@ -100,20 +100,20 @@ fun CustomKeyboard(
                 KeyButton("F2") { sendRaw("${ESC}OQ".toByteArray()) }
                 KeyButton("F3") { sendRaw("${ESC}OR".toByteArray()) }
                 KeyButton("F4") { sendRaw("${ESC}OS".toByteArray()) }
-                KeyButton("F5") { sendRaw("${ESC}[15~".toByteArray()) }
-                KeyButton("F6") { sendRaw("${ESC}[17~".toByteArray()) }
-                KeyButton("F7") { sendRaw("${ESC}[18~".toByteArray()) }
-                KeyButton("F8") { sendRaw("${ESC}[19~".toByteArray()) }
-                KeyButton("F9") { sendRaw("${ESC}[20~".toByteArray()) }
-                KeyButton("F10") { sendRaw("${ESC}[21~".toByteArray()) }
-                KeyButton("F11") { sendRaw("${ESC}[23~".toByteArray()) }
-                KeyButton("F12") { sendRaw("${ESC}[24~".toByteArray()) }
-                KeyButton("Home") { sendRaw("${ESC}[H".toByteArray()) }
-                KeyButton("End") { sendRaw("${ESC}[F".toByteArray()) }
-                KeyButton("PgUp") { sendRaw("${ESC}[5~".toByteArray()) }
-                KeyButton("PgDn") { sendRaw("${ESC}[6~".toByteArray()) }
-                KeyButton("Ins") { sendRaw("${ESC}[2~".toByteArray()) }
-                KeyButton("Del") { sendRaw("${ESC}[3~".toByteArray()) }
+                KeyButton("F5") { sendRaw("$ESC[15~".toByteArray()) }
+                KeyButton("F6") { sendRaw("$ESC[17~".toByteArray()) }
+                KeyButton("F7") { sendRaw("$ESC[18~".toByteArray()) }
+                KeyButton("F8") { sendRaw("$ESC[19~".toByteArray()) }
+                KeyButton("F9") { sendRaw("$ESC[20~".toByteArray()) }
+                KeyButton("F10") { sendRaw("$ESC[21~".toByteArray()) }
+                KeyButton("F11") { sendRaw("$ESC[23~".toByteArray()) }
+                KeyButton("F12") { sendRaw("$ESC[24~".toByteArray()) }
+                KeyButton("Home") { sendRaw("$ESC[H".toByteArray()) }
+                KeyButton("End") { sendRaw("$ESC[F".toByteArray()) }
+                KeyButton("PgUp") { sendRaw("$ESC[5~".toByteArray()) }
+                KeyButton("PgDn") { sendRaw("$ESC[6~".toByteArray()) }
+                KeyButton("Ins") { sendRaw("$ESC[2~".toByteArray()) }
+                KeyButton("Del") { sendRaw("$ESC[3~".toByteArray()) }
             }
         }
 
@@ -126,11 +126,23 @@ fun CustomKeyboard(
             for (c in "1234567890-=") {
                 val label = if (shiftActive) {
                     when (c) {
-                        '1' -> '!'; '2' -> '@'; '3' -> '#'; '4' -> '$'; '5' -> '%'
-                        '6' -> '^'; '7' -> '&'; '8' -> '*'; '9' -> '('; '0' -> ')'
-                        '-' -> '_'; '=' -> '+'; else -> c
+                        '1' -> '!'
+                        '2' -> '@'
+                        '3' -> '#'
+                        '4' -> '$'
+                        '5' -> '%'
+                        '6' -> '^'
+                        '7' -> '&'
+                        '8' -> '*'
+                        '9' -> '('
+                        '0' -> ')'
+                        '-' -> '_'
+                        '=' -> '+'
+                        else -> c
                     }.toString()
-                } else c.toString()
+                } else {
+                    c.toString()
+                }
                 KeyButton(label) { sendKey(label) }
             }
         }
@@ -177,16 +189,20 @@ fun CustomKeyboard(
             for (c in "zxcvbnm,.") {
                 val label = if (shiftActive) {
                     when (c) {
-                        ',' -> '<'; '.' -> '>'; else -> c.uppercase().first()
+                        ',' -> '<'
+                        '.' -> '>'
+                        else -> c.uppercase().first()
                     }.toString()
-                } else c.toString()
+                } else {
+                    c.toString()
+                }
                 KeyButton(label) { sendKey(label) }
             }
             val slash = if (shiftActive) "?" else "/"
             val backslash = if (shiftActive) "|" else "\\"
             KeyButton(slash) { sendKey(slash) }
             KeyButton(backslash) { sendKey(backslash) }
-            RepeatKeyButton("\u2191") { sendRaw("${ESC}[A".toByteArray()) }
+            RepeatKeyButton("\u2191") { sendRaw("$ESC[A".toByteArray()) }
             KeyButton("\u232B") { sendRaw(byteArrayOf(0x7F)) }
         }
 
@@ -200,9 +216,9 @@ fun CustomKeyboard(
             KeyButton("`") { sendKey("`") }
             KeyButton("|") { sendKey("|") }
             SpaceKeyButton { sendKey(" ") }
-            RepeatKeyButton("\u2190") { sendRaw("${ESC}[D".toByteArray()) }
-            RepeatKeyButton("\u2193") { sendRaw("${ESC}[B".toByteArray()) }
-            RepeatKeyButton("\u2192") { sendRaw("${ESC}[C".toByteArray()) }
+            RepeatKeyButton("\u2190") { sendRaw("$ESC[D".toByteArray()) }
+            RepeatKeyButton("\u2193") { sendRaw("$ESC[B".toByteArray()) }
+            RepeatKeyButton("\u2192") { sendRaw("$ESC[C".toByteArray()) }
         }
     }
 }

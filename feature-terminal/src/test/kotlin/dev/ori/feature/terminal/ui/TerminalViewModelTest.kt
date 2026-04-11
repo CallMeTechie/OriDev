@@ -6,7 +6,6 @@ import com.google.common.truth.Truth.assertThat
 import dev.ori.core.network.ssh.ShellHandle
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.core.network.ssh.SshSession
-import dev.ori.domain.model.CommandSnippet
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.usecase.GetSnippetsUseCase
 import io.mockk.coEvery

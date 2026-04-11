@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
 class GetConnectionsUseCase @Inject constructor(
-    private val repository: ConnectionRepository
+    private val repository: ConnectionRepository,
 ) {
     operator fun invoke(): Flow<List<ServerProfile>> = repository.getAllProfiles()
 }

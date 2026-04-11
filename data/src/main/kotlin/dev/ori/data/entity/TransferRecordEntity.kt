@@ -9,13 +9,15 @@ import dev.ori.core.common.model.TransferStatus
 
 @Entity(
     tableName = "transfer_records",
-    foreignKeys = [ForeignKey(
-        entity = ServerProfileEntity::class,
-        parentColumns = ["id"],
-        childColumns = ["serverProfileId"],
-        onDelete = ForeignKey.CASCADE
-    )],
-    indices = [Index("serverProfileId")]
+    foreignKeys = [
+        ForeignKey(
+            entity = ServerProfileEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["serverProfileId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index("serverProfileId")],
 )
 data class TransferRecordEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -31,5 +33,5 @@ data class TransferRecordEntity(
     val startedAt: Long? = null,
     val completedAt: Long? = null,
     val errorMessage: String? = null,
-    val retryCount: Int = 0
+    val retryCount: Int = 0,
 )

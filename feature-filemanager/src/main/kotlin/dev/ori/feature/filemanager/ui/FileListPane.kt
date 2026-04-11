@@ -2,7 +2,6 @@ package dev.ori.feature.filemanager.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,10 +15,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,7 +39,7 @@ import dev.ori.domain.model.FileItem
 @Composable
 fun FileListPane(
     paneState: PaneState,
-    pane: ActivePane,
+    @Suppress("UnusedParameter") pane: ActivePane,
     onNavigateToPath: (String) -> Unit,
     onNavigateUp: () -> Unit,
     onToggleSelection: (String) -> Unit,

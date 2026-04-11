@@ -10,7 +10,10 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CommandSnippetDao {
-    @Query("SELECT * FROM command_snippets WHERE serverProfileId = :serverId OR serverProfileId IS NULL ORDER BY sortOrder")
+    @Query(
+        "SELECT * FROM command_snippets WHERE serverProfileId = :serverId " +
+            "OR serverProfileId IS NULL ORDER BY sortOrder",
+    )
     fun getForServer(serverId: Long?): Flow<List<CommandSnippetEntity>>
 
     @Query("SELECT * FROM command_snippets WHERE isWatchQuickCommand = 1 ORDER BY sortOrder")

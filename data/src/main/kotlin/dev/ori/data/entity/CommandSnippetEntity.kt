@@ -11,5 +11,5 @@ data class CommandSnippetEntity(
     val command: String,
     val category: String,
     val isWatchQuickCommand: Boolean = false,
-    val sortOrder: Int = 0
+    val sortOrder: Int = 0,
 )

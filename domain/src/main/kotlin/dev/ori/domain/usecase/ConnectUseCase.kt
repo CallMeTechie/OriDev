@@ -10,7 +10,7 @@ import dev.ori.domain.repository.ConnectionRepository
 import javax.inject.Inject
 
 class ConnectUseCase @Inject constructor(
-    private val repository: ConnectionRepository
+    private val repository: ConnectionRepository,
 ) {
     suspend operator fun invoke(profileId: Long): AppResult<Connection> {
         return try {
@@ -19,7 +19,8 @@ class ConnectUseCase @Inject constructor(
         } catch (e: AppErrorException) {
             when (e.error) {
                 is AppError.HostKeyUnknown,
-                is AppError.HostKeyMismatch -> throw e
+                is AppError.HostKeyMismatch,
+                -> throw e
 
                 is AppError.AuthenticationError -> appFailure(e.error)
 
