@@ -63,18 +63,18 @@ class KeyStoreManager @Inject constructor() : CredentialStore {
 
         val keyGenerator = KeyGenerator.getInstance(
             android.security.keystore.KeyProperties.KEY_ALGORITHM_AES,
-            ANDROID_KEYSTORE
+            ANDROID_KEYSTORE,
         )
         keyGenerator.init(
             android.security.keystore.KeyGenParameterSpec.Builder(
                 alias,
                 android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or
-                    android.security.keystore.KeyProperties.PURPOSE_DECRYPT
+                    android.security.keystore.KeyProperties.PURPOSE_DECRYPT,
             )
                 .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setKeySize(KEY_SIZE)
-                .build()
+                .build(),
         )
         return keyGenerator.generateKey()
     }

@@ -1,7 +1,6 @@
 package dev.ori.core.common.extension
 
 import java.text.DecimalFormat
-import java.util.Locale
 
 fun Long.toHumanReadableSize(): String {
     if (this < 1024) return "$this B"

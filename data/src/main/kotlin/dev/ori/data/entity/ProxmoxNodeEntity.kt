@@ -12,5 +12,5 @@ data class ProxmoxNodeEntity(
     val tokenId: String,
     val tokenSecretRef: String,
     val certFingerprint: String? = null,
-    val lastSyncAt: Long? = null
+    val lastSyncAt: Long? = null,
 )

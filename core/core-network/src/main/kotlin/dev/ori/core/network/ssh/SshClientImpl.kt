@@ -1,11 +1,11 @@
 package dev.ori.core.network.ssh
 
 import dev.ori.core.network.model.RemoteFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.sftp.SFTPClient
 import net.schmizz.sshj.userauth.keyprovider.PKCS8KeyFile
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
 import java.util.UUID
@@ -26,7 +26,7 @@ class SshClientImpl @Inject constructor(
         port: Int,
         username: String,
         password: CharArray?,
-        privateKey: ByteArray?
+        privateKey: ByteArray?,
     ): SshSession {
         val client = SSHClient()
         client.addHostKeyVerifier(hostKeyVerifier)
@@ -57,7 +57,7 @@ class SshClientImpl @Inject constructor(
                 profileId = 0,
                 host = host,
                 port = port,
-                connectedAt = System.currentTimeMillis()
+                connectedAt = System.currentTimeMillis(),
             )
         } catch (e: Exception) {
             client.close()
@@ -83,7 +83,7 @@ class SshClientImpl @Inject constructor(
                     size = entry.attributes.size,
                     lastModified = entry.attributes.mtime * 1000L,
                     permissions = entry.attributes.permissions?.toString().orEmpty(),
-                    owner = entry.attributes.uid.toString()
+                    owner = entry.attributes.uid.toString(),
                 )
             }
         }
@@ -100,7 +100,7 @@ class SshClientImpl @Inject constructor(
             CommandResult(
                 exitCode = cmd.exitStatus ?: -1,
                 stdout = stdout,
-                stderr = stderr
+                stderr = stderr,
             )
         } finally {
             session.close()

@@ -15,5 +15,5 @@ data class KnownHostEntry(
     val keyType: String,
     val fingerprint: String,
     val firstSeen: Long,
-    val lastSeen: Long
+    val lastSeen: Long,
 )

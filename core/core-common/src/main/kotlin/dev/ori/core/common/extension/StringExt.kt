@@ -3,7 +3,8 @@ package dev.ori.core.common.extension
 fun String.isValidHost(): Boolean {
     if (isBlank()) return false
     val ipPattern = Regex("""^(\d{1,3}\.){3}\d{1,3}$""")
-    val hostnamePattern = Regex("""^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$""")
+    val hostnamePattern =
+        Regex("""^[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]*[a-zA-Z0-9])?)*$""")
     return ipPattern.matches(this) || hostnamePattern.matches(this)
 }
 

@@ -9,5 +9,5 @@ data class BookmarkEntity(
     val serverProfileId: Long?,
     val path: String,
     val label: String,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
 )

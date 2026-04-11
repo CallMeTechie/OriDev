@@ -5,5 +5,5 @@ data class SshSession(
     val profileId: Long,
     val host: String,
     val port: Int,
-    val connectedAt: Long
+    val connectedAt: Long,
 )

@@ -5,7 +5,7 @@ import dev.ori.core.network.model.RemoteFile
 data class CommandResult(
     val exitCode: Int,
     val stdout: String,
-    val stderr: String
+    val stderr: String,
 )
 
 interface SshClient {
@@ -14,7 +14,7 @@ interface SshClient {
         port: Int,
         username: String,
         password: CharArray? = null,
-        privateKey: ByteArray? = null
+        privateKey: ByteArray? = null,
     ): SshSession
 
     suspend fun disconnect(sessionId: String)

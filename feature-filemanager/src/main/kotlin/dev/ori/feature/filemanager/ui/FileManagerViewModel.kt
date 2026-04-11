@@ -218,6 +218,7 @@ class FileManagerViewModel @Inject constructor(
         updatePaneState(pane) { it.copy(error = null) }
     }
 
+    @Suppress("UnusedParameter")
     private fun initiateTransfer(sourcePaths: List<String>, sourcePane: ActivePane) {
         if (sourcePaths.isEmpty()) return
         val count = sourcePaths.size

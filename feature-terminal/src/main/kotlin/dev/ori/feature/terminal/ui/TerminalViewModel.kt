@@ -131,11 +131,15 @@ class TerminalViewModel @Inject constructor(
                 _uiState.update { state ->
                     state.copy(
                         tabs = state.tabs.map { tab ->
-                            if (tab.id == tabId) tab.copy(
-                                isConnected = true,
-                                shellId = shellHandle.shellId,
-                            ) else tab
-                        }
+                            if (tab.id == tabId) {
+                                tab.copy(
+                                    isConnected = true,
+                                    shellId = shellHandle.shellId,
+                                )
+                            } else {
+                                tab
+                            }
+                        },
                     )
                 }
 

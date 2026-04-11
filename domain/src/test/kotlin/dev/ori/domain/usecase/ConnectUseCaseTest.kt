@@ -31,7 +31,7 @@ class ConnectUseCaseTest {
             serverName = "Test Server",
             host = "example.com",
             status = ConnectionStatus.CONNECTED,
-            connectedSince = 1000L
+            connectedSince = 1000L,
         )
         coEvery { repository.connect(1L) } returns expected
 

@@ -2,7 +2,7 @@ package dev.ori.core.network.ssh
 
 data class StoredHostKey(
     val fingerprint: String,
-    val keyType: String
+    val keyType: String,
 )
 
 interface HostKeyStore {

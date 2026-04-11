@@ -13,5 +13,5 @@ data class TransferRequest(
     val totalBytes: Long = 0,
     val transferredBytes: Long = 0,
     val fileCount: Int = 1,
-    val filesTransferred: Int = 0
+    val filesTransferred: Int = 0,
 )

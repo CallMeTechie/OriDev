@@ -5,7 +5,7 @@ data class Connection(
     val serverName: String,
     val host: String,
     val status: ConnectionStatus,
-    val connectedSince: Long? = null
+    val connectedSince: Long? = null,
 )
 
 enum class ConnectionStatus {
@@ -13,5 +13,5 @@ enum class ConnectionStatus {
     CONNECTING,
     CONNECTED,
     RECONNECTING,
-    ERROR
+    ERROR,
 }
