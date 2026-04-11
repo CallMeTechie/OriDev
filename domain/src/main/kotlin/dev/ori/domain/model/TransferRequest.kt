@@ -14,4 +14,8 @@ data class TransferRequest(
     val transferredBytes: Long = 0,
     val fileCount: Int = 1,
     val filesTransferred: Int = 0,
+    val startedAt: Long? = null,
+    val completedAt: Long? = null,
+    val errorMessage: String? = null,
+    val retryCount: Int = 0,
 )
