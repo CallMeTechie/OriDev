@@ -12,6 +12,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import dev.ori.feature.connections.navigation.CONNECTIONS_ROUTE
 import dev.ori.feature.connections.navigation.connectionsScreen
+import dev.ori.feature.filemanager.navigation.fileManagerScreen
 
 @Composable
 fun OriDevNavHost(
@@ -25,9 +26,7 @@ fun OriDevNavHost(
     ) {
         connectionsScreen()
 
-        composable("filemanager") {
-            PlaceholderScreen(title = "File Manager")
-        }
+        fileManagerScreen()
 
         composable("terminal") {
             PlaceholderScreen(title = "Terminal")

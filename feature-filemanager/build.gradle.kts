@@ -43,6 +43,8 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.android.compiler)
     implementation(libs.navigation.compose)
+    implementation(libs.window)
+    implementation(libs.compose.material.icons.extended)
 
     testImplementation(libs.junit5.api)
     testRuntimeOnly(libs.junit5.engine)

@@ -23,6 +23,7 @@ import androidx.navigation.compose.rememberNavController
 import dev.ori.app.navigation.OriDevNavHost
 import dev.ori.core.ui.theme.OriDevTheme
 import dev.ori.feature.connections.navigation.CONNECTIONS_ROUTE
+import dev.ori.feature.filemanager.navigation.FILE_MANAGER_ROUTE
 
 private data class BottomNavItem(
     val route: String,
@@ -32,7 +33,7 @@ private data class BottomNavItem(
 
 private val bottomNavItems = listOf(
     BottomNavItem(CONNECTIONS_ROUTE, "Connections", Icons.Default.Wifi),
-    BottomNavItem("filemanager", "Files", Icons.Default.Folder),
+    BottomNavItem(FILE_MANAGER_ROUTE, "Files", Icons.Default.Folder),
     BottomNavItem("terminal", "Terminal", Icons.Default.Terminal),
     BottomNavItem("transfers", "Transfers", Icons.Default.SwapVert),
     BottomNavItem("settings", "Settings", Icons.Default.Settings),
