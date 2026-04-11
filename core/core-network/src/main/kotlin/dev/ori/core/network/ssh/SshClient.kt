@@ -25,9 +25,19 @@ interface SshClient {
 
     suspend fun executeCommand(sessionId: String, command: String): CommandResult
 
-    suspend fun uploadFile(sessionId: String, localPath: String, remotePath: String)
+    suspend fun uploadFile(
+        sessionId: String,
+        localPath: String,
+        remotePath: String,
+        onProgress: (transferred: Long, total: Long) -> Unit = { _, _ -> },
+    )
 
-    suspend fun downloadFile(sessionId: String, remotePath: String, localPath: String)
+    suspend fun downloadFile(
+        sessionId: String,
+        remotePath: String,
+        localPath: String,
+        onProgress: (transferred: Long, total: Long) -> Unit = { _, _ -> },
+    )
 
     suspend fun deleteFile(sessionId: String, path: String)
 
