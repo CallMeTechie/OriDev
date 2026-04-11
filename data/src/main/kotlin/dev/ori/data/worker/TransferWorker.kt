@@ -13,15 +13,15 @@ import androidx.work.workDataOf
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.ori.core.common.model.TransferDirection
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import dev.ori.core.common.model.TransferStatus
 import dev.ori.core.network.ftp.FtpClient
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.data.dao.ServerProfileDao
 import dev.ori.data.dao.TransferRecordDao
 import dev.ori.data.entity.TransferRecordEntity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @HiltWorker
 class TransferWorker @AssistedInject constructor(
@@ -40,10 +40,12 @@ class TransferWorker @AssistedInject constructor(
 
         val record = dao.getById(transferId) ?: return Result.failure()
 
+        @Suppress("TooGenericExceptionCaught")
         try {
             setForeground(createForegroundInfo(record))
-        } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
-            // Foreground notification may fail if permissions are missing; continue anyway
+        } catch (e: Exception) {
+            // Foreground notification may fail if permissions are missing; log and continue
+            android.util.Log.w("TransferWorker", "Could not set foreground: ${e.message}", e)
         }
 
         dao.update(

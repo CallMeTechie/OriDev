@@ -16,6 +16,7 @@ import dev.ori.feature.connections.navigation.connectionsScreen
 import dev.ori.feature.connections.navigation.editConnectionScreen
 import dev.ori.feature.filemanager.navigation.fileManagerScreen
 import dev.ori.feature.terminal.navigation.terminalScreen
+import dev.ori.feature.transfers.navigation.transferQueueScreen
 
 @Composable
 fun OriDevNavHost(
@@ -37,9 +38,7 @@ fun OriDevNavHost(
 
         terminalScreen()
 
-        composable("transfers") {
-            PlaceholderScreen(title = "Transfers")
-        }
+        transferQueueScreen()
 
         composable("settings") {
             PlaceholderScreen(title = "Settings")
