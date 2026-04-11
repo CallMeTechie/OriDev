@@ -15,4 +15,5 @@ interface ConnectionRepository {
     suspend fun connect(profileId: Long): Connection
     suspend fun disconnect(profileId: Long)
     fun getActiveConnections(): Flow<List<Connection>>
+    suspend fun getActiveSessionId(profileId: Long): String?
 }

@@ -109,6 +109,9 @@ class ConnectionRepositoryImpl @Inject constructor(
     override fun getActiveConnections(): Flow<List<Connection>> =
         _activeConnections.asStateFlow()
 
+    override suspend fun getActiveSessionId(profileId: Long): String? =
+        activeSessions[profileId]?.sessionId
+
     private fun updateActiveConnections() {
         _activeConnections.value = activeSessions.map { (profileId, session) ->
             Connection(

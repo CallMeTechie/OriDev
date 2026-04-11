@@ -106,6 +106,7 @@ hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt"
 hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", version.ref = "hilt" }
 hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hilt-navigation-compose" }
 hilt-work = { module = "androidx.hilt:hilt-work", version.ref = "hilt-navigation-compose" }
+hilt-compiler = { module = "androidx.hilt:hilt-compiler", version.ref = "hilt-navigation-compose" }
 hilt-android-testing = { module = "com.google.dagger:hilt-android-testing", version.ref = "hilt" }
 
 # Networking
