@@ -4,15 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
@@ -42,7 +37,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,6 +44,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.ui.theme.TerminalBackground
 import dev.ori.core.ui.theme.TerminalText
+import org.connectbot.terminal.Terminal
+import org.connectbot.terminal.TerminalEmulator
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,13 +69,8 @@ fun TerminalScreen(
         }
     }
 
-    // Auto-scroll terminal output
-    val scrollState = rememberScrollState()
     val activeTab = uiState.tabs.getOrNull(uiState.activeTabIndex)
-
-    LaunchedEffect(activeTab?.outputVersion) {
-        scrollState.animateScrollTo(scrollState.maxValue)
-    }
+    val activeEmulator = activeTab?.let { viewModel.getEmulator(it.id) }
 
     Scaffold(
         topBar = {
@@ -162,9 +153,8 @@ fun TerminalScreen(
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Terminal content area
                     TerminalContentArea(
-                        output = activeTab?.let { viewModel.getTerminalOutput(it.id) } ?: "",
+                        emulator = activeEmulator,
                         fontSize = uiState.terminalFontSize,
-                        scrollState = scrollState,
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(uiState.splitRatio),
@@ -200,9 +190,8 @@ fun TerminalScreen(
                 // Portrait: terminal fullscreen, keyboard as bottom section
                 Column(modifier = Modifier.fillMaxSize()) {
                     TerminalContentArea(
-                        output = activeTab?.let { viewModel.getTerminalOutput(it.id) } ?: "",
+                        emulator = activeEmulator,
                         fontSize = uiState.terminalFontSize,
-                        scrollState = scrollState,
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
@@ -260,33 +249,29 @@ fun TerminalScreen(
     }
 }
 
-// TODO: Replace placeholder with termlib Terminal composable.
-// Migration path:
-//   1. Create TerminalEmulator per tab via TerminalEmulatorFactory.Companion.create()
-//      passing the main Looper, initial cols/rows, and callbacks:
-//      - onKeyboardInput: write bytes to shellHandle.outputStream
-//      - onResize: invoke shellHandle.onResize
-//   2. Feed SSH output bytes into emulator.writeInput() instead of StringBuilder
-//   3. Replace TerminalContentArea with:
-//        org.connectbot.terminal.Terminal(emulator = emulator, modifier = modifier)
-//   4. Remove manual scroll state, font rendering, and ANSI concerns -- termlib handles all of it.
 @Composable
 private fun TerminalContentArea(
-    output: String,
+    emulator: TerminalEmulator?,
     fontSize: Float,
-    scrollState: androidx.compose.foundation.ScrollState,
     modifier: Modifier = Modifier,
 ) {
-    SelectionContainer {
-        Text(
-            text = output.ifEmpty { "No active session. Tap + to open a new terminal tab." },
-            fontFamily = FontFamily.Monospace,
-            fontSize = fontSize.sp,
-            color = if (output.isEmpty()) TerminalText.copy(alpha = 0.5f) else TerminalText,
+    if (emulator != null) {
+        Terminal(
+            terminalEmulator = emulator,
+            modifier = modifier.background(TerminalBackground),
+        )
+    } else {
+        Box(
             modifier = modifier
                 .background(TerminalBackground)
-                .padding(8.dp)
-                .verticalScroll(scrollState),
-        )
+                .padding(8.dp),
+        ) {
+            Text(
+                text = "No active session. Tap + to open a new terminal tab.",
+                fontFamily = FontFamily.Monospace,
+                fontSize = fontSize.sp,
+                color = TerminalText.copy(alpha = 0.5f),
+            )
+        }
     }
 }

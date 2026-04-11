@@ -2,12 +2,15 @@ package dev.ori.feature.terminal.ui
 
 import android.content.Context
 import android.content.Intent
+import android.os.Looper
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.ori.core.network.ssh.ShellHandle
 import dev.ori.core.network.ssh.SshClient
+import dev.ori.core.ui.theme.TerminalBackground
+import dev.ori.core.ui.theme.TerminalText
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.usecase.GetSnippetsUseCase
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.connectbot.terminal.TerminalEmulator
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -26,6 +30,7 @@ class TerminalViewModel @Inject constructor(
     private val sshClient: SshClient,
     private val connectionRepository: ConnectionRepository,
     private val getSnippetsUseCase: GetSnippetsUseCase,
+    private val emulatorProvider: TerminalEmulatorProvider,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -33,7 +38,7 @@ class TerminalViewModel @Inject constructor(
     val uiState: StateFlow<TerminalUiState> = _uiState.asStateFlow()
 
     private val shellHandles = ConcurrentHashMap<String, ShellHandle>()
-    private val terminalOutputs = ConcurrentHashMap<String, StringBuilder>()
+    private val terminalEmulators = ConcurrentHashMap<String, TerminalEmulator>()
     private var serviceStarted = false
 
     init {
@@ -62,8 +67,8 @@ class TerminalViewModel @Inject constructor(
         }
     }
 
-    fun getTerminalOutput(tabId: String): String {
-        return terminalOutputs[tabId]?.toString() ?: ""
+    fun getEmulator(tabId: String): TerminalEmulator? {
+        return terminalEmulators[tabId]
     }
 
     private fun createTab(profileId: Long, serverName: String) {
@@ -81,8 +86,6 @@ class TerminalViewModel @Inject constructor(
             )
         }
 
-        terminalOutputs[tabId] = StringBuilder()
-
         ensureServiceStarted()
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -99,6 +102,29 @@ class TerminalViewModel @Inject constructor(
 
                 val shellHandle = sshClient.openShell(session.sessionId)
                 shellHandles[tabId] = shellHandle
+
+                val emulator = emulatorProvider.create(
+                    looper = Looper.getMainLooper(),
+                    initialRows = DEFAULT_ROWS,
+                    initialCols = DEFAULT_COLS,
+                    defaultForeground = TerminalText,
+                    defaultBackground = TerminalBackground,
+                    onKeyboardInput = { bytes ->
+                        viewModelScope.launch(Dispatchers.IO) {
+                            try {
+                                shellHandle.outputStream.write(bytes)
+                                shellHandle.outputStream.flush()
+                            } catch (_: IOException) { /* connection lost */ }
+                        }
+                    },
+                    onResize = { dimensions ->
+                        shellHandle.onResize(dimensions.columns, dimensions.rows)
+                    },
+                    onClipboardCopy = { text ->
+                        onEvent(TerminalEvent.CopyToClipboard(text))
+                    },
+                )
+                terminalEmulators[tabId] = emulator
 
                 _uiState.update { state ->
                     state.copy(
@@ -123,22 +149,12 @@ class TerminalViewModel @Inject constructor(
     private fun startReaderCoroutine(tabId: String, shellHandle: ShellHandle) {
         viewModelScope.launch(Dispatchers.IO) {
             val buffer = ByteArray(4096)
+            val emulator = terminalEmulators[tabId]
             try {
                 while (true) {
                     val bytesRead = shellHandle.inputStream.read(buffer)
                     if (bytesRead == -1) break
-                    val text = String(buffer, 0, bytesRead)
-                    terminalOutputs[tabId]?.append(text)
-
-                    _uiState.update { state ->
-                        state.copy(
-                            tabs = state.tabs.map { tab ->
-                                if (tab.id == tabId) tab.copy(
-                                    outputVersion = tab.outputVersion + 1,
-                                ) else tab
-                            }
-                        )
-                    }
+                    emulator?.writeInput(buffer, 0, bytesRead)
                 }
             } catch (_: IOException) {
                 // Connection closed or lost
@@ -203,7 +219,7 @@ class TerminalViewModel @Inject constructor(
 
     private fun closeTab(tabId: String) {
         shellHandles.remove(tabId)?.onClose?.invoke()
-        terminalOutputs.remove(tabId)
+        terminalEmulators.remove(tabId)
 
         _uiState.update { state ->
             val newTabs = state.tabs.filterNot { it.id == tabId }
@@ -247,7 +263,8 @@ class TerminalViewModel @Inject constructor(
 
     private fun resizeTerminal(cols: Int, rows: Int) {
         val activeTab = getActiveTab() ?: return
-        shellHandles[activeTab.id]?.onResize?.invoke(cols, rows)
+        terminalEmulators[activeTab.id]?.resize(cols, rows)
+        // The emulator's onResize callback will propagate to shellHandle.onResize
     }
 
     private fun clearError() {
@@ -281,10 +298,12 @@ class TerminalViewModel @Inject constructor(
         super.onCleared()
         shellHandles.values.forEach { it.onClose() }
         shellHandles.clear()
-        terminalOutputs.clear()
+        terminalEmulators.clear()
     }
 
     companion object {
         private const val MAX_CLIPBOARD_HISTORY = 10
+        private const val DEFAULT_ROWS = 24
+        private const val DEFAULT_COLS = 80
     }
 }
