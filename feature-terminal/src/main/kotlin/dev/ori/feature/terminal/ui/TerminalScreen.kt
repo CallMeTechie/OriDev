@@ -144,7 +144,7 @@ fun TerminalScreen(
                 onTabSelect = { viewModel.onEvent(TerminalEvent.SwitchTab(it)) },
                 onTabClose = { viewModel.onEvent(TerminalEvent.CloseTab(it)) },
                 onAddTab = {
-                    // TODO: show server picker dialog
+                    viewModel.onEvent(TerminalEvent.ToggleServerPicker)
                 },
             )
 
@@ -236,6 +236,17 @@ fun TerminalScreen(
             snippets = uiState.snippets,
             onSnippetClick = { viewModel.onEvent(TerminalEvent.ExecuteSnippet(it)) },
             onDismiss = { viewModel.onEvent(TerminalEvent.ToggleSnippets) },
+        )
+    }
+
+    // Server picker dialog
+    if (uiState.showServerPicker) {
+        ServerPickerDialog(
+            servers = uiState.availableServers,
+            onSelect = { profileId, serverName ->
+                viewModel.onEvent(TerminalEvent.SelectServer(profileId, serverName))
+            },
+            onDismiss = { viewModel.onEvent(TerminalEvent.ToggleServerPicker) },
         )
     }
 
