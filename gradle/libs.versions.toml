@@ -7,26 +7,27 @@ compose-bom = "2025.04.00"
 
 # AndroidX
 core-ktx = "1.16.0"
-lifecycle = "2.9.0"
+lifecycle = "2.9.4"
 activity-compose = "1.10.1"
-navigation-compose = "2.9.0"
-window = "1.4.0"
-room = "2.7.1"
+navigation-compose = "2.9.7"
+window = "1.5.1"
+room = "2.8.4"
 work = "2.10.1"
 datastore = "1.1.4"
-biometric = "1.4.0"
+biometric = "1.1.0"
 security-crypto = "1.1.0-alpha07"
 splashscreen = "1.2.0-alpha02"
 
 # Hilt
-hilt = "2.54"
+hilt = "2.55"
+# Note: 2.59.2 is latest but needs KSP 2.1.10+. Using 2.55 for KSP compat.
 hilt-navigation-compose = "1.2.0"
 
 # Networking
 sshj = "0.40.0"
 commons-net = "3.11.1"
 okhttp = "4.12.0"
-moshi = "1.16.0"
+moshi = "1.15.2"
 
 # Terminal & Editor
 # Note: Termux terminal-view (Apache 2.0) -- verify license before use
