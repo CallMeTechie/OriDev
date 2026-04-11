@@ -85,13 +85,13 @@ class TerminalViewModelTest {
 
         viewModel.onEvent(TerminalEvent.CreateTab(profileId = 1L, serverName = "Server 1"))
 
-        viewModel.uiState.test {
-            val state = awaitItem()
-            assertThat(state.tabs).hasSize(1)
-            assertThat(state.tabs[0].serverName).isEqualTo("Server 1")
-            assertThat(state.tabs[0].profileId).isEqualTo(1L)
-            assertThat(state.activeTabIndex).isEqualTo(0)
-        }
+        // Tab addition is synchronous, so check the value directly
+        // (avoids race with the async IO coroutine that follows)
+        val state = viewModel.uiState.value
+        assertThat(state.tabs).hasSize(1)
+        assertThat(state.tabs[0].serverName).isEqualTo("Server 1")
+        assertThat(state.tabs[0].profileId).isEqualTo(1L)
+        assertThat(state.activeTabIndex).isEqualTo(0)
     }
 
     @Test
