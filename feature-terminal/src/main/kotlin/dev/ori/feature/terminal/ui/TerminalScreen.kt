@@ -260,6 +260,16 @@ fun TerminalScreen(
     }
 }
 
+// TODO: Replace placeholder with termlib Terminal composable.
+// Migration path:
+//   1. Create TerminalEmulator per tab via TerminalEmulatorFactory.Companion.create()
+//      passing the main Looper, initial cols/rows, and callbacks:
+//      - onKeyboardInput: write bytes to shellHandle.outputStream
+//      - onResize: invoke shellHandle.onResize
+//   2. Feed SSH output bytes into emulator.writeInput() instead of StringBuilder
+//   3. Replace TerminalContentArea with:
+//        org.connectbot.terminal.Terminal(emulator = emulator, modifier = modifier)
+//   4. Remove manual scroll state, font rendering, and ANSI concerns -- termlib handles all of it.
 @Composable
 private fun TerminalContentArea(
     output: String,

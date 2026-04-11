@@ -1,8 +1,8 @@
 [versions]
 # Kotlin & Compose
-kotlin = "2.1.10"
+kotlin = "2.3.20"
 agp = "8.9.1"
-compose-bom = "2025.04.00"
+compose-bom = "2026.03.00"
 
 
 # AndroidX
@@ -19,8 +19,8 @@ security-crypto = "1.1.0-alpha07"
 splashscreen = "1.2.0-alpha02"
 
 # Hilt
-hilt = "2.55"
-# Note: 2.59.2 is latest but needs KSP 2.1.10+. Using 2.55 for KSP compat.
+hilt = "2.58"
+# Note: 2.59+ drops AGP 8.x support. Staying on 2.58.
 hilt-navigation-compose = "1.2.0"
 
 # Networking
@@ -57,7 +57,7 @@ test-runner = "1.6.2"
 detekt = "1.23.8"
 
 # KSP
-ksp = "2.1.10-1.0.31"
+ksp = "2.3.6"
 
 [libraries]
 # Kotlin

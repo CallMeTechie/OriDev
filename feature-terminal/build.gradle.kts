@@ -6,6 +6,12 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
+    }
+}
+
 android {
     namespace = "dev.ori.feature.terminal"
     compileSdk = 36
@@ -18,11 +24,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
-
-    kotlinOptions {
-        jvmTarget = "21"
-    }
-
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
@@ -47,7 +48,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.window)
-    // implementation(libs.termlib) // TODO: requires Kotlin 2.3+, re-enable after Kotlin upgrade
+    implementation(libs.termlib)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
