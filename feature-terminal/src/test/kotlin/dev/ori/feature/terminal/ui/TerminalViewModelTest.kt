@@ -33,6 +33,7 @@ class TerminalViewModelTest {
     private val sshClient = mockk<SshClient>(relaxed = true)
     private val connectionRepository = mockk<ConnectionRepository>(relaxed = true)
     private val getSnippetsUseCase = mockk<GetSnippetsUseCase>()
+    private val emulatorProvider = mockk<TerminalEmulatorProvider>(relaxed = true)
     private val context = mockk<Context>(relaxed = true)
 
     @BeforeEach
@@ -52,6 +53,7 @@ class TerminalViewModelTest {
             sshClient = sshClient,
             connectionRepository = connectionRepository,
             getSnippetsUseCase = getSnippetsUseCase,
+            emulatorProvider = emulatorProvider,
             context = context,
         )
     }
