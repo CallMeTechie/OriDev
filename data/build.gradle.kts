@@ -25,6 +25,10 @@ android {
     }
 }
 
+tasks.withType<Test> {
+    useJUnitPlatform()
+}
+
 room {
     schemaDirectory("$projectDir/schemas")
 }
