@@ -25,6 +25,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-common"))
+    implementation(project(":domain"))
 
     implementation(libs.security.crypto)
     implementation(libs.biometric)
