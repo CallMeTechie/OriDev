@@ -107,15 +107,68 @@ class SshClientImpl @Inject constructor(
         }
     }
 
-    override suspend fun uploadFile(sessionId: String, localPath: String, remotePath: String) {
+    override suspend fun uploadFile(
+        sessionId: String,
+        localPath: String,
+        remotePath: String,
+        onProgress: (transferred: Long, total: Long) -> Unit,
+    ) {
         withSftpClient(sessionId) { sftp ->
-            sftp.put(localPath, remotePath)
+            val localFile = java.io.File(localPath)
+            val totalBytes = localFile.length()
+            val remoteFile = sftp.open(
+                remotePath,
+                java.util.EnumSet.of(
+                    net.schmizz.sshj.sftp.OpenMode.WRITE,
+                    net.schmizz.sshj.sftp.OpenMode.CREAT,
+                    net.schmizz.sshj.sftp.OpenMode.TRUNC,
+                ),
+            )
+            try {
+                val outputStream = remoteFile.RemoteFileOutputStream()
+                localFile.inputStream().use { input ->
+                    val buffer = ByteArray(TRANSFER_BUFFER_SIZE)
+                    var transferred = 0L
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        outputStream.write(buffer, 0, bytesRead)
+                        transferred += bytesRead
+                        onProgress(transferred, totalBytes)
+                    }
+                    outputStream.flush()
+                }
+            } finally {
+                remoteFile.close()
+            }
         }
     }
 
-    override suspend fun downloadFile(sessionId: String, remotePath: String, localPath: String) {
+    override suspend fun downloadFile(
+        sessionId: String,
+        remotePath: String,
+        localPath: String,
+        onProgress: (transferred: Long, total: Long) -> Unit,
+    ) {
         withSftpClient(sessionId) { sftp ->
-            sftp.get(remotePath, localPath)
+            val attrs = sftp.stat(remotePath)
+            val totalBytes = attrs.size
+            val remoteFile = sftp.open(remotePath)
+            try {
+                val inputStream = remoteFile.RemoteFileInputStream()
+                java.io.File(localPath).outputStream().use { output ->
+                    val buffer = ByteArray(TRANSFER_BUFFER_SIZE)
+                    var transferred = 0L
+                    var bytesRead: Int
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        transferred += bytesRead
+                        onProgress(transferred, totalBytes)
+                    }
+                    output.flush()
+                }
+            } finally {
+                remoteFile.close()
+            }
         }
     }
 
@@ -169,5 +222,6 @@ class SshClientImpl @Inject constructor(
 
     companion object {
         private const val KEEPALIVE_INTERVAL_SECONDS = 15
+        private const val TRANSFER_BUFFER_SIZE = 32_768
     }
 }
