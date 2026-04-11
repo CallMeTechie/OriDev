@@ -37,3 +37,7 @@ dependencies {
     testImplementation(libs.truth)
     testImplementation(libs.kotlinx.coroutines.test)
 }
+
+tasks.withType<Test> {
+    useJUnitPlatform()
+}
