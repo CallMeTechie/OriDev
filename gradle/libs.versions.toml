@@ -43,6 +43,7 @@ play-services-ads = "23.6.0"
 
 # Wear OS
 wear-compose = "1.5.0"
+wear-tiles = "1.5.0"
 play-services-wearable = "19.0.0"
 horologist = "0.6.22"
 
@@ -140,6 +141,9 @@ play-services-ads = { module = "com.google.android.gms:play-services-ads", versi
 wear-compose-material3 = { module = "androidx.wear.compose:compose-material3", version.ref = "wear-compose" }
 wear-compose-foundation = { module = "androidx.wear.compose:compose-foundation", version.ref = "wear-compose" }
 wear-compose-navigation = { module = "androidx.wear.compose:compose-navigation", version.ref = "wear-compose" }
+wear-tiles = { module = "androidx.wear.tiles:tiles", version.ref = "wear-tiles" }
+wear-tiles-material = { module = "androidx.wear.tiles:tiles-material", version.ref = "wear-tiles" }
+androidx-concurrent-futures = { module = "androidx.concurrent:concurrent-futures", version = "1.2.0" }
 play-services-wearable = { module = "com.google.android.gms:play-services-wearable", version.ref = "play-services-wearable" }
 horologist-compose-layout = { module = "com.google.android.horologist:horologist-compose-layout", version.ref = "horologist" }
 
