@@ -57,6 +57,7 @@ class TerminalViewModel @Inject constructor(
 
     private val shellHandles = ConcurrentHashMap<String, ShellHandle>()
     private val terminalEmulators = ConcurrentHashMap<String, TerminalEmulator>()
+    private val codeBlockDetectors = ConcurrentHashMap<String, CodeBlockDetector>()
     private var serviceStarted = false
 
     init {
@@ -100,7 +101,22 @@ class TerminalViewModel @Inject constructor(
             is TerminalEvent.ClearClaudeResponse -> _uiState.update {
                 it.copy(claudeResponse = null, claudeError = null)
             }
+            is TerminalEvent.ToggleCodeBlocksSheet -> _uiState.update {
+                it.copy(showCodeBlocksSheet = !it.showCodeBlocksSheet)
+            }
+            is TerminalEvent.CopyCodeBlock -> copyCodeBlock(event.blockId)
+            is TerminalEvent.OpenCodeBlockInEditor -> _uiState.update {
+                it.copy(codeBlockSnackbar = "Open in Editor: Coming soon")
+            }
+            is TerminalEvent.ClearCodeBlocks -> _uiState.update { it.copy(detectedCodeBlocks = emptyList()) }
+            is TerminalEvent.ClearCodeBlockSnackbar -> _uiState.update { it.copy(codeBlockSnackbar = null) }
         }
+    }
+
+    private fun copyCodeBlock(blockId: String) {
+        val block = _uiState.value.detectedCodeBlocks.find { it.id == blockId } ?: return
+        copyToClipboard(block.content)
+        _uiState.update { it.copy(codeBlockSnackbar = "Copied code block") }
     }
 
     fun getEmulator(tabId: String): TerminalEmulator? {
@@ -109,6 +125,7 @@ class TerminalViewModel @Inject constructor(
 
     private fun createTab(profileId: Long, serverName: String) {
         val tabId = UUID.randomUUID().toString()
+        codeBlockDetectors[tabId] = CodeBlockDetector()
 
         _uiState.update { state ->
             val newTab = TerminalTabState(
@@ -195,6 +212,16 @@ class TerminalViewModel @Inject constructor(
                     val bytesRead = shellHandle.inputStream.read(buffer)
                     if (bytesRead == -1) break
                     emulator?.writeInput(buffer, 0, bytesRead)
+                    val detector = codeBlockDetectors[tabId]
+                    if (detector != null) {
+                        val newBlocks = detector.processChunk(buffer, bytesRead)
+                        if (newBlocks.isNotEmpty()) {
+                            _uiState.update { state ->
+                                val combined = (state.detectedCodeBlocks + newBlocks).takeLast(MAX_CODE_BLOCKS)
+                                state.copy(detectedCodeBlocks = combined)
+                            }
+                        }
+                    }
                     uiState.value.activeRecordingId?.let { recId ->
                         sessionRecordingRepository.appendOutput(recId, buffer.copyOf(bytesRead))
                     }
@@ -263,6 +290,7 @@ class TerminalViewModel @Inject constructor(
     private fun closeTab(tabId: String) {
         shellHandles.remove(tabId)?.onClose?.invoke()
         terminalEmulators.remove(tabId)
+        codeBlockDetectors.remove(tabId)
 
         _uiState.update { state ->
             val newTabs = state.tabs.filterNot { it.id == tabId }
@@ -483,11 +511,13 @@ class TerminalViewModel @Inject constructor(
         shellHandles.values.forEach { it.onClose() }
         shellHandles.clear()
         terminalEmulators.clear()
+        codeBlockDetectors.clear()
     }
 
     companion object {
         private const val MAX_CLIPBOARD_HISTORY = 10
         private const val DEFAULT_ROWS = 24
         private const val DEFAULT_COLS = 80
+        private const val MAX_CODE_BLOCKS = 20
     }
 }
