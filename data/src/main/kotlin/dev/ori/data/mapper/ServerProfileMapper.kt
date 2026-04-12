@@ -22,6 +22,7 @@ fun ServerProfileEntity.toDomain(): ServerProfile =
         lastConnected = lastConnected,
         createdAt = createdAt,
         sortOrder = sortOrder,
+        require2fa = require2fa,
     )
 
 fun ServerProfile.toEntity(): ServerProfileEntity =
@@ -43,4 +44,5 @@ fun ServerProfile.toEntity(): ServerProfileEntity =
         lastConnected = lastConnected,
         createdAt = createdAt,
         sortOrder = sortOrder,
+        require2fa = require2fa,
     )

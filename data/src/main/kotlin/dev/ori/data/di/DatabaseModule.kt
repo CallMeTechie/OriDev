@@ -14,6 +14,7 @@ import dev.ori.data.dao.ProxmoxNodeDao
 import dev.ori.data.dao.ServerProfileDao
 import dev.ori.data.dao.SessionLogDao
 import dev.ori.data.dao.TransferRecordDao
+import dev.ori.data.db.MIGRATION_1_2
 import dev.ori.data.db.OriDevDatabase
 import javax.inject.Singleton
 
@@ -28,7 +29,9 @@ object DatabaseModule {
             context,
             OriDevDatabase::class.java,
             "oridev.db",
-        ).build()
+        )
+            .addMigrations(MIGRATION_1_2)
+            .build()
 
     @Provides
     fun provideServerProfileDao(db: OriDevDatabase): ServerProfileDao = db.serverProfileDao()
