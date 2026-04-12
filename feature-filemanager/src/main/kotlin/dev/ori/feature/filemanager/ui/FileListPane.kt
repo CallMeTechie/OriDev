@@ -31,6 +31,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -83,6 +86,7 @@ fun FileListPane(
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.semantics { heading() },
             )
         }
 
@@ -96,7 +100,7 @@ fun FileListPane(
             IconButton(onClick = onSelectAll) {
                 Icon(
                     Icons.Default.SelectAll,
-                    contentDescription = "Select all",
+                    contentDescription = "Alle auswählen",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -116,21 +120,25 @@ fun FileListPane(
                     } else {
                         Icons.AutoMirrored.Filled.ViewList
                     },
-                    contentDescription = "Toggle view mode",
+                    contentDescription = if (paneState.viewMode == ViewMode.LIST) {
+                        "Zu Rasteransicht wechseln"
+                    } else {
+                        "Zu Listenansicht wechseln"
+                    },
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             IconButton(onClick = onCreateDirectory) {
                 Icon(
                     Icons.Default.CreateNewFolder,
-                    contentDescription = "New folder",
+                    contentDescription = "Neuen Ordner anlegen",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             IconButton(onClick = onRefresh) {
                 Icon(
                     Icons.Default.Refresh,
-                    contentDescription = "Refresh",
+                    contentDescription = "Aktualisieren",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -172,6 +180,9 @@ fun FileListPane(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onNavigateUp() }
+                                .semantics {
+                                    contentDescription = "Eine Ebene nach oben"
+                                }
                                 .padding(horizontal = 12.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
