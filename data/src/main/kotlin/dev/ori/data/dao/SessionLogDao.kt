@@ -12,6 +12,9 @@ interface SessionLogDao {
     @Query("SELECT * FROM session_logs WHERE serverProfileId = :serverId ORDER BY startedAt DESC")
     fun getForServer(serverId: Long): Flow<List<SessionLogEntity>>
 
+    @Query("SELECT * FROM session_logs WHERE id = :id")
+    suspend fun getById(id: Long): SessionLogEntity?
+
     @Insert
     suspend fun insert(log: SessionLogEntity): Long
 
