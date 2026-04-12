@@ -13,13 +13,17 @@ const val CONNECTIONS_ROUTE = "connections"
 const val ADD_CONNECTION_ROUTE = "connections/add"
 const val EDIT_CONNECTION_ROUTE = "connections/edit/{profileId}"
 
-fun NavGraphBuilder.connectionsScreen(navController: NavController) {
+fun NavGraphBuilder.connectionsScreen(
+    navController: NavController,
+    onNavigateToProxmox: () -> Unit = {},
+) {
     composable(route = CONNECTIONS_ROUTE) {
         ConnectionListScreen(
             onNavigateToAdd = { navController.navigate(ADD_CONNECTION_ROUTE) },
             onNavigateToEdit = { profileId ->
                 navController.navigate("connections/edit/$profileId")
             },
+            onNavigateToProxmox = onNavigateToProxmox,
         )
     }
 }

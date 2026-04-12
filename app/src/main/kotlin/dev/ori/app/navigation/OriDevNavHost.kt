@@ -18,6 +18,10 @@ import dev.ori.feature.editor.navigation.diffViewerScreen
 import dev.ori.feature.editor.navigation.editorScreen
 import dev.ori.feature.editor.navigation.navigateToEditor
 import dev.ori.feature.filemanager.navigation.fileManagerScreen
+import dev.ori.feature.proxmox.navigation.navigateToCreateVm
+import dev.ori.feature.proxmox.navigation.navigateToProxmox
+import dev.ori.feature.proxmox.navigation.proxmoxDashboardScreen
+import dev.ori.feature.terminal.navigation.navigateToTerminal
 import dev.ori.feature.terminal.navigation.terminalScreen
 import dev.ori.feature.transfers.navigation.transferQueueScreen
 
@@ -31,7 +35,16 @@ fun OriDevNavHost(
         startDestination = CONNECTIONS_ROUTE,
         modifier = modifier,
     ) {
-        connectionsScreen(navController)
+        connectionsScreen(
+            navController = navController,
+            onNavigateToProxmox = { navController.navigateToProxmox() },
+        )
+
+        proxmoxDashboardScreen(
+            onNavigateToTerminal = { profileId -> navController.navigateToTerminal(profileId) },
+            onNavigateToCreateVm = { nodeId -> navController.navigateToCreateVm(nodeId) },
+            onNavigateBackFromWizard = { navController.popBackStack() },
+        )
 
         addConnectionScreen(navController)
 

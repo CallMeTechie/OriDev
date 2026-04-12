@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
@@ -56,6 +57,7 @@ import kotlinx.coroutines.launch
 fun ConnectionListScreen(
     onNavigateToAdd: () -> Unit = {},
     onNavigateToEdit: (Long) -> Unit = {},
+    onNavigateToProxmox: () -> Unit = {},
     viewModel: ConnectionListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -107,7 +109,17 @@ fun ConnectionListScreen(
 
     Scaffold(
         topBar = {
-            OriDevTopBar(title = "Connections")
+            OriDevTopBar(
+                title = "Connections",
+                actions = {
+                    IconButton(onClick = onNavigateToProxmox) {
+                        Icon(
+                            imageVector = Icons.Default.Cloud,
+                            contentDescription = "Proxmox Manager",
+                        )
+                    }
+                },
+            )
         },
         floatingActionButton = {
             FloatingActionButton(
