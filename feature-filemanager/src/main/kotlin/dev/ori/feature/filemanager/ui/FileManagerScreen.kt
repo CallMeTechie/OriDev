@@ -288,6 +288,7 @@ private fun PaneContent(
         onToggleSelection = { path -> onEvent(FileManagerEvent.ToggleFileSelection(pane, path)) },
         onSelectAll = { onEvent(FileManagerEvent.SelectAllFiles(pane)) },
         onSetViewMode = { mode -> onEvent(FileManagerEvent.SetViewMode(pane, mode)) },
+        onRefresh = { onEvent(FileManagerEvent.RefreshPane(pane)) },
         onCreateDirectory = {
             /* Create directory dialog -- handled by parent in future iteration */
         },

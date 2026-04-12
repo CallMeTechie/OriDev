@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +47,7 @@ fun FileListPane(
     onToggleSelection: (String) -> Unit,
     onSelectAll: () -> Unit,
     onSetViewMode: (ViewMode) -> Unit,
+    onRefresh: () -> Unit,
     onCreateDirectory: () -> Unit,
     onShowFileInfo: (FileItem) -> Unit,
     onShowFilePreview: (FileItem) -> Unit,
@@ -122,6 +124,13 @@ fun FileListPane(
                 Icon(
                     Icons.Default.CreateNewFolder,
                     contentDescription = "New folder",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = onRefresh) {
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = "Refresh",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
