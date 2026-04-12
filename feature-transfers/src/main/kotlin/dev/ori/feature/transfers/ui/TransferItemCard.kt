@@ -30,6 +30,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,6 +61,24 @@ fun TransferItemCard(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val fileName = transfer.sourcePath.substringAfterLast('/')
+    val progressPercent = if (transfer.totalBytes > 0) {
+        ((transfer.transferredBytes.toFloat() / transfer.totalBytes) * FULL_PROGRESS).toInt()
+    } else {
+        0
+    }
+    val statusLabel = when (transfer.status) {
+        TransferStatus.ACTIVE -> "aktiv"
+        TransferStatus.QUEUED -> "in Warteschlange"
+        TransferStatus.PAUSED -> "pausiert"
+        TransferStatus.COMPLETED -> "abgeschlossen"
+        TransferStatus.FAILED -> "fehlgeschlagen"
+    }
+    val directionLabel = when (transfer.direction) {
+        TransferDirection.UPLOAD -> "Upload"
+        TransferDirection.DOWNLOAD -> "Download"
+    }
+    val cardDescription = "$directionLabel $fileName, $progressPercent Prozent, $statusLabel"
     Card(
         modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -69,9 +89,15 @@ fun TransferItemCard(
         Column(
             modifier = Modifier.padding(12.dp),
         ) {
-            DirectionAndFileRow(transfer)
-            Spacer(modifier = Modifier.height(8.dp))
-            ProgressSection(transfer)
+            Column(
+                modifier = Modifier.semantics(mergeDescendants = true) {
+                    contentDescription = cardDescription
+                },
+            ) {
+                DirectionAndFileRow(transfer)
+                Spacer(modifier = Modifier.height(8.dp))
+                ProgressSection(transfer)
+            }
             Spacer(modifier = Modifier.height(8.dp))
             StatusAndActionsRow(transfer, onPause, onResume, onCancel, onRetry)
             if (transfer.status == TransferStatus.FAILED && !transfer.errorMessage.isNullOrBlank()) {
@@ -96,7 +122,7 @@ private fun DirectionAndFileRow(transfer: TransferRequest) {
                 TransferDirection.UPLOAD -> Icons.Default.CloudUpload
                 TransferDirection.DOWNLOAD -> Icons.Default.CloudDownload
             },
-            contentDescription = transfer.direction.name,
+            contentDescription = null,
             tint = Indigo500,
             modifier = Modifier.size(20.dp),
         )
@@ -223,20 +249,45 @@ private fun ActionButtons(
     Row {
         when (transfer.status) {
             TransferStatus.ACTIVE -> {
-                SmallActionButton(Icons.Default.Pause, "Pause", Indigo500, onPause)
+                SmallActionButton(Icons.Default.Pause, "Übertragung pausieren", Indigo500, onPause)
                 Spacer(modifier = Modifier.width(4.dp))
-                SmallActionButton(Icons.Default.Close, "Cancel", StatusDisconnected, onCancel)
+                SmallActionButton(
+                    Icons.Default.Close,
+                    "Übertragung abbrechen",
+                    StatusDisconnected,
+                    onCancel,
+                )
             }
             TransferStatus.PAUSED -> {
-                SmallActionButton(Icons.Default.PlayArrow, "Resume", Indigo500, onResume)
+                SmallActionButton(
+                    Icons.Default.PlayArrow,
+                    "Übertragung fortsetzen",
+                    Indigo500,
+                    onResume,
+                )
                 Spacer(modifier = Modifier.width(4.dp))
-                SmallActionButton(Icons.Default.Close, "Cancel", StatusDisconnected, onCancel)
+                SmallActionButton(
+                    Icons.Default.Close,
+                    "Übertragung abbrechen",
+                    StatusDisconnected,
+                    onCancel,
+                )
             }
             TransferStatus.QUEUED -> {
-                SmallActionButton(Icons.Default.Close, "Cancel", StatusDisconnected, onCancel)
+                SmallActionButton(
+                    Icons.Default.Close,
+                    "Übertragung abbrechen",
+                    StatusDisconnected,
+                    onCancel,
+                )
             }
             TransferStatus.FAILED -> {
-                SmallActionButton(Icons.Default.Refresh, "Retry", Indigo500, onRetry)
+                SmallActionButton(
+                    Icons.Default.Refresh,
+                    "Übertragung erneut versuchen",
+                    Indigo500,
+                    onRetry,
+                )
             }
             TransferStatus.COMPLETED -> {
                 // No actions for completed transfers

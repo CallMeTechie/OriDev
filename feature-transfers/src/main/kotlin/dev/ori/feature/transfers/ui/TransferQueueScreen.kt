@@ -153,7 +153,7 @@ private fun EmptyTransfersState() {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
                 imageVector = Icons.Default.SwapVert,
-                contentDescription = null,
+                contentDescription = "Keine Übertragungen",
                 modifier = Modifier.size(48.dp),
                 tint = Gray400,
             )
