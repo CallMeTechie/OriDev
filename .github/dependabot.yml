@@ -6,22 +6,52 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
-    labels: [dependencies]
+    labels:
+      - dependencies
+      - automated
+    reviewers:
+      - CallMeTechie
+    commit-message:
+      prefix: "chore(deps)"
     groups:
       compose:
         patterns: ["androidx.compose*"]
+        update-types: ["minor", "patch"]
       kotlin:
         patterns: ["org.jetbrains.kotlin*", "com.google.devtools.ksp*"]
+        update-types: ["minor", "patch"]
       hilt:
         patterns: ["com.google.dagger*", "androidx.hilt*"]
+        update-types: ["minor", "patch"]
+      androidx:
+        patterns: ["androidx.*"]
+        exclude-patterns: ["androidx.compose*", "androidx.hilt*"]
+        update-types: ["minor", "patch"]
+      testing:
+        patterns:
+          - "org.junit*"
+          - "io.mockk*"
+          - "app.cash.turbine*"
+          - "com.google.truth*"
+        update-types: ["minor", "patch"]
       security-crypto:
         patterns: ["com.hierynomus:sshj*", "org.bouncycastle*", "ch.acra*"]
     ignore:
+      # Hilt cap for AGP 8.x compat (pre-existing policy)
+      - dependency-name: "com.google.dagger:*"
+        versions: [">=2.59"]
+      # Security-sensitive libs: major updates require manual review
       - dependency-name: "com.hierynomus:sshj"
         update-types: ["version-update:semver-major"]
       - dependency-name: "org.bouncycastle:*"
         update-types: ["version-update:semver-major"]
+
   - package-ecosystem: github-actions
     directory: /
-    schedule: { interval: weekly }
-    labels: [ci]
+    schedule:
+      interval: weekly
+    labels:
+      - ci
+      - automated
+    commit-message:
+      prefix: "ci(deps)"
