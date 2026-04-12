@@ -25,4 +25,5 @@ data class ServerProfileEntity(
     val lastConnected: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val sortOrder: Int = 0,
+    val require2fa: Boolean = false,
 )
