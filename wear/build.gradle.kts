@@ -40,17 +40,26 @@ dependencies {
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
+    implementation(libs.compose.material.icons.extended)
     implementation(libs.wear.compose.material3)
     implementation(libs.wear.compose.foundation)
     implementation(libs.wear.compose.navigation)
     implementation(libs.horologist.compose.layout)
     implementation(libs.play.services.wearable)
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.activity.compose)
 
     implementation(libs.hilt.android)
+    implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.android.compiler)
 
     testImplementation(libs.junit5.api)
     testRuntimeOnly(libs.junit5.engine)
     testImplementation(libs.mockk)
+    testImplementation(libs.turbine)
+    testImplementation(libs.truth)
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }
