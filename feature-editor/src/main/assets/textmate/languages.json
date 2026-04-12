@@ -1,0 +1,29 @@
+{
+  "grammarDefinition": [
+    {
+      "name": "kotlin",
+      "scopeName": "source.kotlin",
+      "grammar": "textmate/grammars/kotlin.placeholder.json"
+    },
+    {
+      "name": "json",
+      "scopeName": "source.json",
+      "grammar": "textmate/grammars/json.placeholder.json"
+    },
+    {
+      "name": "markdown",
+      "scopeName": "text.html.markdown",
+      "grammar": "textmate/grammars/markdown.placeholder.json"
+    },
+    {
+      "name": "shell",
+      "scopeName": "source.shell",
+      "grammar": "textmate/grammars/shell.placeholder.json"
+    },
+    {
+      "name": "yaml",
+      "scopeName": "source.yaml",
+      "grammar": "textmate/grammars/yaml.placeholder.json"
+    }
+  ]
+}

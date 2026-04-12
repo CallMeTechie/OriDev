@@ -1,0 +1,29 @@
+{
+  "name": "YAML (placeholder)",
+  "scopeName": "source.yaml",
+  "fileTypes": ["yml", "yaml"],
+  "patterns": [
+    {
+      "match": "^\\s*[A-Za-z_][A-Za-z0-9_-]*\\s*:",
+      "name": "entity.name.tag.yaml"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.yaml"
+    },
+    {
+      "begin": "'",
+      "end": "'",
+      "name": "string.quoted.single.yaml"
+    },
+    {
+      "match": "#[^\\n]*",
+      "name": "comment.line.number-sign.yaml"
+    },
+    {
+      "match": "\\b(true|false|null|yes|no|on|off)\\b",
+      "name": "constant.language.yaml"
+    }
+  ]
+}

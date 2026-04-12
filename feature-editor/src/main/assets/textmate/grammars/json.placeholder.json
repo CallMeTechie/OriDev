@@ -1,0 +1,23 @@
+{
+  "name": "JSON (placeholder)",
+  "scopeName": "source.json",
+  "fileTypes": ["json"],
+  "patterns": [
+    {
+      "match": "\\b(true|false|null)\\b",
+      "name": "constant.language.json"
+    },
+    {
+      "match": "-?\\b\\d+(\\.\\d+)?([eE][+-]?\\d+)?\\b",
+      "name": "constant.numeric.json"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.json",
+      "patterns": [
+        { "match": "\\\\.", "name": "constant.character.escape.json" }
+      ]
+    }
+  ]
+}

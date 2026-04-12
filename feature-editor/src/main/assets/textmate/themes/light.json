@@ -1,0 +1,21 @@
+{
+  "name": "light",
+  "type": "light",
+  "colors": {
+    "editor.background": "#FFFFFF",
+    "editor.foreground": "#111827",
+    "editor.selectionBackground": "#E0E7FF",
+    "editorLineNumber.foreground": "#9CA3AF"
+  },
+  "tokenColors": [
+    {"scope": "keyword", "settings": {"foreground": "#6366F1"}},
+    {"scope": "string", "settings": {"foreground": "#10B981"}},
+    {"scope": "comment", "settings": {"foreground": "#6B7280"}},
+    {"scope": "entity.name.function", "settings": {"foreground": "#8B5CF6"}},
+    {"scope": "storage.type", "settings": {"foreground": "#3B82F6"}},
+    {"scope": "constant.numeric", "settings": {"foreground": "#F59E0B"}},
+    {"scope": "constant.language", "settings": {"foreground": "#F59E0B"}},
+    {"scope": "markup.heading", "settings": {"foreground": "#6366F1"}},
+    {"scope": "entity.name.tag", "settings": {"foreground": "#3B82F6"}}
+  ]
+}

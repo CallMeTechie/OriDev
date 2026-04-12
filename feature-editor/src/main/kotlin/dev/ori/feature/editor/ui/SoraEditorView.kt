@@ -38,6 +38,13 @@ fun SoraEditorView(
                 editor.setText(content)
             }
             editor.editable = !readOnly
+            // Only re-create language when filename actually changes -- avoids
+            // allocating a new TextMateLanguage on every recomposition.
+            val currentLang = editor.getTag(android.R.id.text1) as? String
+            if (currentLang != filename) {
+                editor.setEditorLanguage(TextMateLoader.loadLanguageForFile(filename))
+                editor.setTag(android.R.id.text1, filename)
+            }
         },
     )
 }

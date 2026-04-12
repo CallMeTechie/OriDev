@@ -1,6 +1,16 @@
 package dev.ori.feature.editor.ui
 
 /**
+ * Pairs a TextMate scope name with the asset path of a bundled grammar file.
+ *
+ * Used by [TextMateLoader] to know which grammar to register for a given file.
+ */
+data class LanguageInfo(
+    val scopeName: String,
+    val grammarAsset: String,
+)
+
+/**
  * Maps file extensions to a TextMate scope name and a human-readable language label.
  *
  * The scope names match the ones used in the bundled TextMate grammars we intend to
@@ -16,6 +26,35 @@ object LanguageDetector {
     )
 
     private val PLAIN = Language(id = "plain", displayName = "Plain Text", scopeName = "text.plain")
+
+    private val GRAMMAR_INFO: Map<String, LanguageInfo> = mapOf(
+        "kt" to LanguageInfo("source.kotlin", "textmate/grammars/kotlin.placeholder.json"),
+        "kts" to LanguageInfo("source.kotlin", "textmate/grammars/kotlin.placeholder.json"),
+        "json" to LanguageInfo("source.json", "textmate/grammars/json.placeholder.json"),
+        "md" to LanguageInfo("text.html.markdown", "textmate/grammars/markdown.placeholder.json"),
+        "markdown" to LanguageInfo("text.html.markdown", "textmate/grammars/markdown.placeholder.json"),
+        "sh" to LanguageInfo("source.shell", "textmate/grammars/shell.placeholder.json"),
+        "bash" to LanguageInfo("source.shell", "textmate/grammars/shell.placeholder.json"),
+        "yml" to LanguageInfo("source.yaml", "textmate/grammars/yaml.placeholder.json"),
+        "yaml" to LanguageInfo("source.yaml", "textmate/grammars/yaml.placeholder.json"),
+    )
+
+    /** Returns the TextMate scope name for the given filename, or null if unsupported. */
+    fun scopeForFile(filename: String): String? {
+        val ext = filename.substringAfterLast('.', "").lowercase()
+        if (ext.isEmpty()) return null
+        return GRAMMAR_INFO[ext]?.scopeName
+    }
+
+    /** Returns full language info (scope + grammar asset) or null if unsupported. */
+    fun infoForFile(filename: String): LanguageInfo? {
+        val ext = filename.substringAfterLast('.', "").lowercase()
+        if (ext.isEmpty()) return null
+        return GRAMMAR_INFO[ext]
+    }
+
+    /** Returns all distinct languages registered for grammar loading. */
+    fun allLanguages(): List<LanguageInfo> = GRAMMAR_INFO.values.distinct()
 
     private val BY_EXTENSION: Map<String, Language> = mapOf(
         "kt" to Language("kotlin", "Kotlin", "source.kotlin"),
