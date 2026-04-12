@@ -44,6 +44,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -112,7 +114,12 @@ fun TerminalScreen(
                 onClick = { viewModel.onEvent(TerminalEvent.ShowSendToClaude("")) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
-                icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+                icon = {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = "An Claude senden",
+                    )
+                },
                 text = { Text("Send to Claude") },
             )
         },
@@ -297,7 +304,7 @@ private fun TerminalTopBarActions(
     // Clipboard history
     Box {
         IconButton(onClick = { onShowClipboardHistoryChange(true) }) {
-            Icon(Icons.Default.ContentCopy, contentDescription = "Clipboard history")
+            Icon(Icons.Default.ContentCopy, contentDescription = "Zwischenablageverlauf")
         }
         ClipboardHistory(
             expanded = showClipboardHistory,
@@ -312,12 +319,12 @@ private fun TerminalTopBarActions(
 
     // Paste from system clipboard
     IconButton(onClick = onPasteFromSystem) {
-        Icon(Icons.Default.ContentPaste, contentDescription = "Paste")
+        Icon(Icons.Default.ContentPaste, contentDescription = "Aus Zwischenablage einfügen")
     }
 
     // Snippets
     IconButton(onClick = { onEvent(TerminalEvent.ToggleSnippets) }) {
-        Icon(Icons.Default.PlayArrow, contentDescription = "Snippets")
+        Icon(Icons.Default.PlayArrow, contentDescription = "Snippets öffnen")
     }
 
     // Detected code blocks
@@ -329,7 +336,10 @@ private fun TerminalTopBarActions(
                 }
             },
         ) {
-            Icon(Icons.Default.Code, contentDescription = "Detected code blocks")
+            Icon(
+                Icons.Default.Code,
+                contentDescription = "Erkannte Code-Blöcke anzeigen",
+            )
         }
     }
 
@@ -341,7 +351,11 @@ private fun TerminalTopBarActions(
             } else {
                 Icons.Default.Keyboard
             },
-            contentDescription = "Toggle keyboard",
+            contentDescription = if (uiState.isKeyboardVisible) {
+                "Tastatur ausblenden"
+            } else {
+                "Tastatur einblenden"
+            },
         )
     }
 
@@ -359,7 +373,11 @@ private fun TerminalTopBarActions(
             } else {
                 Icons.Default.FiberManualRecord
             },
-            contentDescription = if (uiState.isRecording) "Stop recording" else "Start recording",
+            contentDescription = if (uiState.isRecording) {
+                "Aufzeichnung stoppen"
+            } else {
+                "Aufzeichnung starten"
+            },
             tint = if (uiState.isRecording) {
                 MaterialTheme.colorScheme.error
             } else {
@@ -373,12 +391,12 @@ private fun TerminalTopBarActions(
         onClick = { onEvent(TerminalEvent.ExportRecording) },
         enabled = uiState.activeRecordingId != null,
     ) {
-        Icon(Icons.Default.IosShare, contentDescription = "Export recording")
+        Icon(Icons.Default.IosShare, contentDescription = "Aufzeichnung exportieren")
     }
 
     // Preferences
     IconButton(onClick = { onEvent(TerminalEvent.TogglePreferences) }) {
-        Icon(Icons.Default.Settings, contentDescription = "Preferences")
+        Icon(Icons.Default.Settings, contentDescription = "Terminal-Einstellungen")
     }
 }
 
@@ -389,14 +407,22 @@ private fun TerminalContentArea(
     modifier: Modifier = Modifier,
 ) {
     if (emulator != null) {
+        val lineCount = emulator.dimensions.rows
         Terminal(
             terminalEmulator = emulator,
-            modifier = modifier.background(TerminalBackground),
+            modifier = modifier
+                .background(TerminalBackground)
+                .semantics {
+                    contentDescription = "Terminal, $lineCount Zeilen Ausgabe"
+                },
         )
     } else {
         Box(
             modifier = modifier
                 .background(TerminalBackground)
+                .semantics {
+                    contentDescription = "Terminal, keine aktive Sitzung"
+                }
                 .padding(8.dp),
         ) {
             Text(

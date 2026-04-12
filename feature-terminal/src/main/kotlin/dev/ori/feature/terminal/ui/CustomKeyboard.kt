@@ -26,6 +26,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -41,6 +46,28 @@ private val KeyBorder = Color(0xFFE5E7EB)
 private val KeyShape = RoundedCornerShape(8.dp)
 
 private const val ESC = "\u001b"
+
+private fun keyDescription(label: String): String = when (label) {
+    "Esc" -> "Escape-Taste"
+    "Tab" -> "Tabulator-Taste"
+    "Ctrl" -> "Steuerungstaste"
+    "Alt" -> "Alt-Taste"
+    "Shift" -> "Umschalttaste"
+    "Enter" -> "Eingabetaste"
+    "Fn" -> "Funktionstasten umschalten"
+    "Home" -> "Pos1-Taste"
+    "End" -> "Ende-Taste"
+    "PgUp" -> "Bild auf"
+    "PgDn" -> "Bild ab"
+    "Ins" -> "Einfügen-Taste"
+    "Del" -> "Entfernen-Taste"
+    "\u232B" -> "Rücktaste"
+    "\u2191" -> "Pfeil nach oben"
+    "\u2193" -> "Pfeil nach unten"
+    "\u2190" -> "Pfeil nach links"
+    "\u2192" -> "Pfeil nach rechts"
+    else -> "Taste $label"
+}
 
 @Composable
 fun CustomKeyboard(
@@ -228,12 +255,17 @@ private fun KeyButton(
     label: String,
     onClick: () -> Unit,
 ) {
+    val description = keyDescription(label)
     Box(
         modifier = Modifier
             .height(44.dp)
             .widthIn(min = 32.dp)
             .background(KeyBackground, KeyShape)
             .border(1.dp, KeyBorder, KeyShape)
+            .semantics {
+                contentDescription = description
+                role = Role.Button
+            }
             .pointerInput(label) {
                 detectTapGestures(onTap = { onClick() })
             }
@@ -258,12 +290,19 @@ private fun ToggleKeyButton(
 ) {
     val bg = if (isActive) Indigo500 else KeyBackground
     val textColor = if (isActive) Color.White else Color.Black
+    val description = keyDescription(label)
+    val toggleState = if (isActive) "aktiv" else "inaktiv"
     Box(
         modifier = Modifier
             .height(44.dp)
             .widthIn(min = 40.dp)
             .background(bg, KeyShape)
             .border(1.dp, KeyBorder, KeyShape)
+            .semantics {
+                contentDescription = description
+                stateDescription = toggleState
+                role = Role.Switch
+            }
             .pointerInput(label) {
                 detectTapGestures(onTap = { onClick() })
             }
@@ -288,6 +327,7 @@ private fun RepeatKeyButton(
 ) {
     val scope = rememberCoroutineScope()
     var repeatJob by remember { mutableStateOf<Job?>(null) }
+    val description = keyDescription(label)
 
     Box(
         modifier = Modifier
@@ -295,6 +335,10 @@ private fun RepeatKeyButton(
             .widthIn(min = 36.dp)
             .background(KeyBackground, KeyShape)
             .border(1.dp, KeyBorder, KeyShape)
+            .semantics {
+                contentDescription = description
+                role = Role.Button
+            }
             .pointerInput(label) {
                 detectTapGestures(
                     onPress = {
@@ -335,6 +379,10 @@ private fun RowScope.SpaceKeyButton(
             .weight(1f)
             .background(KeyBackground, KeyShape)
             .border(1.dp, KeyBorder, KeyShape)
+            .semantics {
+                contentDescription = "Leertaste"
+                role = Role.Button
+            }
             .pointerInput(Unit) {
                 detectTapGestures(onTap = { onClick() })
             },
