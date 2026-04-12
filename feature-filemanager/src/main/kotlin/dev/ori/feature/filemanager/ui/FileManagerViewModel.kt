@@ -72,7 +72,54 @@ class FileManagerViewModel @Inject constructor(
             is FileManagerEvent.AddBookmark -> { /* Bookmark persistence -- deferred */ }
             is FileManagerEvent.RemoveBookmark -> { /* Bookmark persistence -- deferred */ }
             is FileManagerEvent.InitiateTransfer -> initiateTransfer(event.sourcePaths, event.sourcePane)
+            is FileManagerEvent.ShowFilePreview -> showFilePreview(event.pane, event.file)
+            is FileManagerEvent.ClosePreview -> _uiState.update {
+                it.copy(
+                    previewFile = null,
+                    previewContent = null,
+                    previewLoading = false,
+                    previewError = null,
+                )
+            }
         }
+    }
+
+    private fun showFilePreview(pane: ActivePane, file: dev.ori.domain.model.FileItem) {
+        _uiState.update {
+            it.copy(
+                previewFile = file,
+                previewPane = pane,
+                previewContent = null,
+                previewLoading = true,
+                previewError = null,
+            )
+        }
+        viewModelScope.launch {
+            val result = runCatching { getRepository(pane).getFileContent(file.path) }
+            result.fold(
+                onSuccess = { bytes ->
+                    val capped = if (bytes.size > MAX_PREVIEW_BYTES) bytes.copyOf(MAX_PREVIEW_BYTES) else bytes
+                    _uiState.update {
+                        it.copy(
+                            previewLoading = false,
+                            previewContent = capped.toString(Charsets.UTF_8),
+                        )
+                    }
+                },
+                onFailure = { err ->
+                    _uiState.update {
+                        it.copy(
+                            previewLoading = false,
+                            previewError = err.message ?: "Failed to load preview",
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    companion object {
+        private const val MAX_PREVIEW_BYTES = 100_000
     }
 
     private fun getRepository(pane: ActivePane): FileSystemRepository =

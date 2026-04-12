@@ -8,9 +8,11 @@ import dev.ori.feature.filemanager.ui.FileManagerScreen
 
 const val FILE_MANAGER_ROUTE = "filemanager"
 
-fun NavGraphBuilder.fileManagerScreen() {
+fun NavGraphBuilder.fileManagerScreen(
+    onNavigateToEditor: (filePath: String, isRemote: Boolean) -> Unit = { _, _ -> },
+) {
     composable(route = FILE_MANAGER_ROUTE) {
-        FileManagerScreen()
+        FileManagerScreen(onNavigateToEditor = onNavigateToEditor)
     }
 }
 

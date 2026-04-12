@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import dev.ori.core.ui.component.StatusDot
 import dev.ori.domain.model.FileItem
 
+@Suppress("LongParameterList")
 @Composable
 fun FileListPane(
     paneState: PaneState,
@@ -47,6 +48,7 @@ fun FileListPane(
     onSetViewMode: (ViewMode) -> Unit,
     onCreateDirectory: () -> Unit,
     onShowFileInfo: (FileItem) -> Unit,
+    onShowFilePreview: (FileItem) -> Unit,
     onShowContextMenu: (FileItem) -> Unit,
     onRename: (FileItem) -> Unit,
     onDelete: (FileItem) -> Unit,
@@ -186,7 +188,7 @@ fun FileListPane(
                                 if (file.isDirectory) {
                                     onNavigateToPath(file.path)
                                 } else {
-                                    onToggleSelection(file.path)
+                                    onShowFilePreview(file)
                                 }
                             },
                             onLongClick = {
