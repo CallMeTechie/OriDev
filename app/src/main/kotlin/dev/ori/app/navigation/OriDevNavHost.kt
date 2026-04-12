@@ -14,6 +14,8 @@ import dev.ori.feature.connections.navigation.CONNECTIONS_ROUTE
 import dev.ori.feature.connections.navigation.addConnectionScreen
 import dev.ori.feature.connections.navigation.connectionsScreen
 import dev.ori.feature.connections.navigation.editConnectionScreen
+import dev.ori.feature.editor.navigation.editorScreen
+import dev.ori.feature.editor.navigation.navigateToEditor
 import dev.ori.feature.filemanager.navigation.fileManagerScreen
 import dev.ori.feature.terminal.navigation.terminalScreen
 import dev.ori.feature.transfers.navigation.transferQueueScreen
@@ -34,11 +36,17 @@ fun OriDevNavHost(
 
         editConnectionScreen(navController)
 
-        fileManagerScreen()
+        fileManagerScreen(
+            onNavigateToEditor = { filePath, isRemote ->
+                navController.navigateToEditor(filePath, isRemote)
+            },
+        )
 
         terminalScreen()
 
         transferQueueScreen()
+
+        editorScreen(onNavigateBack = { navController.popBackStack() })
 
         composable("settings") {
             PlaceholderScreen(title = "Settings")
