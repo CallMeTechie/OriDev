@@ -37,6 +37,9 @@ data class TerminalUiState(
     val claudeResponse: String? = null,
     val claudeLoading: Boolean = false,
     val claudeError: String? = null,
+    val detectedCodeBlocks: List<DetectedCodeBlock> = emptyList(),
+    val showCodeBlocksSheet: Boolean = false,
+    val codeBlockSnackbar: String? = null,
 )
 
 sealed class TerminalEvent {
@@ -76,4 +79,9 @@ sealed class TerminalEvent {
     data class SetClaudePrompt(val prompt: String) : TerminalEvent()
     data class SendToClaude(val prompt: String) : TerminalEvent()
     data object ClearClaudeResponse : TerminalEvent()
+    data object ToggleCodeBlocksSheet : TerminalEvent()
+    data class CopyCodeBlock(val blockId: String) : TerminalEvent()
+    data class OpenCodeBlockInEditor(val blockId: String) : TerminalEvent()
+    data object ClearCodeBlocks : TerminalEvent()
+    data object ClearCodeBlockSnackbar : TerminalEvent()
 }

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.FiberManualRecord
@@ -20,6 +21,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -75,6 +78,13 @@ fun TerminalScreen(
         }
     }
 
+    LaunchedEffect(uiState.codeBlockSnackbar) {
+        uiState.codeBlockSnackbar?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.onEvent(TerminalEvent.ClearCodeBlockSnackbar)
+        }
+    }
+
     val activeTab = uiState.tabs.getOrNull(uiState.activeTabIndex)
     val activeEmulator = activeTab?.let { viewModel.getEmulator(it.id) }
 
@@ -83,83 +93,17 @@ fun TerminalScreen(
             TopAppBar(
                 title = { Text("Terminal") },
                 actions = {
-                    // Clipboard history
-                    Box {
-                        IconButton(onClick = { showClipboardHistory = true }) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Clipboard history")
-                        }
-                        ClipboardHistory(
-                            expanded = showClipboardHistory,
-                            entries = uiState.clipboardHistory,
-                            onEntryClick = { text ->
+                    TerminalTopBarActions(
+                        uiState = uiState,
+                        showClipboardHistory = showClipboardHistory,
+                        onShowClipboardHistoryChange = { showClipboardHistory = it },
+                        onPasteFromSystem = {
+                            clipboardManager.getText()?.text?.let { text ->
                                 viewModel.onEvent(TerminalEvent.Paste(text))
-                                showClipboardHistory = false
-                            },
-                            onDismiss = { showClipboardHistory = false },
-                        )
-                    }
-
-                    // Paste from system clipboard
-                    IconButton(onClick = {
-                        clipboardManager.getText()?.text?.let { text ->
-                            viewModel.onEvent(TerminalEvent.Paste(text))
-                        }
-                    }) {
-                        Icon(Icons.Default.ContentPaste, contentDescription = "Paste")
-                    }
-
-                    // Snippets
-                    IconButton(onClick = { viewModel.onEvent(TerminalEvent.ToggleSnippets) }) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Snippets")
-                    }
-
-                    // Keyboard toggle
-                    IconButton(onClick = { viewModel.onEvent(TerminalEvent.ToggleKeyboard) }) {
-                        Icon(
-                            imageVector = if (uiState.isKeyboardVisible) {
-                                Icons.Default.KeyboardHide
-                            } else {
-                                Icons.Default.Keyboard
-                            },
-                            contentDescription = "Toggle keyboard",
-                        )
-                    }
-
-                    // Recording toggle
-                    IconButton(onClick = {
-                        if (uiState.isRecording) {
-                            viewModel.onEvent(TerminalEvent.StopRecording)
-                        } else {
-                            viewModel.onEvent(TerminalEvent.StartRecording)
-                        }
-                    }) {
-                        Icon(
-                            imageVector = if (uiState.isRecording) {
-                                Icons.Default.Stop
-                            } else {
-                                Icons.Default.FiberManualRecord
-                            },
-                            contentDescription = if (uiState.isRecording) "Stop recording" else "Start recording",
-                            tint = if (uiState.isRecording) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                        )
-                    }
-
-                    // Export recording
-                    IconButton(
-                        onClick = { viewModel.onEvent(TerminalEvent.ExportRecording) },
-                        enabled = uiState.activeRecordingId != null,
-                    ) {
-                        Icon(Icons.Default.IosShare, contentDescription = "Export recording")
-                    }
-
-                    // Preferences
-                    IconButton(onClick = { viewModel.onEvent(TerminalEvent.TogglePreferences) }) {
-                        Icon(Icons.Default.Settings, contentDescription = "Preferences")
-                    }
+                            }
+                        },
+                        onEvent = viewModel::onEvent,
+                    )
                 },
             )
         },
@@ -320,6 +264,17 @@ fun TerminalScreen(
         )
     }
 
+    // Code blocks sheet
+    if (uiState.showCodeBlocksSheet) {
+        CodeBlocksSheet(
+            blocks = uiState.detectedCodeBlocks,
+            onCopy = { viewModel.onEvent(TerminalEvent.CopyCodeBlock(it)) },
+            onOpenInEditor = { viewModel.onEvent(TerminalEvent.OpenCodeBlockInEditor(it)) },
+            onClear = { viewModel.onEvent(TerminalEvent.ClearCodeBlocks) },
+            onDismiss = { viewModel.onEvent(TerminalEvent.ToggleCodeBlocksSheet) },
+        )
+    }
+
     // Preferences sheet
     if (uiState.showPreferences) {
         TerminalPreferencesSheet(
@@ -327,6 +282,103 @@ fun TerminalScreen(
             onFontSizeChange = { viewModel.onEvent(TerminalEvent.SetFontSize(it)) },
             onDismiss = { viewModel.onEvent(TerminalEvent.TogglePreferences) },
         )
+    }
+}
+
+@Composable
+@Suppress("LongMethod")
+private fun TerminalTopBarActions(
+    uiState: TerminalUiState,
+    showClipboardHistory: Boolean,
+    onShowClipboardHistoryChange: (Boolean) -> Unit,
+    onPasteFromSystem: () -> Unit,
+    onEvent: (TerminalEvent) -> Unit,
+) {
+    // Clipboard history
+    Box {
+        IconButton(onClick = { onShowClipboardHistoryChange(true) }) {
+            Icon(Icons.Default.ContentCopy, contentDescription = "Clipboard history")
+        }
+        ClipboardHistory(
+            expanded = showClipboardHistory,
+            entries = uiState.clipboardHistory,
+            onEntryClick = { text ->
+                onEvent(TerminalEvent.Paste(text))
+                onShowClipboardHistoryChange(false)
+            },
+            onDismiss = { onShowClipboardHistoryChange(false) },
+        )
+    }
+
+    // Paste from system clipboard
+    IconButton(onClick = onPasteFromSystem) {
+        Icon(Icons.Default.ContentPaste, contentDescription = "Paste")
+    }
+
+    // Snippets
+    IconButton(onClick = { onEvent(TerminalEvent.ToggleSnippets) }) {
+        Icon(Icons.Default.PlayArrow, contentDescription = "Snippets")
+    }
+
+    // Detected code blocks
+    IconButton(onClick = { onEvent(TerminalEvent.ToggleCodeBlocksSheet) }) {
+        BadgedBox(
+            badge = {
+                if (uiState.detectedCodeBlocks.isNotEmpty()) {
+                    Badge { Text(uiState.detectedCodeBlocks.size.toString()) }
+                }
+            },
+        ) {
+            Icon(Icons.Default.Code, contentDescription = "Detected code blocks")
+        }
+    }
+
+    // Keyboard toggle
+    IconButton(onClick = { onEvent(TerminalEvent.ToggleKeyboard) }) {
+        Icon(
+            imageVector = if (uiState.isKeyboardVisible) {
+                Icons.Default.KeyboardHide
+            } else {
+                Icons.Default.Keyboard
+            },
+            contentDescription = "Toggle keyboard",
+        )
+    }
+
+    // Recording toggle
+    IconButton(onClick = {
+        if (uiState.isRecording) {
+            onEvent(TerminalEvent.StopRecording)
+        } else {
+            onEvent(TerminalEvent.StartRecording)
+        }
+    }) {
+        Icon(
+            imageVector = if (uiState.isRecording) {
+                Icons.Default.Stop
+            } else {
+                Icons.Default.FiberManualRecord
+            },
+            contentDescription = if (uiState.isRecording) "Stop recording" else "Start recording",
+            tint = if (uiState.isRecording) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+        )
+    }
+
+    // Export recording
+    IconButton(
+        onClick = { onEvent(TerminalEvent.ExportRecording) },
+        enabled = uiState.activeRecordingId != null,
+    ) {
+        Icon(Icons.Default.IosShare, contentDescription = "Export recording")
+    }
+
+    // Preferences
+    IconButton(onClick = { onEvent(TerminalEvent.TogglePreferences) }) {
+        Icon(Icons.Default.Settings, contentDescription = "Preferences")
     }
 }
 
