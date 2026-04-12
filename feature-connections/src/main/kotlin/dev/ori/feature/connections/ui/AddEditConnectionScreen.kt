@@ -46,6 +46,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -184,6 +186,7 @@ fun AddEditConnectionScreen(
                 text = "Authentication",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.semantics { heading() },
             )
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 val authOptions = listOf(AuthMethod.PASSWORD, AuthMethod.SSH_KEY)
@@ -225,9 +228,9 @@ fun AddEditConnectionScreen(
                                     Icons.Default.Visibility
                                 },
                                 contentDescription = if (passwordVisible) {
-                                    "Hide password"
+                                    "Passwort verbergen"
                                 } else {
-                                    "Show password"
+                                    "Passwort anzeigen"
                                 },
                             )
                         }
@@ -258,7 +261,11 @@ fun AddEditConnectionScreen(
                     } else {
                         Icons.Default.ExpandMore
                     },
-                    contentDescription = null,
+                    contentDescription = if (formState.isAdvancedExpanded) {
+                        "Erweiterte Optionen einklappen"
+                    } else {
+                        "Erweiterte Optionen ausklappen"
+                    },
                 )
                 Text(
                     text = "Advanced",
