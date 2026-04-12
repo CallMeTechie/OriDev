@@ -12,7 +12,12 @@ import dev.ori.core.network.ssh.SshClient
 import dev.ori.core.ui.theme.TerminalBackground
 import dev.ori.core.ui.theme.TerminalText
 import dev.ori.domain.repository.ConnectionRepository
+import dev.ori.domain.repository.SessionRecordingRepository
+import dev.ori.domain.usecase.ExportSessionRecordingUseCase
 import dev.ori.domain.usecase.GetSnippetsUseCase
+import dev.ori.domain.usecase.SendToClaudeUseCase
+import dev.ori.domain.usecase.StartSessionRecordingUseCase
+import dev.ori.domain.usecase.StopSessionRecordingUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,11 +31,17 @@ import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 @HiltViewModel
+@Suppress("TooManyFunctions")
 class TerminalViewModel @Inject constructor(
     private val sshClient: SshClient,
     private val connectionRepository: ConnectionRepository,
     private val getSnippetsUseCase: GetSnippetsUseCase,
     private val emulatorProvider: TerminalEmulatorProvider,
+    private val sessionRecordingRepository: SessionRecordingRepository,
+    private val startSessionRecordingUseCase: StartSessionRecordingUseCase,
+    private val stopSessionRecordingUseCase: StopSessionRecordingUseCase,
+    private val exportSessionRecordingUseCase: ExportSessionRecordingUseCase,
+    private val sendToClaudeUseCase: SendToClaudeUseCase,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -66,6 +77,16 @@ class TerminalViewModel @Inject constructor(
             is TerminalEvent.ClearError -> clearError()
             is TerminalEvent.ToggleServerPicker -> toggleServerPicker()
             is TerminalEvent.SelectServer -> selectServer(event.profileId, event.serverName)
+            is TerminalEvent.StartRecording -> startRecording()
+            is TerminalEvent.StopRecording -> stopRecording()
+            is TerminalEvent.ExportRecording -> exportRecording()
+            is TerminalEvent.ShowSendToClaude -> showSendToClaude(event.selectedText)
+            is TerminalEvent.HideSendToClaude -> hideSendToClaude()
+            is TerminalEvent.SetClaudePrompt -> _uiState.update { it.copy(sendToClaudeInput = event.prompt) }
+            is TerminalEvent.SendToClaude -> sendToClaude(event.prompt)
+            is TerminalEvent.ClearClaudeResponse -> _uiState.update {
+                it.copy(claudeResponse = null, claudeError = null)
+            }
         }
     }
 
@@ -161,6 +182,9 @@ class TerminalViewModel @Inject constructor(
                     val bytesRead = shellHandle.inputStream.read(buffer)
                     if (bytesRead == -1) break
                     emulator?.writeInput(buffer, 0, bytesRead)
+                    uiState.value.activeRecordingId?.let { recId ->
+                        sessionRecordingRepository.appendOutput(recId, buffer.copyOf(bytesRead))
+                    }
                 }
             } catch (_: IOException) {
                 // Connection closed or lost
@@ -298,6 +322,83 @@ class TerminalViewModel @Inject constructor(
     private fun selectServer(profileId: Long, serverName: String) {
         _uiState.update { it.copy(showServerPicker = false) }
         createTab(profileId, serverName)
+    }
+
+    private fun startRecording() {
+        val tab = getActiveTab() ?: return
+        viewModelScope.launch {
+            runCatching { startSessionRecordingUseCase(tab.profileId) }
+                .onSuccess { recording ->
+                    _uiState.update { it.copy(isRecording = true, activeRecordingId = recording.id) }
+                }
+                .onFailure { err ->
+                    _uiState.update { it.copy(error = "Recording failed: ${err.message}") }
+                }
+        }
+    }
+
+    private fun stopRecording() {
+        val recordingId = _uiState.value.activeRecordingId ?: return
+        viewModelScope.launch {
+            runCatching { stopSessionRecordingUseCase(recordingId) }
+                .onFailure { err ->
+                    _uiState.update { it.copy(error = "Stop recording failed: ${err.message}") }
+                }
+            _uiState.update { it.copy(isRecording = false, activeRecordingId = null) }
+        }
+    }
+
+    private fun exportRecording() {
+        val recordingId = _uiState.value.activeRecordingId ?: return
+        viewModelScope.launch {
+            runCatching { exportSessionRecordingUseCase(recordingId) }
+                .onFailure { err ->
+                    _uiState.update { it.copy(error = "Export failed: ${err.message}") }
+                }
+        }
+    }
+
+    private fun showSendToClaude(selectedText: String) {
+        _uiState.update {
+            it.copy(
+                showSendToClaude = true,
+                sendToClaudeContext = selectedText,
+                claudeResponse = null,
+                claudeError = null,
+            )
+        }
+    }
+
+    private fun hideSendToClaude() {
+        _uiState.update {
+            it.copy(
+                showSendToClaude = false,
+                sendToClaudeContext = "",
+                sendToClaudeInput = "",
+                claudeResponse = null,
+                claudeError = null,
+                claudeLoading = false,
+            )
+        }
+    }
+
+    private fun sendToClaude(prompt: String) {
+        val ctx = _uiState.value.sendToClaudeContext
+        _uiState.update { it.copy(claudeLoading = true, claudeError = null, claudeResponse = null) }
+        viewModelScope.launch {
+            val result = sendToClaudeUseCase(prompt, ctx.ifEmpty { null })
+            if (result.isSuccess) {
+                val response = result.getOrNull().orEmpty()
+                _uiState.update {
+                    it.copy(claudeLoading = false, claudeResponse = response, claudeError = null)
+                }
+            } else {
+                val message = result.exceptionOrNull()?.message ?: "Claude request failed"
+                _uiState.update {
+                    it.copy(claudeLoading = false, claudeError = message)
+                }
+            }
+        }
     }
 
     private fun getActiveTab(): TerminalTabState? {
