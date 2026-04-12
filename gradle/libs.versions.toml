@@ -152,6 +152,7 @@ mockk-android = { module = "io.mockk:mockk-android", version.ref = "mockk" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version = "1.10.1" }
+kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version = "1.10.1" }
 espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 test-runner = { module = "androidx.test:runner", version.ref = "test-runner" }
 test-core = { module = "androidx.test:core", version = "1.6.1" }
