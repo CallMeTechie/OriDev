@@ -41,6 +41,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -115,7 +119,7 @@ fun ConnectionListScreen(
                     IconButton(onClick = onNavigateToProxmox) {
                         Icon(
                             imageVector = Icons.Default.Cloud,
-                            contentDescription = "Proxmox Manager",
+                            contentDescription = "Proxmox Manager öffnen",
                         )
                     }
                 },
@@ -126,8 +130,9 @@ fun ConnectionListScreen(
                 onClick = onNavigateToAdd,
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.semantics { role = Role.Button },
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Add connection")
+                Icon(Icons.Default.Add, contentDescription = "Verbindung hinzufügen")
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -146,7 +151,10 @@ fun ConnectionListScreen(
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     placeholder = { Text("Search connections") },
                     leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = null)
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = "Verbindungen durchsuchen",
+                        )
                     },
                     singleLine = true,
                 )
@@ -227,11 +235,19 @@ private fun ServerProfileCard(
     onToggleFavorite: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val statusText = if (isConnected) "verbunden" else "getrennt"
+    val favoriteText = if (profile.isFavorite) ", Favorit" else ""
+    val rowDescription = "${profile.name}, ${profile.protocol.name}, " +
+        "${profile.host}:${profile.port}, $statusText$favoriteText"
     Card(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .semantics(mergeDescendants = true) {
+                contentDescription = rowDescription
+                role = Role.Button
+            },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
@@ -273,9 +289,9 @@ private fun ServerProfileCard(
                         Icons.Outlined.StarBorder
                     },
                     contentDescription = if (profile.isFavorite) {
-                        "Remove from favorites"
+                        "Favorit entfernen"
                     } else {
-                        "Add to favorites"
+                        "Zu Favoriten hinzufügen"
                     },
                     tint = if (profile.isFavorite) {
                         MaterialTheme.colorScheme.primary
