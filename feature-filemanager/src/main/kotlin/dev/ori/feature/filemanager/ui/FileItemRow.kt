@@ -32,6 +32,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ori.core.common.extension.toHumanReadableSize
@@ -53,6 +56,10 @@ fun FileItemRow(
     onDrop: () -> Unit = {},
 ) {
     val backgroundColor = if (isSelected) Indigo50 else Color.Transparent
+    val typeLabel = if (file.isDirectory) "Ordner" else "Datei"
+    val sizeLabel = if (file.isDirectory) "" else ", ${file.size.toHumanReadableSize()}"
+    val rowDescription = "${file.name}, $typeLabel$sizeLabel"
+    val selectionState = if (isSelected) "ausgewählt" else "nicht ausgewählt"
 
     Row(
         modifier = modifier
@@ -62,6 +69,10 @@ fun FileItemRow(
                 onClick = onClick,
                 onLongClick = onLongClick,
             )
+            .semantics(mergeDescendants = true) {
+                contentDescription = rowDescription
+                stateDescription = selectionState
+            }
             .pointerInput(Unit) {
                 detectDragGesturesAfterLongPress(
                     onDragStart = { onDragStart() },

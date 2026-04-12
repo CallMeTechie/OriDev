@@ -115,7 +115,10 @@ fun FileManagerScreen(
                                 contentColor = MaterialTheme.colorScheme.onError,
                             ),
                         ) {
-                            Icon(Icons.Default.Delete, contentDescription = null)
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Ausgewählte Dateien löschen",
+                            )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Delete")
                         }
