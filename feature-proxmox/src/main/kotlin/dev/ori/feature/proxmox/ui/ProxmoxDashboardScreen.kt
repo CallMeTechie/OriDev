@@ -73,7 +73,7 @@ fun ProxmoxDashboardScreen(
                 icon = {
                     Icon(
                         imageVector = Icons.Filled.Add,
-                        contentDescription = "Add Proxmox node",
+                        contentDescription = "Proxmox-Node hinzufügen",
                     )
                 },
                 text = { Text("Add Node") },

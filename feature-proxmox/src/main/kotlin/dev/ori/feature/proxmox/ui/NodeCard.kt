@@ -17,6 +17,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ori.core.ui.component.StatusDot
@@ -39,9 +44,26 @@ fun NodeCard(
     } else {
         BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     }
+    val statusText = if (node.isOnline) "online" else "offline"
+    val cpuText = node.cpuUsage?.let { ", CPU ${(it * 100).toInt()} Prozent" }.orEmpty()
+    val memText = run {
+        val used = node.memUsedBytes
+        val total = node.memTotalBytes
+        if (used != null && total != null && total > 0L) {
+            ", RAM ${used / BYTES_PER_MB} von ${total / BYTES_PER_MB} Megabyte"
+        } else {
+            ""
+        }
+    }
+    val nodeDescription = "Proxmox-Node ${node.name}, ${node.host}, $statusText$cpuText$memText"
     Card(
         modifier = modifier
-            .width(NODE_CARD_WIDTH_DP.dp),
+            .width(NODE_CARD_WIDTH_DP.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = nodeDescription
+                role = Role.Button
+                this.selected = selected
+            },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
