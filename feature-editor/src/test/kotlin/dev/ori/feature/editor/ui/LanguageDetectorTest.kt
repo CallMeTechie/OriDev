@@ -94,4 +94,69 @@ class LanguageDetectorTest {
     fun detect_noExtension_returnsPlain() {
         assertThat(LanguageDetector.detect("Makefile").id).isEqualTo("plain")
     }
+
+    // --- scopeForFile / infoForFile (Phase 6b TextMate loading) ---
+
+    @Test
+    fun scopeForFile_kotlin_returnsKotlinScope() {
+        assertThat(LanguageDetector.scopeForFile("Main.kt")).isEqualTo("source.kotlin")
+    }
+
+    @Test
+    fun scopeForFile_kts_returnsKotlinScope() {
+        assertThat(LanguageDetector.scopeForFile("build.gradle.kts")).isEqualTo("source.kotlin")
+    }
+
+    @Test
+    fun scopeForFile_json_returnsJsonScope() {
+        assertThat(LanguageDetector.scopeForFile("config.json")).isEqualTo("source.json")
+    }
+
+    @Test
+    fun scopeForFile_unknown_returnsNull() {
+        assertThat(LanguageDetector.scopeForFile("data.xyz")).isNull()
+    }
+
+    @Test
+    fun scopeForFile_caseInsensitive() {
+        assertThat(LanguageDetector.scopeForFile("Main.KT")).isEqualTo("source.kotlin")
+        assertThat(LanguageDetector.scopeForFile("README.MD")).isEqualTo("text.html.markdown")
+    }
+
+    @Test
+    fun scopeForFile_noExtension_returnsNull() {
+        assertThat(LanguageDetector.scopeForFile("Makefile")).isNull()
+    }
+
+    @Test
+    fun scopeForFile_markdown_handlesMdAndMarkdown() {
+        assertThat(LanguageDetector.scopeForFile("a.md")).isEqualTo("text.html.markdown")
+        assertThat(LanguageDetector.scopeForFile("a.markdown")).isEqualTo("text.html.markdown")
+    }
+
+    @Test
+    fun scopeForFile_shell_handlesShAndBash() {
+        assertThat(LanguageDetector.scopeForFile("install.sh")).isEqualTo("source.shell")
+        assertThat(LanguageDetector.scopeForFile("install.bash")).isEqualTo("source.shell")
+    }
+
+    @Test
+    fun scopeForFile_yaml_handlesYmlAndYaml() {
+        assertThat(LanguageDetector.scopeForFile("ci.yml")).isEqualTo("source.yaml")
+        assertThat(LanguageDetector.scopeForFile("ci.yaml")).isEqualTo("source.yaml")
+    }
+
+    @Test
+    fun allLanguages_returnsDistinctList() {
+        val all = LanguageDetector.allLanguages()
+        // 5 distinct languages: kotlin, json, markdown, shell, yaml
+        assertThat(all).hasSize(5)
+        assertThat(all.map { it.scopeName }).containsExactly(
+            "source.kotlin",
+            "source.json",
+            "text.html.markdown",
+            "source.shell",
+            "source.yaml",
+        )
+    }
 }

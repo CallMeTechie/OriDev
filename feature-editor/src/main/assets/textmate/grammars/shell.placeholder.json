@@ -1,0 +1,25 @@
+{
+  "name": "Shell (placeholder)",
+  "scopeName": "source.shell",
+  "fileTypes": ["sh", "bash", "zsh"],
+  "patterns": [
+    {
+      "match": "\\b(if|then|else|elif|fi|for|while|do|done|case|esac|in|function|return|break|continue|exit|export|local|readonly)\\b",
+      "name": "keyword.control.shell"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.shell"
+    },
+    {
+      "begin": "'",
+      "end": "'",
+      "name": "string.quoted.single.shell"
+    },
+    {
+      "match": "#[^\\n]*",
+      "name": "comment.line.number-sign.shell"
+    }
+  ]
+}

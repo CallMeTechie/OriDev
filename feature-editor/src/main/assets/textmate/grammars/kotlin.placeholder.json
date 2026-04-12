@@ -1,0 +1,25 @@
+{
+  "name": "Kotlin (placeholder)",
+  "scopeName": "source.kotlin",
+  "fileTypes": ["kt", "kts"],
+  "patterns": [
+    {
+      "match": "\\b(fun|val|var|class|object|interface|if|else|when|for|while|return|package|import|private|public|internal|protected|suspend|override|data|sealed|abstract|open|final|companion|init|this|super|null|true|false|in|is|as|by|out|throw|try|catch|finally)\\b",
+      "name": "keyword.control.kotlin"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.kotlin"
+    },
+    {
+      "match": "//[^\\n]*",
+      "name": "comment.line.double-slash.kotlin"
+    },
+    {
+      "begin": "/\\*",
+      "end": "\\*/",
+      "name": "comment.block.kotlin"
+    }
+  ]
+}

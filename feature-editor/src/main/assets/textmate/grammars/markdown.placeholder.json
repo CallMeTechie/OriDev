@@ -1,0 +1,34 @@
+{
+  "name": "Markdown (placeholder)",
+  "scopeName": "text.html.markdown",
+  "fileTypes": ["md", "markdown"],
+  "patterns": [
+    {
+      "match": "^#{1,6}\\s.*$",
+      "name": "markup.heading.markdown"
+    },
+    {
+      "begin": "\\*\\*",
+      "end": "\\*\\*",
+      "name": "markup.bold.markdown"
+    },
+    {
+      "begin": "\\*",
+      "end": "\\*",
+      "name": "markup.italic.markdown"
+    },
+    {
+      "begin": "```",
+      "end": "```",
+      "name": "markup.fenced_code.block.markdown"
+    },
+    {
+      "match": "`[^`]+`",
+      "name": "markup.inline.raw.markdown"
+    },
+    {
+      "match": "\\[[^\\]]+\\]\\([^)]+\\)",
+      "name": "markup.underline.link.markdown"
+    }
+  ]
+}
