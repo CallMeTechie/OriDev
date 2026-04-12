@@ -9,14 +9,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.KeyboardHide
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -120,11 +125,51 @@ fun TerminalScreen(
                         )
                     }
 
+                    // Recording toggle
+                    IconButton(onClick = {
+                        if (uiState.isRecording) {
+                            viewModel.onEvent(TerminalEvent.StopRecording)
+                        } else {
+                            viewModel.onEvent(TerminalEvent.StartRecording)
+                        }
+                    }) {
+                        Icon(
+                            imageVector = if (uiState.isRecording) {
+                                Icons.Default.Stop
+                            } else {
+                                Icons.Default.FiberManualRecord
+                            },
+                            contentDescription = if (uiState.isRecording) "Stop recording" else "Start recording",
+                            tint = if (uiState.isRecording) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                    }
+
+                    // Export recording
+                    IconButton(
+                        onClick = { viewModel.onEvent(TerminalEvent.ExportRecording) },
+                        enabled = uiState.activeRecordingId != null,
+                    ) {
+                        Icon(Icons.Default.IosShare, contentDescription = "Export recording")
+                    }
+
                     // Preferences
                     IconButton(onClick = { viewModel.onEvent(TerminalEvent.TogglePreferences) }) {
                         Icon(Icons.Default.Settings, contentDescription = "Preferences")
                     }
                 },
+            )
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { viewModel.onEvent(TerminalEvent.ShowSendToClaude("")) },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null) },
+                text = { Text("Send to Claude") },
             )
         },
         snackbarHost = {
@@ -248,6 +293,19 @@ fun TerminalScreen(
                 viewModel.onEvent(TerminalEvent.SelectServer(profileId, serverName))
             },
             onDismiss = { viewModel.onEvent(TerminalEvent.ToggleServerPicker) },
+        )
+    }
+
+    // Send to Claude sheet
+    if (uiState.showSendToClaude) {
+        SendToClaudeSheet(
+            contextText = uiState.sendToClaudeContext,
+            initialPrompt = uiState.sendToClaudeInput,
+            loading = uiState.claudeLoading,
+            response = uiState.claudeResponse,
+            errorMessage = uiState.claudeError,
+            onSend = { prompt -> viewModel.onEvent(TerminalEvent.SendToClaude(prompt)) },
+            onDismiss = { viewModel.onEvent(TerminalEvent.HideSendToClaude) },
         )
     }
 

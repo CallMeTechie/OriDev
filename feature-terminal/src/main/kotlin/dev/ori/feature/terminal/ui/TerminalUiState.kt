@@ -26,6 +26,14 @@ data class TerminalUiState(
     val error: String? = null,
     val showServerPicker: Boolean = false,
     val availableServers: List<ServerProfile> = emptyList(),
+    val isRecording: Boolean = false,
+    val activeRecordingId: Long? = null,
+    val showSendToClaude: Boolean = false,
+    val sendToClaudeContext: String = "",
+    val sendToClaudeInput: String = "",
+    val claudeResponse: String? = null,
+    val claudeLoading: Boolean = false,
+    val claudeError: String? = null,
 )
 
 sealed class TerminalEvent {
@@ -51,4 +59,12 @@ sealed class TerminalEvent {
     data object ClearError : TerminalEvent()
     data object ToggleServerPicker : TerminalEvent()
     data class SelectServer(val profileId: Long, val serverName: String) : TerminalEvent()
+    data object StartRecording : TerminalEvent()
+    data object StopRecording : TerminalEvent()
+    data object ExportRecording : TerminalEvent()
+    data class ShowSendToClaude(val selectedText: String) : TerminalEvent()
+    data object HideSendToClaude : TerminalEvent()
+    data class SetClaudePrompt(val prompt: String) : TerminalEvent()
+    data class SendToClaude(val prompt: String) : TerminalEvent()
+    data object ClearClaudeResponse : TerminalEvent()
 }
