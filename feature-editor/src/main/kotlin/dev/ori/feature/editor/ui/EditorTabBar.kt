@@ -96,7 +96,7 @@ private fun EditorTabChip(
         IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
             Icon(
                 imageVector = Icons.Default.Close,
-                contentDescription = "Close tab",
+                contentDescription = "Tab schließen",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(14.dp),
             )

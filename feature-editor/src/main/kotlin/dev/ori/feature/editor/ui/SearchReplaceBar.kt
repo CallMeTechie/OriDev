@@ -58,10 +58,10 @@ fun SearchReplaceBar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             IconButton(onClick = onFindPrevious) {
-                Icon(Icons.Default.ArrowUpward, contentDescription = "Find previous")
+                Icon(Icons.Default.ArrowUpward, contentDescription = "Vorheriger Treffer")
             }
             IconButton(onClick = onFindNext) {
-                Icon(Icons.Default.ArrowDownward, contentDescription = "Find next")
+                Icon(Icons.Default.ArrowDownward, contentDescription = "Nächster Treffer")
             }
             TextButton(onClick = onToggleCaseSensitive) {
                 Text(

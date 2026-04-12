@@ -27,6 +27,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -67,9 +69,15 @@ fun DiffViewerScreen(
                         },
                     ) {
                         if (uiState.viewMode == DiffViewMode.UNIFIED) {
-                            Icon(Icons.Default.ViewColumn, contentDescription = "Side-by-side view")
+                            Icon(
+                                Icons.Default.ViewColumn,
+                                contentDescription = "Zu Seite-an-Seite-Ansicht wechseln",
+                            )
                         } else {
-                            Icon(Icons.AutoMirrored.Filled.ViewList, contentDescription = "Unified view")
+                            Icon(
+                                Icons.AutoMirrored.Filled.ViewList,
+                                contentDescription = "Zu einheitlicher Ansicht wechseln",
+                            )
                         }
                     }
                 },
@@ -149,10 +157,20 @@ private fun DiffLineRow(line: DiffLine) {
         DiffType.REMOVED -> "-"
         DiffType.CONTEXT -> " "
     }
+    val typeLabel = when (line.type) {
+        DiffType.ADDED -> "Hinzugefügte Zeile"
+        DiffType.REMOVED -> "Entfernte Zeile"
+        DiffType.MODIFIED -> "Geänderte Zeile"
+        DiffType.CONTEXT -> "Kontextzeile"
+    }
+    val lineNumberLabel = line.newLineNumber?.toString() ?: line.oldLineNumber?.toString() ?: ""
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(background)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$typeLabel $lineNumberLabel, ${line.content}"
+            }
             .padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
         Text(
