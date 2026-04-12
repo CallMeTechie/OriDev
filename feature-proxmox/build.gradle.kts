@@ -37,6 +37,7 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.extended)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
@@ -44,9 +45,6 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.android.compiler)
     implementation(libs.navigation.compose)
-    implementation(libs.okhttp)
-    implementation(libs.moshi)
-    implementation(libs.moshi.kotlin)
 
     testImplementation(libs.junit5.api)
     testRuntimeOnly(libs.junit5.engine)
@@ -56,4 +54,8 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
 
     debugImplementation(libs.compose.ui.tooling)
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }
