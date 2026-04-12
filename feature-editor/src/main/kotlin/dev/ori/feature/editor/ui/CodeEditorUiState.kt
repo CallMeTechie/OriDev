@@ -10,7 +10,10 @@ data class EditorTab(
     val isRemote: Boolean,
     val isLoading: Boolean = false,
     val error: String? = null,
+    val gitDiffSummary: GitDiffSummary? = null,
 )
+
+data class GitDiffSummary(val added: Int, val modified: Int)
 
 val EditorTab.isDirty: Boolean
     get() = content != originalContent

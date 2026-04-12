@@ -27,8 +27,10 @@ abstract class FileSystemModule {
         @Provides
         @Singleton
         @LocalFileSystem
-        fun provideLocalFileSystemRepository(): FileSystemRepository =
-            LocalFileSystemRepository()
+        fun provideLocalFileSystemRepository(
+            gitStatusParser: dev.ori.data.repository.GitStatusParser,
+        ): FileSystemRepository =
+            LocalFileSystemRepository(gitStatusParser)
 
         @Provides
         @RemoteFileSystem

@@ -5,6 +5,7 @@ import com.google.common.truth.Truth.assertThat
 import dev.ori.core.common.feature.FeatureGateManager
 import dev.ori.core.common.feature.PremiumFeature
 import dev.ori.domain.repository.FileSystemRepository
+import dev.ori.domain.repository.LineDiffProvider
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -25,6 +26,7 @@ class CodeEditorViewModelTest {
     private val localRepo: FileSystemRepository = mockk(relaxed = true)
     private val remoteRepo: FileSystemRepository = mockk(relaxed = true)
     private val featureGate: FeatureGateManager = mockk(relaxed = true)
+    private val lineDiffProvider: LineDiffProvider = mockk(relaxed = true)
 
     @BeforeEach
     fun setup() {
@@ -47,6 +49,7 @@ class CodeEditorViewModelTest {
         localRepository = localRepo,
         remoteRepository = remoteRepo,
         featureGateManager = featureGate,
+        lineDiffProvider = lineDiffProvider,
         savedStateHandle = savedState(path, isRemote),
     )
 

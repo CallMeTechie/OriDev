@@ -8,8 +8,10 @@ import dev.ori.core.network.ssh.HostKeyStore
 import dev.ori.data.repository.ConnectionRepositoryImpl
 import dev.ori.data.repository.HostKeyStoreImpl
 import dev.ori.data.repository.KnownHostRepositoryImpl
+import dev.ori.data.repository.LineDiffProviderImpl
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.KnownHostRepository
+import dev.ori.domain.repository.LineDiffProvider
 import javax.inject.Singleton
 
 @Module
@@ -33,4 +35,10 @@ abstract class RepositoryModule {
     abstract fun bindHostKeyStore(
         impl: HostKeyStoreImpl,
     ): HostKeyStore
+
+    @Binds
+    @Singleton
+    abstract fun bindLineDiffProvider(
+        impl: LineDiffProviderImpl,
+    ): LineDiffProvider
 }

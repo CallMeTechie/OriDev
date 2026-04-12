@@ -7,14 +7,16 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 
-class LocalFileSystemRepository @Inject constructor() : FileSystemRepository {
+class LocalFileSystemRepository @Inject constructor(
+    private val gitStatusParser: GitStatusParser,
+) : FileSystemRepository {
 
     override suspend fun listFiles(path: String): List<FileItem> = withContext(Dispatchers.IO) {
         val dir = File(path)
         val files = dir.listFiles()?.map { it.toFileItem() } ?: emptyList()
 
         // Attempt to enrich with git status for local repositories
-        val gitStatuses = GitStatusParser.parseStatus(dir)
+        val gitStatuses = gitStatusParser.parseStatus(dir)
         if (gitStatuses.isEmpty()) {
             files
         } else {
