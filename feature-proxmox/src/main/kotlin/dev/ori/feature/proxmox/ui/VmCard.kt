@@ -25,6 +25,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,8 +64,19 @@ fun VmCard(
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            val statusLabel = when (vm.status) {
+                ProxmoxVmStatus.RUNNING -> "läuft"
+                ProxmoxVmStatus.STOPPED -> "gestoppt"
+                ProxmoxVmStatus.PAUSED -> "pausiert"
+                ProxmoxVmStatus.UNKNOWN -> "unbekannt"
+            }
+            val vmDescription = "VM ${vm.vmid} ${vm.name}, Status $statusLabel"
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = vmDescription
+                    },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -120,14 +133,14 @@ fun VmCard(
                             IconButton(onClick = onStart) {
                                 Icon(
                                     imageVector = Icons.Filled.PlayArrow,
-                                    contentDescription = "Start",
+                                    contentDescription = "VM starten",
                                     tint = StatusConnected,
                                 )
                             }
                             IconButton(onClick = onDelete) {
                                 Icon(
                                     imageVector = Icons.Filled.Delete,
-                                    contentDescription = "Delete",
+                                    contentDescription = "VM löschen",
                                     tint = MaterialTheme.colorScheme.error,
                                 )
                             }
@@ -136,14 +149,14 @@ fun VmCard(
                             IconButton(onClick = onStop) {
                                 Icon(
                                     imageVector = Icons.Filled.Stop,
-                                    contentDescription = "Stop",
+                                    contentDescription = "VM stoppen",
                                     tint = MaterialTheme.colorScheme.error,
                                 )
                             }
                             IconButton(onClick = onRestart) {
                                 Icon(
                                     imageVector = Icons.Filled.Refresh,
-                                    contentDescription = "Restart",
+                                    contentDescription = "VM neu starten",
                                     tint = Indigo600,
                                 )
                             }
@@ -152,7 +165,7 @@ fun VmCard(
                             IconButton(onClick = onStop) {
                                 Icon(
                                     imageVector = Icons.Filled.Stop,
-                                    contentDescription = "Stop",
+                                    contentDescription = "VM stoppen",
                                     tint = MaterialTheme.colorScheme.error,
                                 )
                             }
