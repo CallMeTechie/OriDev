@@ -14,6 +14,7 @@ import dev.ori.feature.connections.navigation.CONNECTIONS_ROUTE
 import dev.ori.feature.connections.navigation.addConnectionScreen
 import dev.ori.feature.connections.navigation.connectionsScreen
 import dev.ori.feature.connections.navigation.editConnectionScreen
+import dev.ori.feature.editor.navigation.diffViewerScreen
 import dev.ori.feature.editor.navigation.editorScreen
 import dev.ori.feature.editor.navigation.navigateToEditor
 import dev.ori.feature.filemanager.navigation.fileManagerScreen
@@ -47,6 +48,8 @@ fun OriDevNavHost(
         transferQueueScreen()
 
         editorScreen(onNavigateBack = { navController.popBackStack() })
+
+        diffViewerScreen(onNavigateBack = { navController.popBackStack() })
 
         composable("settings") {
             PlaceholderScreen(title = "Settings")
