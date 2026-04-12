@@ -1,8 +1,19 @@
 package dev.ori.core.security
 
+import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.ori.domain.repository.CredentialStore
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import java.security.KeyStore
-import java.util.concurrent.ConcurrentHashMap
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -10,24 +21,35 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private val Context.credentialDataStore: DataStore<Preferences> by preferencesDataStore(
+    name = "oridev_credentials",
+)
+
 @Singleton
-class KeyStoreManager @Inject constructor() : CredentialStore {
+class KeyStoreManager @Inject constructor(
+    @ApplicationContext private val context: Context,
+) : CredentialStore {
 
     private val keyStore: KeyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-    private val encryptedStore = ConcurrentHashMap<String, ByteArray>()
 
     override suspend fun storePassword(alias: String, password: CharArray) {
-        val bytes = String(password).toByteArray(Charsets.UTF_8)
+        val plaintext = String(password).toByteArray(Charsets.UTF_8)
         try {
-            encryptedStore[alias] = encrypt(alias, bytes)
+            val encrypted = encryptWithMasterKey(plaintext)
+            val base64 = Base64.encodeToString(encrypted, Base64.NO_WRAP)
+            context.credentialDataStore.edit { prefs ->
+                prefs[credentialKey(alias)] = base64
+            }
         } finally {
-            bytes.fill(0)
+            plaintext.fill(0)
+            password.fill('\u0000')
         }
     }
 
     override suspend fun getPassword(alias: String): CharArray? {
-        val encrypted = encryptedStore[alias] ?: return null
-        val decrypted = decrypt(alias, encrypted)
+        val base64 = readCredential(alias) ?: return null
+        val encrypted = Base64.decode(base64, Base64.NO_WRAP)
+        val decrypted = decryptWithMasterKey(encrypted)
         return try {
             String(decrypted, Charsets.UTF_8).toCharArray()
         } finally {
@@ -36,51 +58,66 @@ class KeyStoreManager @Inject constructor() : CredentialStore {
     }
 
     override suspend fun storeSshKey(alias: String, privateKey: ByteArray) {
-        encryptedStore[alias] = encrypt(alias, privateKey)
+        val encrypted = encryptWithMasterKey(privateKey)
+        val base64 = Base64.encodeToString(encrypted, Base64.NO_WRAP)
+        context.credentialDataStore.edit { prefs ->
+            prefs[credentialKey(alias)] = base64
+        }
     }
 
     override suspend fun getSshKey(alias: String): ByteArray? {
-        val encrypted = encryptedStore[alias] ?: return null
-        return decrypt(alias, encrypted)
+        val base64 = readCredential(alias) ?: return null
+        val encrypted = Base64.decode(base64, Base64.NO_WRAP)
+        return decryptWithMasterKey(encrypted)
     }
 
     override suspend fun deleteCredential(alias: String) {
-        encryptedStore.remove(alias)
-        if (keyStore.containsAlias(alias)) {
-            keyStore.deleteEntry(alias)
+        context.credentialDataStore.edit { prefs ->
+            prefs.remove(credentialKey(alias))
         }
     }
 
     override suspend fun hasCredential(alias: String): Boolean {
-        return encryptedStore.containsKey(alias)
+        val key = credentialKey(alias)
+        return context.credentialDataStore.data
+            .map { prefs -> prefs.contains(key) }
+            .first()
     }
 
-    private fun getOrCreateKey(alias: String): SecretKey {
-        val entry = keyStore.getEntry(alias, null)
+    private suspend fun readCredential(alias: String): String? {
+        val key = credentialKey(alias)
+        return context.credentialDataStore.data
+            .map { prefs -> prefs[key] }
+            .first()
+    }
+
+    private fun credentialKey(alias: String) = stringPreferencesKey("credential_$alias")
+
+    private fun getOrCreateMasterKey(): SecretKey {
+        val entry = keyStore.getEntry(MASTER_KEY_ALIAS, null)
         if (entry is KeyStore.SecretKeyEntry) {
             return entry.secretKey
         }
 
         val keyGenerator = KeyGenerator.getInstance(
-            android.security.keystore.KeyProperties.KEY_ALGORITHM_AES,
+            KeyProperties.KEY_ALGORITHM_AES,
             ANDROID_KEYSTORE,
         )
         keyGenerator.init(
-            android.security.keystore.KeyGenParameterSpec.Builder(
-                alias,
-                android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or
-                    android.security.keystore.KeyProperties.PURPOSE_DECRYPT,
+            KeyGenParameterSpec.Builder(
+                MASTER_KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
             )
-                .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setKeySize(KEY_SIZE)
                 .build(),
         )
         return keyGenerator.generateKey()
     }
 
-    private fun encrypt(alias: String, plaintext: ByteArray): ByteArray {
-        val key = getOrCreateKey(alias)
+    private fun encryptWithMasterKey(plaintext: ByteArray): ByteArray {
+        val key = getOrCreateMasterKey()
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key)
         val iv = cipher.iv
@@ -88,8 +125,8 @@ class KeyStoreManager @Inject constructor() : CredentialStore {
         return iv + ciphertext
     }
 
-    private fun decrypt(alias: String, data: ByteArray): ByteArray {
-        val key = getOrCreateKey(alias)
+    private fun decryptWithMasterKey(data: ByteArray): ByteArray {
+        val key = getOrCreateMasterKey()
         val iv = data.copyOfRange(0, GCM_IV_LENGTH)
         val ciphertext = data.copyOfRange(GCM_IV_LENGTH, data.size)
         val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -99,6 +136,7 @@ class KeyStoreManager @Inject constructor() : CredentialStore {
 
     companion object {
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
+        private const val MASTER_KEY_ALIAS = "oridev_master"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val KEY_SIZE = 256
         private const val GCM_IV_LENGTH = 12
