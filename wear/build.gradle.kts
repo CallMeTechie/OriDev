@@ -48,6 +48,7 @@ dependencies {
     implementation(libs.play.services.wearable)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.activity.compose)
+    implementation(libs.lifecycle.runtime.compose)
 
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)
