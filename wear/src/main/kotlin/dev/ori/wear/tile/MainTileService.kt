@@ -1,6 +1,6 @@
 package dev.ori.wear.tile
 
-import androidx.concurrent.futures.ResolvableFuture
+import androidx.concurrent.futures.CallbackToFutureAdapter
 import androidx.wear.protolayout.LayoutElementBuilders
 import androidx.wear.protolayout.ResourceBuilders
 import androidx.wear.protolayout.TimelineBuilders
@@ -28,23 +28,23 @@ class MainTileService : TileService() {
 
     override fun onTileRequest(
         requestParams: RequestBuilders.TileRequest,
-    ): ListenableFuture<TileBuilders.Tile> {
-        val future = ResolvableFuture.create<TileBuilders.Tile>()
-        future.set(createTile())
-        return future
-    }
+    ): ListenableFuture<TileBuilders.Tile> =
+        CallbackToFutureAdapter.getFuture { completer ->
+            completer.set(createTile())
+            TILE_REQUEST_TAG
+        }
 
     override fun onTileResourcesRequest(
         requestParams: RequestBuilders.ResourcesRequest,
-    ): ListenableFuture<ResourceBuilders.Resources> {
-        val future = ResolvableFuture.create<ResourceBuilders.Resources>()
-        future.set(
-            ResourceBuilders.Resources.Builder()
-                .setVersion(RESOURCES_VERSION)
-                .build(),
-        )
-        return future
-    }
+    ): ListenableFuture<ResourceBuilders.Resources> =
+        CallbackToFutureAdapter.getFuture { completer ->
+            completer.set(
+                ResourceBuilders.Resources.Builder()
+                    .setVersion(RESOURCES_VERSION)
+                    .build(),
+            )
+            RESOURCES_REQUEST_TAG
+        }
 
     override fun onTileAddEvent(requestParams: EventBuilders.TileAddEvent) {
         // No-op. Tile added to the carousel.
@@ -98,5 +98,7 @@ class MainTileService : TileService() {
     private companion object {
         const val RESOURCES_VERSION = "1"
         const val FRESHNESS_INTERVAL_MILLIS = 60_000L
+        const val TILE_REQUEST_TAG = "MainTileService#onTileRequest"
+        const val RESOURCES_REQUEST_TAG = "MainTileService#onTileResourcesRequest"
     }
 }

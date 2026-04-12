@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <application>
+        <!--
+            TransferWorker returns ForegroundInfo with
+            FOREGROUND_SERVICE_TYPE_DATA_SYNC. WorkManager hosts long-running
+            workers in its own SystemForegroundService, so we declare the
+            matching foregroundServiceType here. The entry is merged into the
+            consuming app manifest via the manifest merger.
+        -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge"
+            tools:replace="android:foregroundServiceType" />
+    </application>
+
+</manifest>
