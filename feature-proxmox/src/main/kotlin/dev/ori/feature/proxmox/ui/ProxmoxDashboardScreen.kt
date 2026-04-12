@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -106,8 +105,11 @@ fun ProxmoxDashboardScreen(
             sheetState = sheetState,
         ) {
             AddNodeSheet(
-                onSubmit = { pending -> viewModel.onEvent(ProxmoxEvent.ProbeAndAddNode(pending)) },
-                onCancel = { viewModel.onEvent(ProxmoxEvent.HideAddNodeSheet) },
+                onDismiss = { viewModel.onEvent(ProxmoxEvent.HideAddNodeSheet) },
+                onProbeAndAdd = { pending ->
+                    viewModel.onEvent(ProxmoxEvent.ProbeAndAddNode(pending))
+                },
+                isLoading = state.isLoading,
             )
         }
     }
@@ -199,46 +201,4 @@ private fun EmptyState() {
             textAlign = TextAlign.Center,
         )
     }
-}
-
-// Placeholder composables -- implemented fully in Task 7.5.
-@Composable
-private fun AddNodeSheet(
-    @Suppress("UNUSED_PARAMETER") onSubmit: (AddNodePending) -> Unit,
-    @Suppress("UNUSED_PARAMETER") onCancel: () -> Unit,
-) {
-    Box(modifier = Modifier.padding(16.dp)) {
-        Text(
-            text = "Add Node form -- coming in Task 7.5",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-    }
-}
-
-@Composable
-private fun CertificateTrustDialog(
-    request: CertificateTrustRequest,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Untrusted Certificate") },
-        text = {
-            Text(
-                text = "${request.host}:${request.port}\n${request.fingerprint}",
-                style = MaterialTheme.typography.bodySmall,
-            )
-        },
-        confirmButton = {
-            androidx.compose.material3.TextButton(onClick = onConfirm) {
-                Text("Trust and Add")
-            }
-        },
-        dismissButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
-    )
 }
