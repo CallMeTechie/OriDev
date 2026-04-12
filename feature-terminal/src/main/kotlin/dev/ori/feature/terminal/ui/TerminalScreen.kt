@@ -280,7 +280,18 @@ fun TerminalScreen(
     if (uiState.showSnippets) {
         SnippetSheet(
             snippets = uiState.snippets,
-            onSnippetClick = { viewModel.onEvent(TerminalEvent.ExecuteSnippet(it)) },
+            searchQuery = uiState.snippetSearchQuery,
+            editingSnippet = uiState.editingSnippet,
+            showDialog = uiState.showSnippetDialog,
+            onSnippetClick = { viewModel.onEvent(TerminalEvent.ExecuteSnippet(it.command)) },
+            onSearchQueryChange = { viewModel.onEvent(TerminalEvent.SetSnippetSearchQuery(it)) },
+            onAddClick = { viewModel.onEvent(TerminalEvent.ShowAddSnippetDialog) },
+            onEditClick = { viewModel.onEvent(TerminalEvent.ShowEditSnippetDialog(it)) },
+            onDeleteClick = { viewModel.onEvent(TerminalEvent.DeleteSnippet(it)) },
+            onSaveSnippet = { name, command, category ->
+                viewModel.onEvent(TerminalEvent.SaveSnippet(name, command, category))
+            },
+            onDismissDialog = { viewModel.onEvent(TerminalEvent.HideSnippetDialog) },
             onDismiss = { viewModel.onEvent(TerminalEvent.ToggleSnippets) },
         )
     }
