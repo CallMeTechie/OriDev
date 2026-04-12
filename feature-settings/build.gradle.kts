@@ -32,6 +32,7 @@ android {
 dependencies {
     implementation(project(":core:core-common"))
     implementation(project(":core:core-ui"))
+    implementation(project(":core:core-security"))
     implementation(project(":domain"))
 
     implementation(platform(libs.compose.bom))
@@ -54,4 +55,8 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
 
     debugImplementation(libs.compose.ui.tooling)
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }

@@ -41,10 +41,16 @@ dependencies {
     testRuntimeOnly(libs.junit5.engine)
     testImplementation(libs.mockk)
     testImplementation(libs.truth)
+    testImplementation(libs.turbine)
+    testImplementation(libs.kotlinx.coroutines.test)
 
     androidTestImplementation(libs.test.runner)
     androidTestImplementation(libs.test.core)
     androidTestImplementation(libs.test.ext.junit)
     androidTestImplementation(libs.truth)
     androidTestImplementation(libs.kotlinx.coroutines.test)
+}
+
+tasks.withType<Test> {
+    useJUnitPlatform()
 }

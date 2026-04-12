@@ -24,6 +24,22 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField(
+            "String",
+            "ACRA_BACKEND_URL",
+            "\"${project.findProperty("acra.backend.url") ?: "https://acra.invalid"}\"",
+        )
+        buildConfigField(
+            "String",
+            "ACRA_BASIC_AUTH_LOGIN",
+            "\"${project.findProperty("acra.basic.auth.login") ?: ""}\"",
+        )
+        buildConfigField(
+            "String",
+            "ACRA_BASIC_AUTH_PASSWORD",
+            "\"${project.findProperty("acra.basic.auth.password") ?: ""}\"",
+        )
     }
 
     buildTypes {
@@ -93,9 +109,13 @@ dependencies {
     implementation(libs.play.services.wearable)
     implementation(libs.kotlinx.coroutines.play.services)
 
+    implementation(libs.acra.http)
+    implementation(libs.acra.limiter)
+
     testImplementation(libs.junit5.api)
     testRuntimeOnly(libs.junit5.engine)
     testImplementation(libs.mockk)
+    testImplementation(libs.truth)
 
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)

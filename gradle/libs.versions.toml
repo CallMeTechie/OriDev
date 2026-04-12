@@ -58,8 +58,13 @@ test-runner = "1.6.2"
 # Code Quality
 detekt = "1.23.8"
 
+# Note: ACRA libraries are declared in [libraries] (acra-http, acra-limiter).
+
 # KSP
 ksp = "2.3.6"
+
+# Crash Reporting
+acra = "5.11.4"
 
 [libraries]
 # Kotlin
@@ -161,6 +166,10 @@ espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref =
 test-runner = { module = "androidx.test:runner", version.ref = "test-runner" }
 test-core = { module = "androidx.test:core", version = "1.6.1" }
 test-ext-junit = { module = "androidx.test.ext:junit", version = "1.2.1" }
+
+# Crash Reporting
+acra-http = { module = "ch.acra:acra-http", version.ref = "acra" }
+acra-limiter = { module = "ch.acra:acra-limiter", version.ref = "acra" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
