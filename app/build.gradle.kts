@@ -84,6 +84,7 @@ dependencies {
     implementation(project(":feature-proxmox"))
     implementation(project(":feature-editor"))
     implementation(project(":feature-settings"))
+    implementation(project(":feature-onboarding"))
 
     implementation(libs.core.ktx)
     implementation(libs.lifecycle.runtime.ktx)
