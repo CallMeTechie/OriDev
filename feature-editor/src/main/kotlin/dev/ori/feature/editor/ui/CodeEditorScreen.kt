@@ -16,6 +16,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.ui.component.OriDevTopBar
@@ -57,10 +59,10 @@ fun CodeEditorScreen(
                         onClick = { viewModel.onEvent(CodeEditorEvent.Save) },
                         enabled = activeTab?.isDirty == true && !uiState.isReadOnly,
                     ) {
-                        Icon(Icons.Default.Save, contentDescription = "Save")
+                        Icon(Icons.Default.Save, contentDescription = "Datei speichern")
                     }
                     IconButton(onClick = { viewModel.onEvent(CodeEditorEvent.ToggleSearch) }) {
-                        Icon(Icons.Default.Search, contentDescription = "Search")
+                        Icon(Icons.Default.Search, contentDescription = "Suchen und Ersetzen")
                     }
                 },
             )
@@ -96,12 +98,17 @@ fun CodeEditorScreen(
                 )
             }
             if (activeTab != null) {
+                val language = activeTab.filename.substringAfterLast('.', "Text")
                 SoraEditorView(
                     content = activeTab.content,
                     filename = activeTab.filename,
                     readOnly = uiState.isReadOnly,
                     onContentChange = { viewModel.onEvent(CodeEditorEvent.ContentChanged(it)) },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .semantics {
+                            contentDescription = "Code-Editor, Sprache $language"
+                        },
                 )
                 GitDiffStatusBar(summary = activeTab.gitDiffSummary)
             }
