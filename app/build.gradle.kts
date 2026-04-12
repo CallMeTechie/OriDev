@@ -102,3 +102,8 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
 }
+
+tasks.withType<Test> {
+    useJUnitPlatform()
+}
+
