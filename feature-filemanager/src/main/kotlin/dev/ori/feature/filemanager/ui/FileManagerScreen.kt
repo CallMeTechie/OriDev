@@ -39,6 +39,7 @@ import dev.ori.core.ui.component.OriDevTopBar
 @Composable
 fun FileManagerScreen(
     viewModel: FileManagerViewModel = hiltViewModel(),
+    onNavigateToEditor: (filePath: String, isRemote: Boolean) -> Unit = { _, _ -> },
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -191,6 +192,22 @@ fun FileManagerScreen(
             onDismiss = { viewModel.onEvent(FileManagerEvent.ShowFileInfo(null)) },
         )
     }
+
+    // File preview bottom sheet
+    uiState.previewFile?.let { file ->
+        FilePreviewSheet(
+            file = file,
+            content = uiState.previewContent,
+            loading = uiState.previewLoading,
+            errorMessage = uiState.previewError,
+            isRemote = uiState.previewPane == ActivePane.RIGHT,
+            onOpenInEditor = { path, isRemote ->
+                viewModel.onEvent(FileManagerEvent.ClosePreview)
+                onNavigateToEditor(path, isRemote)
+            },
+            onDismiss = { viewModel.onEvent(FileManagerEvent.ClosePreview) },
+        )
+    }
 }
 
 @Composable
@@ -275,6 +292,7 @@ private fun PaneContent(
             /* Create directory dialog -- handled by parent in future iteration */
         },
         onShowFileInfo = { file -> onEvent(FileManagerEvent.ShowFileInfo(file)) },
+        onShowFilePreview = { file -> onEvent(FileManagerEvent.ShowFilePreview(pane, file)) },
         onShowContextMenu = { file -> onEvent(FileManagerEvent.ShowContextMenu(file)) },
         onRename = { /* Rename dialog -- handled by parent in future iteration */ },
         onDelete = { file ->

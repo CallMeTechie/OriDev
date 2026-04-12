@@ -36,6 +36,11 @@ data class FileManagerUiState(
     val contextMenuFile: FileItem? = null,
     val dragState: DragState = DragState(),
     val transferSnackbar: String? = null,
+    val previewFile: FileItem? = null,
+    val previewPane: ActivePane = ActivePane.LEFT,
+    val previewContent: String? = null,
+    val previewLoading: Boolean = false,
+    val previewError: String? = null,
 )
 
 sealed class FileManagerEvent {
@@ -59,6 +64,8 @@ sealed class FileManagerEvent {
     data class AddBookmark(val bookmark: Bookmark) : FileManagerEvent()
     data class RemoveBookmark(val bookmark: Bookmark) : FileManagerEvent()
     data class InitiateTransfer(val sourcePaths: List<String>, val sourcePane: ActivePane) : FileManagerEvent()
+    data class ShowFilePreview(val pane: ActivePane, val file: FileItem) : FileManagerEvent()
+    data object ClosePreview : FileManagerEvent()
 }
 
 data class DragState(
