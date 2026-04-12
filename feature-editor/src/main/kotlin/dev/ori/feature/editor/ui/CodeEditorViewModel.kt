@@ -7,6 +7,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.ori.core.common.feature.FeatureGateManager
 import dev.ori.core.common.feature.PremiumFeature
 import dev.ori.domain.repository.FileSystemRepository
+import dev.ori.domain.repository.LineChange
+import dev.ori.domain.repository.LineDiffProvider
 import dev.ori.domain.repository.LocalFileSystem
 import dev.ori.domain.repository.RemoteFileSystem
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +25,7 @@ class CodeEditorViewModel @Inject constructor(
     @LocalFileSystem private val localRepository: FileSystemRepository,
     @RemoteFileSystem private val remoteRepository: FileSystemRepository,
     private val featureGateManager: FeatureGateManager,
+    private val lineDiffProvider: LineDiffProvider,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -106,6 +109,9 @@ class CodeEditorViewModel @Inject constructor(
                             },
                         )
                     }
+                    if (!isRemote) {
+                        loadGitDiffSummary(tabId, path)
+                    }
                 },
                 onFailure = { err ->
                     _uiState.update { state ->
@@ -122,6 +128,22 @@ class CodeEditorViewModel @Inject constructor(
                     }
                 },
             )
+        }
+    }
+
+    private fun loadGitDiffSummary(tabId: String, path: String) {
+        viewModelScope.launch {
+            val diff = runCatching { lineDiffProvider.getLineDiff(path) }.getOrDefault(emptyMap())
+            val added = diff.values.count { it == LineChange.ADDED }
+            val modified = diff.values.count { it == LineChange.MODIFIED }
+            val summary = if (added == 0 && modified == 0) null else GitDiffSummary(added, modified)
+            _uiState.update { state ->
+                state.copy(
+                    tabs = state.tabs.map { tab ->
+                        if (tab.id == tabId) tab.copy(gitDiffSummary = summary) else tab
+                    },
+                )
+            }
         }
     }
 

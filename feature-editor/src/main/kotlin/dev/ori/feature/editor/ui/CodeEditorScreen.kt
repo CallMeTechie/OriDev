@@ -101,8 +101,9 @@ fun CodeEditorScreen(
                     filename = activeTab.filename,
                     readOnly = uiState.isReadOnly,
                     onContentChange = { viewModel.onEvent(CodeEditorEvent.ContentChanged(it)) },
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.weight(1f),
                 )
+                GitDiffStatusBar(summary = activeTab.gitDiffSummary)
             }
         }
     }
