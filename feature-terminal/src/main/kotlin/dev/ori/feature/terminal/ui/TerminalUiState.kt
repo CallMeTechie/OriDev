@@ -20,6 +20,9 @@ data class TerminalUiState(
     val clipboardHistory: List<String> = emptyList(),
     val showSnippets: Boolean = false,
     val snippets: List<CommandSnippet> = emptyList(),
+    val snippetSearchQuery: String = "",
+    val editingSnippet: CommandSnippet? = null,
+    val showSnippetDialog: Boolean = false,
     val showPasteConfirmation: String? = null,
     val showPreferences: Boolean = false,
     val terminalFontSize: Float = 14f,
@@ -53,6 +56,12 @@ sealed class TerminalEvent {
     data class UpdateSplitRatio(val ratio: Float) : TerminalEvent()
     data object ToggleSnippets : TerminalEvent()
     data class ExecuteSnippet(val command: String) : TerminalEvent()
+    data object ShowAddSnippetDialog : TerminalEvent()
+    data class ShowEditSnippetDialog(val snippet: CommandSnippet) : TerminalEvent()
+    data object HideSnippetDialog : TerminalEvent()
+    data class SaveSnippet(val name: String, val command: String, val category: String) : TerminalEvent()
+    data class DeleteSnippet(val snippet: CommandSnippet) : TerminalEvent()
+    data class SetSnippetSearchQuery(val query: String) : TerminalEvent()
     data object TogglePreferences : TerminalEvent()
     data class SetFontSize(val size: Float) : TerminalEvent()
     data class ResizeTerminal(val cols: Int, val rows: Int) : TerminalEvent()

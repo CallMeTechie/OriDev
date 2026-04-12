@@ -7,15 +7,19 @@ import dev.ori.core.common.result.appSuccess
 import dev.ori.core.network.ssh.ShellHandle
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.core.network.ssh.SshSession
+import dev.ori.domain.model.CommandSnippet
 import dev.ori.domain.model.SessionRecording
 import dev.ori.domain.repository.ClaudeRepository
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRecordingRepository
+import dev.ori.domain.usecase.AddSnippetUseCase
+import dev.ori.domain.usecase.DeleteSnippetUseCase
 import dev.ori.domain.usecase.ExportSessionRecordingUseCase
 import dev.ori.domain.usecase.GetSnippetsUseCase
 import dev.ori.domain.usecase.SendToClaudeUseCase
 import dev.ori.domain.usecase.StartSessionRecordingUseCase
 import dev.ori.domain.usecase.StopSessionRecordingUseCase
+import dev.ori.domain.usecase.UpdateSnippetUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -42,6 +46,9 @@ class TerminalViewModelTest {
     private val sshClient = mockk<SshClient>(relaxed = true)
     private val connectionRepository = mockk<ConnectionRepository>(relaxed = true)
     private val getSnippetsUseCase = mockk<GetSnippetsUseCase>()
+    private val addSnippetUseCase = mockk<AddSnippetUseCase>(relaxed = true)
+    private val updateSnippetUseCase = mockk<UpdateSnippetUseCase>(relaxed = true)
+    private val deleteSnippetUseCase = mockk<DeleteSnippetUseCase>(relaxed = true)
     private val emulatorProvider = mockk<TerminalEmulatorProvider>(relaxed = true)
     private val sessionRecordingRepository = mockk<SessionRecordingRepository>(relaxed = true)
     private val startSessionRecordingUseCase = mockk<StartSessionRecordingUseCase>()
@@ -74,6 +81,9 @@ class TerminalViewModelTest {
             sshClient = sshClient,
             connectionRepository = connectionRepository,
             getSnippetsUseCase = getSnippetsUseCase,
+            addSnippetUseCase = addSnippetUseCase,
+            updateSnippetUseCase = updateSnippetUseCase,
+            deleteSnippetUseCase = deleteSnippetUseCase,
             emulatorProvider = emulatorProvider,
             sessionRecordingRepository = sessionRecordingRepository,
             startSessionRecordingUseCase = startSessionRecordingUseCase,
@@ -365,6 +375,126 @@ class TerminalViewModelTest {
         val state = viewModel.uiState.value
         assertThat(state.showSendToClaude).isFalse()
         assertThat(state.sendToClaudeContext).isEmpty()
+    }
+
+    // --- Phase 6b.1 Snippet CRUD ---
+
+    @Test
+    fun `showAddSnippetDialog sets state and nulls editingSnippet`() = runTest {
+        val viewModel = createViewModel()
+
+        viewModel.onEvent(TerminalEvent.ShowAddSnippetDialog)
+
+        val state = viewModel.uiState.value
+        assertThat(state.showSnippetDialog).isTrue()
+        assertThat(state.editingSnippet).isNull()
+    }
+
+    @Test
+    fun `showEditSnippetDialog sets editingSnippet`() = runTest {
+        val viewModel = createViewModel()
+        val snippet = CommandSnippet(
+            id = 7L,
+            serverProfileId = null,
+            name = "ls",
+            command = "ls -la",
+            category = "general",
+            isWatchQuickCommand = true,
+            sortOrder = 3,
+        )
+
+        viewModel.onEvent(TerminalEvent.ShowEditSnippetDialog(snippet))
+
+        val state = viewModel.uiState.value
+        assertThat(state.showSnippetDialog).isTrue()
+        assertThat(state.editingSnippet).isEqualTo(snippet)
+    }
+
+    @Test
+    fun `saveSnippet new snippet calls add use case`() = runTest(testDispatcher) {
+        coEvery { addSnippetUseCase(any()) } returns 99L
+        val viewModel = createViewModel()
+        viewModel.onEvent(TerminalEvent.ShowAddSnippetDialog)
+
+        viewModel.onEvent(TerminalEvent.SaveSnippet("name", "echo hi", "general"))
+        advanceUntilIdle()
+
+        coVerify {
+            addSnippetUseCase(
+                match {
+                    it.name == "name" &&
+                        it.command == "echo hi" &&
+                        it.category == "general" &&
+                        it.serverProfileId == null &&
+                        !it.isWatchQuickCommand
+                },
+            )
+        }
+        val state = viewModel.uiState.value
+        assertThat(state.showSnippetDialog).isFalse()
+        assertThat(state.editingSnippet).isNull()
+    }
+
+    @Test
+    fun `saveSnippet with editingSnippet calls update use case preserving metadata`() =
+        runTest(testDispatcher) {
+            val existing = CommandSnippet(
+                id = 42L,
+                serverProfileId = 5L,
+                name = "old",
+                command = "old cmd",
+                category = "old cat",
+                isWatchQuickCommand = true,
+                sortOrder = 9,
+            )
+            val viewModel = createViewModel()
+            viewModel.onEvent(TerminalEvent.ShowEditSnippetDialog(existing))
+
+            viewModel.onEvent(TerminalEvent.SaveSnippet("new", "new cmd", "new cat"))
+            advanceUntilIdle()
+
+            coVerify {
+                updateSnippetUseCase(
+                    match {
+                        it.id == 42L &&
+                            it.serverProfileId == 5L &&
+                            it.name == "new" &&
+                            it.command == "new cmd" &&
+                            it.category == "new cat" &&
+                            it.isWatchQuickCommand &&
+                            it.sortOrder == 9
+                    },
+                )
+            }
+            val state = viewModel.uiState.value
+            assertThat(state.showSnippetDialog).isFalse()
+            assertThat(state.editingSnippet).isNull()
+        }
+
+    @Test
+    fun `deleteSnippet calls use case`() = runTest(testDispatcher) {
+        val snippet = CommandSnippet(
+            id = 11L,
+            serverProfileId = null,
+            name = "n",
+            command = "c",
+            category = "x",
+        )
+        val viewModel = createViewModel()
+
+        viewModel.onEvent(TerminalEvent.DeleteSnippet(snippet))
+        advanceUntilIdle()
+
+        coVerify { deleteSnippetUseCase(snippet) }
+    }
+
+    @Test
+    fun `setSnippetSearchQuery updates state`() = runTest {
+        val viewModel = createViewModel()
+
+        viewModel.onEvent(TerminalEvent.SetSnippetSearchQuery("kubectl"))
+
+        assertThat(viewModel.uiState.value.snippetSearchQuery).isEqualTo("kubectl")
     }
 
     @Test

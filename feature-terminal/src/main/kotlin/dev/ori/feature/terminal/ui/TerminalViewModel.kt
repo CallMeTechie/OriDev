@@ -11,13 +11,17 @@ import dev.ori.core.network.ssh.ShellHandle
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.core.ui.theme.TerminalBackground
 import dev.ori.core.ui.theme.TerminalText
+import dev.ori.domain.model.CommandSnippet
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRecordingRepository
+import dev.ori.domain.usecase.AddSnippetUseCase
+import dev.ori.domain.usecase.DeleteSnippetUseCase
 import dev.ori.domain.usecase.ExportSessionRecordingUseCase
 import dev.ori.domain.usecase.GetSnippetsUseCase
 import dev.ori.domain.usecase.SendToClaudeUseCase
 import dev.ori.domain.usecase.StartSessionRecordingUseCase
 import dev.ori.domain.usecase.StopSessionRecordingUseCase
+import dev.ori.domain.usecase.UpdateSnippetUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,6 +40,9 @@ class TerminalViewModel @Inject constructor(
     private val sshClient: SshClient,
     private val connectionRepository: ConnectionRepository,
     private val getSnippetsUseCase: GetSnippetsUseCase,
+    private val addSnippetUseCase: AddSnippetUseCase,
+    private val updateSnippetUseCase: UpdateSnippetUseCase,
+    private val deleteSnippetUseCase: DeleteSnippetUseCase,
     private val emulatorProvider: TerminalEmulatorProvider,
     private val sessionRecordingRepository: SessionRecordingRepository,
     private val startSessionRecordingUseCase: StartSessionRecordingUseCase,
@@ -71,6 +78,12 @@ class TerminalViewModel @Inject constructor(
             is TerminalEvent.UpdateSplitRatio -> updateSplitRatio(event.ratio)
             is TerminalEvent.ToggleSnippets -> toggleSnippets()
             is TerminalEvent.ExecuteSnippet -> executeSnippet(event.command)
+            is TerminalEvent.ShowAddSnippetDialog -> showAddSnippetDialog()
+            is TerminalEvent.ShowEditSnippetDialog -> showEditSnippetDialog(event.snippet)
+            is TerminalEvent.HideSnippetDialog -> hideSnippetDialog()
+            is TerminalEvent.SaveSnippet -> saveSnippet(event.name, event.command, event.category)
+            is TerminalEvent.DeleteSnippet -> deleteSnippetEvent(event.snippet)
+            is TerminalEvent.SetSnippetSearchQuery -> _uiState.update { it.copy(snippetSearchQuery = event.query) }
             is TerminalEvent.TogglePreferences -> togglePreferences()
             is TerminalEvent.SetFontSize -> setFontSize(event.size)
             is TerminalEvent.ResizeTerminal -> resizeTerminal(event.cols, event.rows)
@@ -281,6 +294,47 @@ class TerminalViewModel @Inject constructor(
     private fun executeSnippet(command: String) {
         sendText(command + "\n")
         _uiState.update { it.copy(showSnippets = false) }
+    }
+
+    private fun showAddSnippetDialog() {
+        _uiState.update { it.copy(editingSnippet = null, showSnippetDialog = true) }
+    }
+
+    private fun showEditSnippetDialog(snippet: CommandSnippet) {
+        _uiState.update { it.copy(editingSnippet = snippet, showSnippetDialog = true) }
+    }
+
+    private fun hideSnippetDialog() {
+        _uiState.update { it.copy(editingSnippet = null, showSnippetDialog = false) }
+    }
+
+    private fun saveSnippet(name: String, command: String, category: String) {
+        val editing = _uiState.value.editingSnippet
+        viewModelScope.launch {
+            if (editing != null) {
+                updateSnippetUseCase(editing.copy(name = name, command = command, category = category))
+            } else {
+                val current = _uiState.value.snippets
+                addSnippetUseCase(
+                    CommandSnippet(
+                        name = name,
+                        command = command,
+                        category = category,
+                        serverProfileId = null,
+                        isWatchQuickCommand = false,
+                        sortOrder = current.size,
+                    ),
+                )
+            }
+            _uiState.update { it.copy(editingSnippet = null, showSnippetDialog = false) }
+        }
+    }
+
+    private fun deleteSnippetEvent(snippet: CommandSnippet) {
+        viewModelScope.launch {
+            deleteSnippetUseCase(snippet)
+            _uiState.update { it.copy(editingSnippet = null, showSnippetDialog = false) }
+        }
     }
 
     private fun togglePreferences() {
