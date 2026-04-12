@@ -3,18 +3,28 @@ package dev.ori.feature.terminal.ui
 import android.content.Context
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
+import dev.ori.core.common.result.appSuccess
 import dev.ori.core.network.ssh.ShellHandle
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.core.network.ssh.SshSession
+import dev.ori.domain.model.SessionRecording
+import dev.ori.domain.repository.ClaudeRepository
 import dev.ori.domain.repository.ConnectionRepository
+import dev.ori.domain.repository.SessionRecordingRepository
+import dev.ori.domain.usecase.ExportSessionRecordingUseCase
 import dev.ori.domain.usecase.GetSnippetsUseCase
+import dev.ori.domain.usecase.SendToClaudeUseCase
+import dev.ori.domain.usecase.StartSessionRecordingUseCase
+import dev.ori.domain.usecase.StopSessionRecordingUseCase
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -33,6 +43,18 @@ class TerminalViewModelTest {
     private val connectionRepository = mockk<ConnectionRepository>(relaxed = true)
     private val getSnippetsUseCase = mockk<GetSnippetsUseCase>()
     private val emulatorProvider = mockk<TerminalEmulatorProvider>(relaxed = true)
+    private val sessionRecordingRepository = mockk<SessionRecordingRepository>(relaxed = true)
+    private val startSessionRecordingUseCase = mockk<StartSessionRecordingUseCase>()
+    private val stopSessionRecordingUseCase = mockk<StopSessionRecordingUseCase>(relaxed = true)
+    private val exportSessionRecordingUseCase = mockk<ExportSessionRecordingUseCase>(relaxed = true)
+    private var claudeResult: kotlin.Result<String> = kotlin.Result.success("")
+    private val claudeRepository = object : ClaudeRepository {
+        override suspend fun hasApiKey(): Boolean = true
+        override suspend fun setApiKey(apiKey: String) = Unit
+        override suspend fun sendPrompt(userMessage: String, context: String?): kotlin.Result<String> =
+            claudeResult
+    }
+    private val sendToClaudeUseCase = SendToClaudeUseCase(claudeRepository)
     private val context = mockk<Context>(relaxed = true)
 
     @BeforeEach
@@ -53,6 +75,11 @@ class TerminalViewModelTest {
             connectionRepository = connectionRepository,
             getSnippetsUseCase = getSnippetsUseCase,
             emulatorProvider = emulatorProvider,
+            sessionRecordingRepository = sessionRecordingRepository,
+            startSessionRecordingUseCase = startSessionRecordingUseCase,
+            stopSessionRecordingUseCase = stopSessionRecordingUseCase,
+            exportSessionRecordingUseCase = exportSessionRecordingUseCase,
+            sendToClaudeUseCase = sendToClaudeUseCase,
             context = context,
         )
     }
@@ -246,6 +273,98 @@ class TerminalViewModelTest {
 
         viewModel.onEvent(TerminalEvent.SetFontSize(2f))
         assertThat(viewModel.uiState.value.terminalFontSize).isEqualTo(10f)
+    }
+
+    @Test
+    fun `startRecording sets isRecording and stores id`() = runTest {
+        stubSshConnection()
+        coEvery { startSessionRecordingUseCase(any()) } returns SessionRecording(
+            id = 42L,
+            serverProfileId = 1L,
+            startedAt = 0L,
+            logFilePath = "/tmp/rec",
+        )
+        val viewModel = createViewModel()
+        viewModel.onEvent(TerminalEvent.CreateTab(profileId = 1L, serverName = "Server"))
+
+        viewModel.onEvent(TerminalEvent.StartRecording)
+
+        val state = viewModel.uiState.value
+        assertThat(state.isRecording).isTrue()
+        assertThat(state.activeRecordingId).isEqualTo(42L)
+    }
+
+    @Test
+    fun `stopRecording clears recording state`() = runTest {
+        stubSshConnection()
+        coEvery { startSessionRecordingUseCase(any()) } returns SessionRecording(
+            id = 42L, serverProfileId = 1L, startedAt = 0L, logFilePath = "/tmp/rec",
+        )
+        val viewModel = createViewModel()
+        viewModel.onEvent(TerminalEvent.CreateTab(profileId = 1L, serverName = "Server"))
+        viewModel.onEvent(TerminalEvent.StartRecording)
+        assertThat(viewModel.uiState.value.isRecording).isTrue()
+
+        viewModel.onEvent(TerminalEvent.StopRecording)
+
+        val state = viewModel.uiState.value
+        assertThat(state.isRecording).isFalse()
+        assertThat(state.activeRecordingId).isNull()
+        coVerify { stopSessionRecordingUseCase(42L) }
+    }
+
+    @Test
+    fun `showSendToClaude sets dialog state with context`() = runTest {
+        val viewModel = createViewModel()
+
+        viewModel.onEvent(TerminalEvent.ShowSendToClaude("selected shell output"))
+
+        val state = viewModel.uiState.value
+        assertThat(state.showSendToClaude).isTrue()
+        assertThat(state.sendToClaudeContext).isEqualTo("selected shell output")
+    }
+
+    @Test
+    fun `sendToClaude success sets response`() = runTest(testDispatcher) {
+        claudeResult = appSuccess("Claude says hi")
+        val viewModel = createViewModel()
+        viewModel.onEvent(TerminalEvent.ShowSendToClaude("ctx"))
+
+        viewModel.onEvent(TerminalEvent.SendToClaude("what's this?"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertThat(state.claudeResponse).isEqualTo("Claude says hi")
+        assertThat(state.claudeLoading).isFalse()
+        assertThat(state.claudeError).isNull()
+    }
+
+    @Test
+    fun `sendToClaude failure sets error`() = runTest(testDispatcher) {
+        claudeResult = kotlin.Result.failure(RuntimeException("network error"))
+        val viewModel = createViewModel()
+        viewModel.onEvent(TerminalEvent.ShowSendToClaude("ctx"))
+
+        viewModel.onEvent(TerminalEvent.SendToClaude("what's this?"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertThat(state.claudeError).isNotNull()
+        assertThat(state.claudeResponse).isNull()
+        assertThat(state.claudeLoading).isFalse()
+    }
+
+    @Test
+    fun `hideSendToClaude clears dialog state`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onEvent(TerminalEvent.ShowSendToClaude("ctx"))
+        assertThat(viewModel.uiState.value.showSendToClaude).isTrue()
+
+        viewModel.onEvent(TerminalEvent.HideSendToClaude)
+
+        val state = viewModel.uiState.value
+        assertThat(state.showSendToClaude).isFalse()
+        assertThat(state.sendToClaudeContext).isEmpty()
     }
 
     @Test
