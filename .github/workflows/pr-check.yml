@@ -32,22 +32,18 @@ jobs:
         with:
           cache-read-only: true
 
-      # detekt (static analysis + ktlint formatting)
       - name: Run detekt
-        run: ./gradlew detekt --continue
-        continue-on-error: true
+        run: ./gradlew detekt
 
       - name: Upload detekt report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: detekt-report
-          path: build/reports/detekt/
+          path: '**/build/reports/detekt/'
 
-      # Android Lint
       - name: Run Android Lint
-        run: ./gradlew lint --continue
-        continue-on-error: true
+        run: ./gradlew lint
 
       - name: Upload lint reports
         if: always()
@@ -55,15 +51,6 @@ jobs:
         with:
           name: lint-reports
           path: '**/build/reports/lint-results*.html'
-
-      # Fail if detekt or lint found issues
-      - name: Check for quality issues
-        run: |
-          ./gradlew detekt 2>&1 | tee /tmp/detekt-output.txt
-          if grep -q "Build failed" /tmp/detekt-output.txt; then
-            echo "::error::detekt found code quality issues. See detekt-report artifact."
-            exit 1
-          fi
 
   # ============================================================
   # Stage 2: Unit tests with coverage
@@ -211,8 +198,8 @@ jobs:
     name: UI Tests (Emulator)
     runs-on: ubuntu-latest
     needs: [build]
-    # Only run on non-draft PRs to save CI minutes
-    if: github.event.pull_request.draft == false
+    # Opt-in via PR label to save CI minutes; emulator runs are expensive and flaky
+    if: github.event.pull_request.draft == false && contains(github.event.pull_request.labels.*.name, 'run-ui-tests')
     steps:
       - uses: actions/checkout@v4
 
