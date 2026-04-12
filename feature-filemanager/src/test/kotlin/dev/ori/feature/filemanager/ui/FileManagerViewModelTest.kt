@@ -270,6 +270,50 @@ class FileManagerViewModelTest {
     }
 
     @Test
+    fun showFilePreview_success_setsContent() = runTest {
+        val viewModel = createViewModel()
+        val file = sampleFiles[1] // photos.jpg
+        coEvery { localRepository.getFileContent(file.path) } returns "preview bytes".toByteArray()
+
+        viewModel.onEvent(FileManagerEvent.ShowFilePreview(ActivePane.LEFT, file))
+
+        val state = viewModel.uiState.value
+        assertThat(state.previewFile).isEqualTo(file)
+        assertThat(state.previewContent).isEqualTo("preview bytes")
+        assertThat(state.previewLoading).isFalse()
+        assertThat(state.previewError).isNull()
+    }
+
+    @Test
+    fun showFilePreview_failure_setsError() = runTest {
+        val viewModel = createViewModel()
+        val file = sampleFiles[2] // notes.txt
+        coEvery { localRepository.getFileContent(file.path) } throws RuntimeException("io error")
+
+        viewModel.onEvent(FileManagerEvent.ShowFilePreview(ActivePane.LEFT, file))
+
+        val state = viewModel.uiState.value
+        assertThat(state.previewError).isNotNull()
+        assertThat(state.previewContent).isNull()
+        assertThat(state.previewLoading).isFalse()
+    }
+
+    @Test
+    fun closePreview_clearsPreviewState() = runTest {
+        val viewModel = createViewModel()
+        val file = sampleFiles[1]
+        coEvery { localRepository.getFileContent(file.path) } returns "bytes".toByteArray()
+        viewModel.onEvent(FileManagerEvent.ShowFilePreview(ActivePane.LEFT, file))
+        assertThat(viewModel.uiState.value.previewFile).isNotNull()
+
+        viewModel.onEvent(FileManagerEvent.ClosePreview)
+
+        val state = viewModel.uiState.value
+        assertThat(state.previewFile).isNull()
+        assertThat(state.previewContent).isNull()
+    }
+
+    @Test
     fun createDirectory_failure_setsError() = runTest {
         val viewModel = createViewModel()
         val dirPath = "/storage/emulated/0/NewDir"
