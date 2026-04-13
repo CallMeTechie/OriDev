@@ -6,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -71,7 +70,7 @@ class DiffViewerViewModelTest {
     }
 
     @Test
-    fun `missing payload shows expired error`() = runTest {
+    fun `missing payload shows expired error`() {
         val vm = createViewModel("missing")
         val state = vm.uiState.value
         assertThat(state.isLoading).isFalse()
@@ -79,7 +78,7 @@ class DiffViewerViewModelTest {
     }
 
     @Test
-    fun `set view mode updates state`() = runTest {
+    fun `set view mode updates state`() {
         DiffDataHolder.put(
             "d2",
             DiffPayload("x", "x", "a", "a"),
@@ -90,7 +89,7 @@ class DiffViewerViewModelTest {
     }
 
     @Test
-    fun `onCleared removes payload from holder`() = runTest {
+    fun `onCleared removes payload from holder`() {
         DiffDataHolder.put(
             "d3",
             DiffPayload("a", "b", "t1", "t2"),
