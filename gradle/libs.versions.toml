@@ -73,6 +73,9 @@ leakcanary = "2.14"
 baselineprofile-plugin = "1.3.4"
 uiautomator = "2.3.0"
 
+# Google Play Publisher (gradle-play-publisher)
+gradle-play-publisher = "3.12.1"
+
 [libraries]
 # Kotlin
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
@@ -197,3 +200,4 @@ room = { id = "androidx.room", version.ref = "room" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 android-test = { id = "com.android.test", version.ref = "agp" }
 baselineprofile = { id = "androidx.baselineprofile", version.ref = "baselineprofile-plugin" }
+play-publisher = { id = "com.github.triplet.play", version.ref = "gradle-play-publisher" }

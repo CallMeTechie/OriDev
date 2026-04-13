@@ -1,0 +1,120 @@
+name: Auto Tag
+
+on:
+  workflow_run:
+    workflows: ["Build & Test"]
+    types: [completed]
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    name: Analyze commits and create version tag
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Checkout master with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: master
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Skip if head commit is a release bump
+        id: skip_check
+        run: |
+          MSG=$(git log -1 --pretty=%B)
+          if echo "$MSG" | grep -q '^chore(release):'; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Head commit is a release bump -- skipping to avoid infinite loop."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Determine next version
+        id: version
+        if: steps.skip_check.outputs.skip == 'false'
+        run: |
+          set -e
+          # shellcheck disable=SC1091
+          source version.properties
+          LAST_TAG=$(git describe --tags --abbrev=0 --match 'v*.*.*' 2>/dev/null || echo "")
+          echo "Last tag: ${LAST_TAG:-<none>}"
+
+          if [ -z "$LAST_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${LAST_TAG}..HEAD"
+          fi
+
+          BUMP="none"
+          while IFS= read -r line; do
+            if echo "$line" | grep -qE '^(feat|fix|refactor|build|ci|docs|style|test|chore|perf)(\([^)]+\))?!:'; then
+              BUMP="major"; break
+            fi
+          done < <(git log --pretty=%s "$RANGE")
+
+          if [ "$BUMP" != "major" ]; then
+            if git log --pretty=%B "$RANGE" | grep -qE '^BREAKING CHANGE'; then
+              BUMP="major"
+            elif git log --pretty=%s "$RANGE" | grep -qE '^feat(\([^)]+\))?:'; then
+              BUMP="minor"
+            elif git log --pretty=%s "$RANGE" | grep -qE '^fix(\([^)]+\))?:'; then
+              BUMP="patch"
+            fi
+          fi
+
+          echo "Bump type: $BUMP"
+          if [ "$BUMP" = "none" ]; then
+            echo "bump=none" >> "$GITHUB_OUTPUT"
+            echo "::notice::No feat/fix/breaking commits since ${LAST_TAG:-<none>} -- no version bump."
+            exit 0
+          fi
+
+          case "$BUMP" in
+            major) NEW_MAJOR=$((VERSION_MAJOR+1)); NEW_MINOR=0; NEW_PATCH=0 ;;
+            minor) NEW_MAJOR=$VERSION_MAJOR; NEW_MINOR=$((VERSION_MINOR+1)); NEW_PATCH=0 ;;
+            patch) NEW_MAJOR=$VERSION_MAJOR; NEW_MINOR=$VERSION_MINOR; NEW_PATCH=$((VERSION_PATCH+1)) ;;
+          esac
+          NEW_CODE=$((VERSION_CODE+1))
+          NEW_VERSION="v${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
+
+          {
+            echo "bump=$BUMP"
+            echo "new_version=$NEW_VERSION"
+            echo "new_major=$NEW_MAJOR"
+            echo "new_minor=$NEW_MINOR"
+            echo "new_patch=$NEW_PATCH"
+            echo "new_code=$NEW_CODE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Update version.properties and tag
+        if: steps.skip_check.outputs.skip == 'false' && steps.version.outputs.bump != 'none' && steps.version.outputs.bump != ''
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new_version }}
+          NEW_MAJOR: ${{ steps.version.outputs.new_major }}
+          NEW_MINOR: ${{ steps.version.outputs.new_minor }}
+          NEW_PATCH: ${{ steps.version.outputs.new_patch }}
+          NEW_CODE: ${{ steps.version.outputs.new_code }}
+        run: |
+          set -e
+          cat > version.properties <<EOF
+          # Semantic version -- auto-bumped by .github/workflows/auto-tag.yml based on conventional commits.
+          # feat: -> minor, fix: -> patch, BREAKING CHANGE / feat!: / fix!: -> major
+          VERSION_MAJOR=${NEW_MAJOR}
+          VERSION_MINOR=${NEW_MINOR}
+          VERSION_PATCH=${NEW_PATCH}
+          VERSION_CODE=${NEW_CODE}
+          EOF
+          git add version.properties
+          git commit -m "chore(release): ${NEW_VERSION}"
+          git tag -a "${NEW_VERSION}" -m "Release ${NEW_VERSION}"
+          git push origin master
+          git push origin "${NEW_VERSION}"

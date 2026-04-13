@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,7 +7,18 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.baselineprofile)
+    alias(libs.plugins.play.publisher)
 }
+
+// Single source of truth for app version — rewritten by
+// .github/workflows/auto-tag.yml based on conventional commits.
+val versionProps = Properties().apply {
+    rootProject.file("version.properties").reader().use { load(it) }
+}
+val vMajor = versionProps.getProperty("VERSION_MAJOR").toInt()
+val vMinor = versionProps.getProperty("VERSION_MINOR").toInt()
+val vPatch = versionProps.getProperty("VERSION_PATCH").toInt()
+val vCode = versionProps.getProperty("VERSION_CODE").toInt()
 
 kotlin {
     compilerOptions {
@@ -35,9 +48,8 @@ android {
         applicationId = "dev.ori.app"
         minSdk = 34
         targetSdk = 36
-        // Allow CI to override versionCode/versionName via -P flags for continuous builds.
-        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 1
-        versionName = (project.findProperty("versionName") as String?) ?: "0.1.0"
+        versionCode = vCode
+        versionName = "$vMajor.$vMinor.$vPatch"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -95,6 +107,19 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+}
+
+// Google Play Store publishing — activated only when PLAY_SERVICE_ACCOUNT_JSON_PATH
+// points to a valid credentials file. Without it, the plugin is still configured
+// (and plan/publish tasks are registered) but won't run successfully, which is
+// the intended safe default for local/PR builds.
+play {
+    serviceAccountCredentials.set(
+        file(System.getenv("PLAY_SERVICE_ACCOUNT_JSON_PATH") ?: "/dev/null")
+    )
+    track.set("internal")
+    defaultToAppBundles.set(true)
+    releaseStatus.set(com.github.triplet.gradle.androidpublisher.ReleaseStatus.DRAFT)
 }
 
 dependencies {

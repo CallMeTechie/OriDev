@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +7,15 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
 }
+
+// Shared version source of truth — see /version.properties.
+val versionProps = Properties().apply {
+    rootProject.file("version.properties").reader().use { load(it) }
+}
+val vMajor = versionProps.getProperty("VERSION_MAJOR").toInt()
+val vMinor = versionProps.getProperty("VERSION_MINOR").toInt()
+val vPatch = versionProps.getProperty("VERSION_PATCH").toInt()
+val vCode = versionProps.getProperty("VERSION_CODE").toInt()
 
 kotlin {
     compilerOptions {
@@ -34,9 +45,8 @@ android {
         applicationId = "dev.ori.wear"
         minSdk = 34
         targetSdk = 36
-        // Allow CI to override versionCode/versionName via -P flags for continuous builds.
-        versionCode = (project.findProperty("versionCode") as String?)?.toInt() ?: 1
-        versionName = (project.findProperty("versionName") as String?) ?: "0.1.0"
+        versionCode = vCode
+        versionName = "$vMajor.$vMinor.$vPatch"
     }
 
     buildTypes {
