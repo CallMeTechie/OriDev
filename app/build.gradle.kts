@@ -65,7 +65,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = if (System.getenv("KEYSTORE_PASSWORD") != null) {
+            signingConfig = if (!System.getenv("KEYSTORE_PASSWORD").isNullOrBlank()) {
                 signingConfigs.getByName("release")
             } else {
                 signingConfigs.getByName("debug") // local dev fallback
