@@ -2,34 +2,34 @@ name: Release
 
 on:
   push:
-    tags: ['v*']
+    branches: [master]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to release (e.g. v0.3.0)'
-        required: true
-        type: string
 
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   # ============================================================
-  # Verify before release
+  # Pre-release verification
   # ============================================================
   verify:
     name: Pre-Release Verification
     runs-on: ubuntu-latest
+    # Skip on version-bump commits to prevent infinite loop
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
+          java-version: '21'
+          cache: gradle
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -42,7 +42,7 @@ jobs:
       - name: Run all tests
         run: ./gradlew test
 
-      - name: Upload test results
+      - name: Upload test results on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -50,144 +50,208 @@ jobs:
           path: '**/build/reports/tests/'
 
   # ============================================================
-  # Build signed release artifacts and publish to GitHub + Play Store
-  # Fails fast on missing secrets -- no silent skipping.
+  # Build signed release and publish to GitHub (+ Play Store if secrets set)
   # ============================================================
-  release:
-    name: Build & Publish Release
+  build:
+    name: Build and Publish
     runs-on: ubuntu-latest
-    needs: [verify]
+    needs: verify
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 21
+          java-version: '21'
+          cache: gradle
 
       - uses: gradle/actions/setup-gradle@v4
 
       # ------------------------------------------------------------
-      # Signing mode detection. NEVER fails here -- falls back to debug
-      # signing if KEYSTORE_* secrets are missing so the GitHub Release is
-      # always produced. See docs/SECRETS_SETUP.md to enable release signing
-      # (required for Play Store uploads).
+      # Semantic version bump based on head commit message.
+      #   feat: / feat(scope): -> minor bump
+      # everything else        -> patch bump
+      # BREAKING CHANGE / feat!: / fix!: -> major bump
       # ------------------------------------------------------------
-      - name: Detect signing mode
-        id: signing
+      - name: Determine version bump
+        id: bump
+        shell: bash
         env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && \
-             [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
-            echo "mode=release" >> "$GITHUB_OUTPUT"
-            echo "All signing secrets present — building with release keystore."
+          set -e
+          source version.properties
+          CURRENT="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
+          FIRST_LINE=$(echo "$COMMIT_MSG" | head -1)
+
+          if echo "$FIRST_LINE" | grep -qE '^(feat|fix|refactor|chore|ci|docs|style|test|build|perf)(\([^)]+\))?!:'; then
+            BUMP="major"
+          elif echo "$COMMIT_MSG" | grep -qE '^BREAKING CHANGE'; then
+            BUMP="major"
+          elif echo "$FIRST_LINE" | grep -qE '^feat(\([^)]+\))?:'; then
+            BUMP="minor"
           else
-            echo "mode=debug" >> "$GITHUB_OUTPUT"
-            echo "::warning::KEYSTORE_* secrets not configured — falling back to debug signing. Artifacts will be published to GitHub Release but are NOT Play Store installable. See docs/SECRETS_SETUP.md to enable release signing."
+            BUMP="patch"
           fi
 
-      - name: Decode Keystore
-        if: steps.signing.outputs.mode == 'release'
+          case "$BUMP" in
+            major)
+              NEW_MAJOR=$((VERSION_MAJOR + 1))
+              NEW_MINOR=0
+              NEW_PATCH=0
+              ;;
+            minor)
+              NEW_MAJOR=$VERSION_MAJOR
+              NEW_MINOR=$((VERSION_MINOR + 1))
+              NEW_PATCH=0
+              ;;
+            patch)
+              NEW_MAJOR=$VERSION_MAJOR
+              NEW_MINOR=$VERSION_MINOR
+              NEW_PATCH=$((VERSION_PATCH + 1))
+              ;;
+          esac
+
+          NEW_CODE=$((VERSION_CODE + 1))
+          NEW="${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
+          TAG="v$NEW"
+
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+          echo "new_major=$NEW_MAJOR" >> "$GITHUB_OUTPUT"
+          echo "new_minor=$NEW_MINOR" >> "$GITHUB_OUTPUT"
+          echo "new_patch=$NEW_PATCH" >> "$GITHUB_OUTPUT"
+          echo "new_code=$NEW_CODE" >> "$GITHUB_OUTPUT"
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Version: $CURRENT -> $NEW ($BUMP)"
+
+      - name: Check if tag already exists
+        id: check_tag
+        shell: bash
         env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: printf '%s' "$KEYSTORE_BASE64" | base64 -d > app/release.keystore
+          TAG: ${{ steps.bump.outputs.tag }}
+        run: |
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Tag $TAG already exists — skipping release."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update version.properties
+        if: steps.check_tag.outputs.exists == 'false'
+        shell: bash
+        run: |
+          cat > version.properties <<EOF
+          # Semantic version — auto-bumped by .github/workflows/release.yml based on conventional commits.
+          # feat: -> minor, anything else -> patch, BREAKING CHANGE / feat!: -> major
+          VERSION_MAJOR=${{ steps.bump.outputs.new_major }}
+          VERSION_MINOR=${{ steps.bump.outputs.new_minor }}
+          VERSION_PATCH=${{ steps.bump.outputs.new_patch }}
+          VERSION_CODE=${{ steps.bump.outputs.new_code }}
+          EOF
 
       # ------------------------------------------------------------
-      # Build AAB + APK for phone and wear. Always runs.
-      # Gradle's signingConfig picks the release keystore when
-      # KEYSTORE_PASSWORD is set, otherwise the debug keystore.
-      # Versions come from /version.properties (single source of truth).
+      # Signing setup: use stored keystore if available, else generate
+      # an ephemeral one via keytool so releases always build signed.
+      # Play Store requires a stable keystore — set KEYSTORE_BASE64
+      # secret (see docs/SECRETS_SETUP.md) before first Play upload.
       # ------------------------------------------------------------
-      - name: Build AAB and APK
+      - name: Setup signing
+        if: steps.check_tag.outputs.exists == 'false'
+        id: signing
+        shell: bash
         env:
-          KEYSTORE_PATH: ${{ github.workspace }}/app/release.keystore
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$GITHUB_WORKSPACE/app/release.keystore"
+            echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/app/release.keystore" >> "$GITHUB_ENV"
+            echo "mode=release" >> "$GITHUB_OUTPUT"
+            echo "Release keystore loaded from secret."
+          else
+            keytool -genkey -v \
+              -keystore "$GITHUB_WORKSPACE/app/release.keystore" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -alias oridev \
+              -storepass oridev-ephemeral \
+              -keypass oridev-ephemeral \
+              -dname "CN=Ori:Dev Ephemeral, OU=Dev, O=OriDev, C=DE"
+            echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/app/release.keystore" >> "$GITHUB_ENV"
+            echo "KEYSTORE_PASSWORD_FALLBACK=oridev-ephemeral" >> "$GITHUB_ENV"
+            echo "KEY_ALIAS_FALLBACK=oridev" >> "$GITHUB_ENV"
+            echo "KEY_PASSWORD_FALLBACK=oridev-ephemeral" >> "$GITHUB_ENV"
+            echo "mode=ephemeral" >> "$GITHUB_OUTPUT"
+            echo "::warning::KEYSTORE_BASE64 secret not set — generated ephemeral keystore. This build is signed but NOT Play Store uploadable (cert mismatch on re-install). See docs/SECRETS_SETUP.md."
+          fi
+
+      - name: Build signed AAB and APK
+        if: steps.check_tag.outputs.exists == 'false'
+        shell: bash
+        env:
+          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || env.KEYSTORE_PASSWORD_FALLBACK }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || env.KEY_ALIAS_FALLBACK }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || env.KEY_PASSWORD_FALLBACK }}
         run: |
           ./gradlew :app:bundleRelease :app:assembleRelease \
                     :wear:bundleRelease :wear:assembleRelease
 
-      - name: Verify APK/AAB signing
+      - name: Verify R8 obfuscation
+        if: steps.check_tag.outputs.exists == 'false'
+        shell: bash
         run: |
-          set -e
-          AAB=$(find app/build/outputs/bundle/release -name '*.aab' | head -1)
-          if [ -z "$AAB" ]; then
-            echo "::error::No AAB produced"
+          if [ ! -f app/build/outputs/mapping/release/mapping.txt ]; then
+            echo "::error::R8 mapping.txt not found — minification may not be active"
             exit 1
           fi
-          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -type d | sort -V | tail -1)
-          echo "Using build-tools: $BUILD_TOOLS"
-          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
-          if [ -z "$APK" ]; then
-            echo "::error::No APK produced"
+          SIZE=$(wc -c < app/build/outputs/mapping/release/mapping.txt)
+          if [ "$SIZE" -lt 1000 ]; then
+            echo "::error::R8 mapping.txt is suspiciously small (${SIZE} bytes)"
             exit 1
           fi
-          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK" || true
-          if [ "${{ steps.signing.outputs.mode }}" = "release" ]; then
-            "$BUILD_TOOLS/apksigner" verify --min-sdk-version=34 "$APK"
-            "$BUILD_TOOLS/apksigner" verify -v "$APK" | grep -E 'Verified using v(2|3) scheme.*true' \
-              || { echo "::error::APK is not signed with v2 or v3 scheme"; exit 1; }
-          else
-            echo "::notice::Debug-signed build — skipping strict v2/v3 verification."
-          fi
+          echo "R8 mapping.txt verified (${SIZE} bytes)"
 
-      - name: Generate Changelog
-        id: changelog
-        env:
-          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+      - name: Verify APK signing
+        if: steps.check_tag.outputs.exists == 'false'
+        shell: bash
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 "${TAG_NAME}^" 2>/dev/null || echo "")
-          {
-            echo "changelog<<CHANGELOG_EOF"
-            if [ -n "$PREV_TAG" ]; then
-              echo "## Changes since $PREV_TAG"
-              echo ""
-              echo "### Features"
-              git log --pretty=format:"- %s" "$PREV_TAG..HEAD" | grep "^- feat" || echo "_None_"
-              echo ""
-              echo "### Bug Fixes"
-              git log --pretty=format:"- %s" "$PREV_TAG..HEAD" | grep "^- fix" || echo "_None_"
-              echo ""
-              echo "### Other"
-              git log --pretty=format:"- %s" "$PREV_TAG..HEAD" | grep -v "^- feat" | grep -v "^- fix" || echo "_None_"
-            else
-              echo "Initial release"
-            fi
-            echo ""
-            echo "CHANGELOG_EOF"
-          } >> "$GITHUB_OUTPUT"
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -maxdepth 1 -type d | sort -V | tail -1)
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
+          "$BUILD_TOOLS/apksigner" verify --min-sdk-version=34 "$APK"
 
       - name: Stage release artifacts
+        if: steps.check_tag.outputs.exists == 'false'
         id: stage
+        shell: bash
         env:
-          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
+          NEW_VERSION: ${{ steps.bump.outputs.new }}
         run: |
-          VERSION="${TAG_NAME#v}"
-          OUT=release-artifacts
+          OUT="$GITHUB_WORKSPACE/release-artifacts"
           mkdir -p "$OUT"
 
-          cp app/build/outputs/bundle/release/*.aab            "$OUT/oridev-${VERSION}.aab"            2>/dev/null || true
-          cp app/build/outputs/apk/release/*.apk               "$OUT/oridev-${VERSION}.apk"            2>/dev/null || true
-          cp app/build/outputs/mapping/release/mapping.txt     "$OUT/oridev-${VERSION}-mapping.txt"    2>/dev/null || true
-          cp app/build/outputs/mapping/release/seeds.txt       "$OUT/oridev-${VERSION}-seeds.txt"      2>/dev/null || true
-          cp app/build/outputs/mapping/release/usage.txt       "$OUT/oridev-${VERSION}-usage.txt"      2>/dev/null || true
+          # Phone
+          cp app/build/outputs/bundle/release/*.aab          "$OUT/oridev-${NEW_VERSION}.aab"
+          cp app/build/outputs/apk/release/*.apk             "$OUT/oridev-${NEW_VERSION}.apk"
+          cp app/build/outputs/mapping/release/mapping.txt   "$OUT/oridev-${NEW_VERSION}-mapping.txt"
+          cp app/build/outputs/mapping/release/seeds.txt     "$OUT/oridev-${NEW_VERSION}-seeds.txt" 2>/dev/null || true
+          cp app/build/outputs/mapping/release/usage.txt     "$OUT/oridev-${NEW_VERSION}-usage.txt" 2>/dev/null || true
 
-          cp wear/build/outputs/bundle/release/*.aab           "$OUT/oridev-wear-${VERSION}.aab"         2>/dev/null || true
-          cp wear/build/outputs/apk/release/*.apk              "$OUT/oridev-wear-${VERSION}.apk"         2>/dev/null || true
-          cp wear/build/outputs/mapping/release/mapping.txt    "$OUT/oridev-wear-${VERSION}-mapping.txt" 2>/dev/null || true
+          # Wear
+          cp wear/build/outputs/bundle/release/*.aab         "$OUT/oridev-wear-${NEW_VERSION}.aab"
+          cp wear/build/outputs/apk/release/*.apk            "$OUT/oridev-wear-${NEW_VERSION}.apk"
+          cp wear/build/outputs/mapping/release/mapping.txt  "$OUT/oridev-wear-${NEW_VERSION}-mapping.txt" 2>/dev/null || true
 
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "dir=$OUT" >> "$GITHUB_OUTPUT"
 
-          echo "## Release Artifacts ($VERSION)" >> "$GITHUB_STEP_SUMMARY"
+          echo "## Release Artifacts (v${NEW_VERSION}, signing=${{ steps.signing.outputs.mode }})" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           for file in "$OUT"/*; do
             [ -f "$file" ] || continue
@@ -196,54 +260,86 @@ jobs:
             echo "- **$name**: $size" >> "$GITHUB_STEP_SUMMARY"
           done
 
-      - name: Compose release body
-        id: body
+      - name: Generate changelog
+        if: steps.check_tag.outputs.exists == 'false'
+        id: changelog
+        shell: bash
         env:
-          TAG_NAME: ${{ github.event.inputs.tag || github.ref_name }}
-          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
-          CHANGELOG: ${{ steps.changelog.outputs.changelog }}
+          NEW_VERSION: ${{ steps.bump.outputs.new }}
         run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 --match 'v*.*.*' 2>/dev/null || echo "")
           {
-            echo "body<<BODY_EOF"
-            echo "**Release ${TAG_NAME}** · Signing: \`${SIGNING_MODE}\`"
+            echo "changelog<<CHANGELOG_EOF"
+            echo "**Release v${NEW_VERSION}** · Signing: \`${{ steps.signing.outputs.mode }}\`"
             echo ""
-            if [ "$SIGNING_MODE" = "debug" ]; then
-              echo "> ⚠️ **Debug-signed build** — installable via \`adb install\` but NOT Play-Store uploadable. Configure \`KEYSTORE_*\` secrets ([see SECRETS_SETUP.md](./docs/SECRETS_SETUP.md)) for production signing."
+            if [ "${{ steps.signing.outputs.mode }}" = "ephemeral" ]; then
+              echo "> ⚠️ **Ephemeral-signed build** — the release keystore secret is not configured in this repo. APK is installable via \`adb install\` but NOT Play Store uploadable (each run uses a fresh cert). See \`docs/SECRETS_SETUP.md\` to enable production signing."
               echo ""
             fi
             echo "### Artifacts"
             echo "- \`oridev-*.aab\` / \`oridev-*.apk\` — Phone build (R8 minified)"
             echo "- \`oridev-wear-*.aab\` / \`oridev-wear-*.apk\` — Wear OS companion"
-            echo "- \`oridev-*-mapping.txt\` — R8 deobfuscation map (Play Console upload)"
+            echo "- \`oridev-*-mapping.txt\` — R8 deobfuscation map (upload to Play Console for stack traces)"
             echo ""
-            echo "$CHANGELOG"
-            echo "BODY_EOF"
+            if [ -n "$PREV_TAG" ]; then
+              echo "### Changes since $PREV_TAG"
+              echo ""
+              echo "#### Features"
+              git log --pretty=format:"- %s" "$PREV_TAG..HEAD" | grep "^- feat" || echo "_None_"
+              echo ""
+              echo ""
+              echo "#### Bug Fixes"
+              git log --pretty=format:"- %s" "$PREV_TAG..HEAD" | grep "^- fix" || echo "_None_"
+              echo ""
+              echo ""
+              echo "#### Other"
+              git log --pretty=format:"- %s" "$PREV_TAG..HEAD" | grep -vE "^- (feat|fix)" || echo "_None_"
+            else
+              echo "### Initial release"
+            fi
+            echo ""
+            echo "CHANGELOG_EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Commit version bump and tag
+        if: steps.check_tag.outputs.exists == 'false'
+        shell: bash
+        env:
+          TAG: ${{ steps.bump.outputs.tag }}
+          NEW_VERSION: ${{ steps.bump.outputs.new }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.properties
+          git commit -m "chore(release): v$NEW_VERSION"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin master
+          git push origin "$TAG"
+
       - name: Create GitHub Release
+        if: steps.check_tag.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: "Ori:Dev ${{ github.event.inputs.tag || github.ref_name }}"
-          body: ${{ steps.body.outputs.body }}
-          prerelease: ${{ steps.signing.outputs.mode == 'debug' }}
+          tag_name: ${{ steps.bump.outputs.tag }}
+          name: "Ori:Dev ${{ steps.bump.outputs.tag }}"
+          body: ${{ steps.changelog.outputs.changelog }}
+          prerelease: ${{ steps.signing.outputs.mode == 'ephemeral' }}
           files: ${{ steps.stage.outputs.dir }}/*
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
 
       # ------------------------------------------------------------
-      # Play Store upload -- runs only when both release signing AND
-      # PLAY_SERVICE_ACCOUNT_JSON are configured. Skips with a warning
-      # otherwise (Play Store requires a real release keystore).
-      # See docs/SECRETS_SETUP.md section 2 for service account setup.
+      # Play Store upload (optional) — only runs when both a stable
+      # release keystore AND a Play service account JSON are set.
       # ------------------------------------------------------------
-      - name: Check Play Store upload prerequisites
+      - name: Check Play Store prerequisites
+        if: steps.check_tag.outputs.exists == 'false'
         id: play
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
           if [ "${{ steps.signing.outputs.mode }}" != "release" ]; then
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping Play Store upload: release keystore not configured (debug-signed build)."
+            echo "::notice::Skipping Play Store upload: ephemeral keystore (not stable for Play Console)."
           elif [ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
             echo "available=false" >> "$GITHUB_OUTPUT"
             echo "::warning::Skipping Play Store upload: PLAY_SERVICE_ACCOUNT_JSON secret not set. See docs/SECRETS_SETUP.md section 2."
@@ -251,28 +347,21 @@ jobs:
             echo "available=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Decode Play service account
-        if: steps.play.outputs.available == 'true'
-        env:
-          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-        run: |
-          printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > /tmp/play-sa.json
-          echo "PLAY_SERVICE_ACCOUNT_JSON_PATH=/tmp/play-sa.json" >> "$GITHUB_ENV"
-
       - name: Upload to Play Store (internal track)
         if: steps.play.outputs.available == 'true'
         env:
-          KEYSTORE_PATH: ${{ github.workspace }}/app/release.keystore
+          KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          PLAY_SERVICE_ACCOUNT_JSON_PATH: /tmp/play-sa.json
-        run: ./gradlew :app:publishReleaseBundle
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          printf '%s' "$PLAY_SERVICE_ACCOUNT_JSON" > /tmp/play-sa.json
+          export PLAY_SERVICE_ACCOUNT_JSON_PATH=/tmp/play-sa.json
+          ./gradlew :app:publishReleaseBundle
 
       - name: Cleanup secrets
         if: always()
         run: |
-          rm -f "${{ github.workspace }}/app/release.keystore"
+          rm -f "$GITHUB_WORKSPACE/app/release.keystore" 2>/dev/null || true
           rm -f /tmp/play-sa.json 2>/dev/null || true
-          rm -f keystore.base64 2>/dev/null || true
-          echo "Secret cleanup done"
