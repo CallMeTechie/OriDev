@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   tag:
@@ -118,3 +119,16 @@ jobs:
           git tag -a "${NEW_VERSION}" -m "Release ${NEW_VERSION}"
           git push origin master
           git push origin "${NEW_VERSION}"
+
+      - name: Dispatch Release workflow
+        if: steps.skip_check.outputs.skip == 'false' && steps.version.outputs.bump != 'none' && steps.version.outputs.bump != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_VERSION: ${{ steps.version.outputs.new_version }}
+        run: |
+          # Pushes made via GITHUB_TOKEN do NOT trigger downstream "on: push"
+          # workflows (anti-recursion). Dispatch Release explicitly instead.
+          gh workflow run release.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$NEW_VERSION" \
+            -f "tag=$NEW_VERSION"
