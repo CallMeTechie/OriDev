@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.baselineprofile)
 }
 
 kotlin {
@@ -112,6 +113,13 @@ dependencies {
 
     implementation(libs.acra.http)
     implementation(libs.acra.limiter)
+
+    // Performance: ProfileInstaller pulls in the baseline profile at install time.
+    implementation(libs.androidx.profileinstaller)
+    "baselineProfile"(project(":baselineprofile"))
+
+    // LeakCanary in debug builds only — never shipped to release.
+    debugImplementation(libs.leakcanary.android)
 
     testImplementation(libs.junit5.api)
     testRuntimeOnly(libs.junit5.engine)

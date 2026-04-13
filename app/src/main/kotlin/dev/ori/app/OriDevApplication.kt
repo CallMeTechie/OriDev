@@ -2,6 +2,7 @@ package dev.ori.app
 
 import android.app.Application
 import android.content.Context
+import android.os.Trace
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
@@ -37,13 +38,18 @@ class OriDevApplication : Application(), Configuration.Provider {
     }
 
     override fun onCreate() {
-        super.onCreate()
-        wearDataSyncPublisher.start()
-        applicationScope.launch(Dispatchers.IO) {
-            val enabled = crashReportingPreferences.enabled.first()
-            if (ACRA.isInitialised) {
-                ACRA.errorReporter.setEnabled(enabled)
+        Trace.beginSection("OriDevApplication.onCreate")
+        try {
+            super.onCreate()
+            wearDataSyncPublisher.start()
+            applicationScope.launch(Dispatchers.IO) {
+                val enabled = crashReportingPreferences.enabled.first()
+                if (ACRA.isInitialised) {
+                    ACRA.errorReporter.setEnabled(enabled)
+                }
             }
+        } finally {
+            Trace.endSection()
         }
     }
 }
