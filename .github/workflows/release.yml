@@ -72,7 +72,9 @@ jobs:
       # ----------------------------------------------------------
       # Signing-secret presence gate.
       # Tag mode FAILS if secrets are missing (proper releases must be signed).
-      # Continuous mode SKIPS gracefully (logs warning, exits 0).
+      # Continuous mode ALWAYS builds — falls back to debug-signing if the
+      # release keystore secrets aren't configured, so artifacts are always
+      # available on GitHub Releases for smoke testing.
       # ----------------------------------------------------------
       - name: Check signing secrets available
         id: secrets
@@ -87,13 +89,15 @@ jobs:
              [ -n "$KEY_ALIAS" ] && \
              [ -n "$KEY_PASSWORD" ]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "signing_mode=release" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "signing_mode=debug" >> "$GITHUB_OUTPUT"
             if [ "${{ github.event_name }}" = "push" ]; then
               echo "::error::Tag release requires signing secrets (KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD). See RELEASE.md."
               exit 1
             else
-              echo "::warning::Skipping continuous release: signing secrets not configured. See RELEASE.md."
+              echo "::notice::KEYSTORE_* secrets not set — continuous build will use debug-signing fallback. Artifacts are still produced and uploaded."
             fi
           fi
 
@@ -117,9 +121,11 @@ jobs:
 
       # ----------------------------------------------------------
       # CONTINUOUS MODE: inject versionCode = run_number, versionName = 0.2.0-master.<n>+<sha>
+      # Runs unconditionally — Gradle's signingConfig falls back to debug
+      # signing when KEYSTORE_PASSWORD env is unset.
       # ----------------------------------------------------------
-      - name: Build signed AAB and APK (continuous mode)
-        if: github.event_name == 'workflow_run' && steps.secrets.outputs.available == 'true'
+      - name: Build AAB and APK (continuous mode)
+        if: github.event_name == 'workflow_run'
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/app/release.keystore
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -175,13 +181,39 @@ jobs:
             echo "CHANGELOG_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # Report artifact sizes
-      - name: Artifact size report
-        if: steps.secrets.outputs.available == 'true'
+      # Stage artifacts into a single dir with canonical names so the upload
+      # globs are simple and mapping.txt / seeds.txt / usage.txt are included.
+      - name: Stage release artifacts
+        id: stage
         run: |
-          echo "## Release Artifacts" >> $GITHUB_STEP_SUMMARY
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            VERSION="0.2.0-master.${{ github.run_number }}+${SHORT_SHA}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          OUT=release-artifacts
+          mkdir -p "$OUT"
+
+          # Phone artifacts
+          cp app/build/outputs/bundle/release/*.aab            "$OUT/oridev-${VERSION}.aab"            2>/dev/null || true
+          cp app/build/outputs/apk/release/*.apk               "$OUT/oridev-${VERSION}.apk"            2>/dev/null || true
+          cp app/build/outputs/mapping/release/mapping.txt     "$OUT/oridev-${VERSION}-mapping.txt"    2>/dev/null || true
+          cp app/build/outputs/mapping/release/seeds.txt       "$OUT/oridev-${VERSION}-seeds.txt"      2>/dev/null || true
+          cp app/build/outputs/mapping/release/usage.txt       "$OUT/oridev-${VERSION}-usage.txt"      2>/dev/null || true
+
+          # Wear artifacts
+          cp wear/build/outputs/bundle/release/*.aab           "$OUT/oridev-wear-${VERSION}.aab"       2>/dev/null || true
+          cp wear/build/outputs/apk/release/*.apk              "$OUT/oridev-wear-${VERSION}.apk"       2>/dev/null || true
+          cp wear/build/outputs/mapping/release/mapping.txt    "$OUT/oridev-wear-${VERSION}-mapping.txt" 2>/dev/null || true
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "dir=$OUT" >> "$GITHUB_OUTPUT"
+
+          echo "## Release Artifacts ($VERSION, signing=${{ steps.secrets.outputs.signing_mode }})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          for file in $(find . -name "*.apk" -o -name "*.aab" | grep -i release); do
+          for file in "$OUT"/*; do
+            [ -f "$file" ] || continue
             size=$(du -h "$file" | cut -f1)
             name=$(basename "$file")
             echo "- **$name**: $size" >> $GITHUB_STEP_SUMMARY
@@ -195,25 +227,22 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body: ${{ steps.changelog.outputs.changelog }}
-          files: |
-            app/build/outputs/bundle/release/*.aab
-            app/build/outputs/apk/release/*.apk
-            wear/build/outputs/bundle/release/*.aab
-            wear/build/outputs/apk/release/*.apk
+          files: ${{ steps.stage.outputs.dir }}/*
           fail_on_unmatched_files: false
 
       # ----------------------------------------------------------
       # CONTINUOUS MODE: rolling continuous-master prerelease
+      # ALWAYS runs on workflow_run success — signing fallback handled above.
       # ----------------------------------------------------------
       - name: Delete existing continuous-master release and tag
-        if: github.event_name == 'workflow_run' && steps.secrets.outputs.available == 'true'
+        if: github.event_name == 'workflow_run'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release delete continuous-master --yes --cleanup-tag --repo "${{ github.repository }}" || true
 
       - name: Create rolling continuous-master prerelease
-        if: github.event_name == 'workflow_run' && steps.secrets.outputs.available == 'true'
+        if: github.event_name == 'workflow_run'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: continuous-master
@@ -221,19 +250,29 @@ jobs:
           prerelease: true
           target_commitish: ${{ github.sha }}
           body: |
-            Automatic build from master branch. Force-moved on every successful push.
+            **Automatic build from master branch.** Force-moved on every successful push.
 
-            **Commit:** ${{ github.sha }}
-            **Build number:** ${{ github.run_number }}
-            **Triggered by:** ${{ github.event.workflow_run.head_commit.message }}
+            - **Commit:** ${{ github.sha }}
+            - **Build number:** ${{ github.run_number }}
+            - **Version:** `${{ steps.stage.outputs.version }}`
+            - **Signing:** `${{ steps.secrets.outputs.signing_mode }}` (debug = fallback, release = KEYSTORE_* secrets set)
+            - **Trigger:** ${{ github.event.workflow_run.head_commit.message }}
 
-            Always download via `gh release download continuous-master` to get the latest master build.
+            Download the latest master build any time via:
+            ```bash
+            gh release download continuous-master --repo ${{ github.repository }}
+            ```
+
+            ### Artefakte
+            - `oridev-*.aab` / `oridev-*.apk` — Phone build (minified, R8)
+            - `oridev-wear-*.aab` / `oridev-wear-*.apk` — Wear OS build
+            - `oridev-*-mapping.txt` — R8 deobfuscation map (upload to Play Console for stack traces)
+            - `oridev-*-seeds.txt` / `-usage.txt` — R8 analysis output
+
+            ⚠️ **Signed with debug key?** Set `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` in repo secrets to produce Play-Store-installable artifacts. See `RELEASE.md`.
+
             For production releases, use a `v*` tag.
-          files: |
-            app/build/outputs/bundle/release/*.aab
-            app/build/outputs/apk/release/*.apk
-            wear/build/outputs/bundle/release/*.aab
-            wear/build/outputs/apk/release/*.apk
+          files: ${{ steps.stage.outputs.dir }}/*
           fail_on_unmatched_files: false
 
       # ----------------------------------------------------------
