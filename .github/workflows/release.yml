@@ -323,7 +323,7 @@ jobs:
           tag_name: ${{ steps.bump.outputs.tag }}
           name: "Ori:Dev ${{ steps.bump.outputs.tag }}"
           body: ${{ steps.changelog.outputs.changelog }}
-          prerelease: ${{ steps.signing.outputs.mode == 'ephemeral' }}
+          prerelease: false
           files: ${{ steps.stage.outputs.dir }}/*
           fail_on_unmatched_files: true
 

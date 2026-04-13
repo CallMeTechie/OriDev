@@ -42,7 +42,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "dev.ori.wear"
+        applicationId = "com.ori.dev.wear"
         minSdk = 34
         targetSdk = 36
         versionCode = vCode

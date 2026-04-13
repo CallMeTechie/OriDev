@@ -23,7 +23,7 @@ class StartupBaselineProfileGenerator {
     val rule = BaselineProfileRule()
 
     @Test
-    fun generate() = rule.collect(packageName = "dev.ori.app") {
+    fun generate() = rule.collect(packageName = "com.ori.dev") {
         pressHome()
         startActivityAndWait()
         // Walk through onboarding (German strings).

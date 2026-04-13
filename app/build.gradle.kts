@@ -45,7 +45,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "dev.ori.app"
+        applicationId = "com.ori.dev"
         minSdk = 34
         targetSdk = 36
         versionCode = vCode
