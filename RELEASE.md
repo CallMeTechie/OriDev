@@ -20,6 +20,58 @@ Tag push triggers `.github/workflows/release.yml`, which:
 7. Publishes a GitHub Release with all four artifacts (phone AAB+APK, wear AAB+APK).
 8. Cleans up the keystore from the runner regardless of success or failure.
 
+## Continuous Master Builds
+
+Every successful push to `master` automatically produces a rolling prerelease tagged `continuous-master`. The flow:
+
+1. The "Build & Test" workflow runs on master and (on success) emits a `workflow_run` event.
+2. `release.yml` listens for that event, re-runs verification (detekt, lint, tests) on master HEAD, and rebuilds signed phone + wear AAB/APK.
+3. Version metadata for continuous builds is injected via Gradle properties:
+   - `versionCode = github.run_number`
+   - `versionName = 0.2.0-master.<run_number>+<shortsha>`
+4. The previous `continuous-master` GitHub release and tag are deleted, then recreated with the new artifacts. There is always exactly one "Latest Master Build (<n>)" prerelease.
+
+To download the latest master build:
+
+```bash
+gh release download continuous-master --repo <org>/OriDev
+```
+
+### Graceful skip when secrets are missing
+
+If `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, or `KEY_PASSWORD` are not configured, the continuous release job logs a warning and exits 0 instead of failing. The authoritative `Build & Test` workflow's status is unaffected, so master CI stays green.
+
+Tag releases (`v*` push) still fail loudly if signing secrets are missing — proper releases must always be signed.
+
+## Google Play Store upload (optional)
+
+Play Store upload is gated on the `PLAY_SERVICE_ACCOUNT_JSON` GitHub secret. If absent, the upload step is skipped silently with a notice.
+
+To enable:
+
+1. Create a Google Cloud service account with the `Service Account User` role and grant it access to your Play Console project (Play Console -> Setup -> API access).
+   See: https://developers.google.com/android-publisher/getting_started
+2. Download the JSON key and store its full contents in the `PLAY_SERVICE_ACCOUNT_JSON` GitHub secret.
+3. Add the publisher plugin to `app/build.gradle.kts`:
+   ```kotlin
+   plugins {
+       // ...existing plugins...
+       id("com.github.triplet.play") version "3.10.1"
+   }
+
+   play {
+       serviceAccountCredentials.set(file(System.getenv("PLAY_SERVICE_ACCOUNT_JSON_PATH") ?: "/dev/null"))
+       track.set("internal")
+       defaultToAppBundles.set(true)
+       releaseStatus.set(com.github.triplet.gradle.androidpublisher.ReleaseStatus.DRAFT)
+   }
+   ```
+   And in `settings.gradle.kts` `pluginManagement`, ensure `gradlePluginPortal()` is in the repository list.
+4. The first version must be uploaded manually to the Play Console — the Publisher API cannot create a brand-new app listing. After the first manual upload, subsequent CI runs will publish to the `internal` track as `DRAFT` automatically.
+5. An operator promotes from `internal/DRAFT` -> `production` in the Play Console.
+
+The publisher plugin is intentionally NOT wired into `app/build.gradle.kts` by default — the release workflow detects whether the `publishReleaseBundle` task exists and only runs it when present.
+
 ## Required GitHub Secrets
 
 Settings -> Secrets and variables -> Actions:
@@ -33,6 +85,7 @@ Settings -> Secrets and variables -> Actions:
 | `ACRA_BACKEND_URL` | Crash reporter ingest URL |
 | `ACRA_BASIC_AUTH_LOGIN` | ACRA HTTP basic auth login |
 | `ACRA_BASIC_AUTH_PASSWORD` | ACRA HTTP basic auth password |
+| `PLAY_SERVICE_ACCOUNT_JSON` | (optional) Google Play API service account JSON for automatic upload to the `internal` track |
 
 ## Generating an upload keystore
 
