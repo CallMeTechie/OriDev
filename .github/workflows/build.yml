@@ -33,6 +33,10 @@ jobs:
       - name: Run unit tests
         run: ./gradlew test
 
+      # Android Lint — gates master so violations fail fast
+      - name: Run Android Lint
+        run: ./gradlew lint
+
       # Publish test results
       - name: Publish test results
         if: always()
