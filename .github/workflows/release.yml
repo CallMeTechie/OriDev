@@ -158,11 +158,30 @@ jobs:
           EOF
 
       # ------------------------------------------------------------
-      # Signing setup: use stored keystore if available, else generate
-      # an ephemeral one via keytool so releases always build signed.
-      # Play Store requires a stable keystore — set KEYSTORE_BASE64
-      # secret (see docs/SECRETS_SETUP.md) before first Play upload.
+      # Signing setup -- FAILS HARD if KEYSTORE_* secrets are missing.
+      # No ephemeral fallback: ephemeral-signed AABs uploaded to Play
+      # Console once lock that lost keystore's fingerprint permanently,
+      # forcing an upload key reset. See docs/SECRETS_SETUP.md.
       # ------------------------------------------------------------
+      - name: Verify signing secrets
+        if: steps.check_tag.outputs.exists == 'false'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          missing=()
+          [ -z "$KEYSTORE_BASE64" ]   && missing+=("KEYSTORE_BASE64")
+          [ -z "$KEYSTORE_PASSWORD" ] && missing+=("KEYSTORE_PASSWORD")
+          [ -z "$KEY_ALIAS" ]         && missing+=("KEY_ALIAS")
+          [ -z "$KEY_PASSWORD" ]      && missing+=("KEY_PASSWORD")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Release aborted — missing signing secrets: ${missing[*]}. See docs/SECRETS_SETUP.md section 1 to configure the release keystore. No ephemeral fallback: uploading an ephemeral-signed AAB to Play Console permanently locks the app to a non-recoverable keystore."
+            exit 1
+          fi
+          echo "All release signing secrets present."
+
       - name: Setup signing
         if: steps.check_tag.outputs.exists == 'false'
         id: signing
@@ -170,35 +189,19 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$GITHUB_WORKSPACE/app/release.keystore"
-            echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/app/release.keystore" >> "$GITHUB_ENV"
-            echo "mode=release" >> "$GITHUB_OUTPUT"
-            echo "Release keystore loaded from secret."
-          else
-            keytool -genkey -v \
-              -keystore "$GITHUB_WORKSPACE/app/release.keystore" \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -alias oridev \
-              -storepass oridev-ephemeral \
-              -keypass oridev-ephemeral \
-              -dname "CN=Ori:Dev Ephemeral, OU=Dev, O=OriDev, C=DE"
-            echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/app/release.keystore" >> "$GITHUB_ENV"
-            echo "KEYSTORE_PASSWORD_FALLBACK=oridev-ephemeral" >> "$GITHUB_ENV"
-            echo "KEY_ALIAS_FALLBACK=oridev" >> "$GITHUB_ENV"
-            echo "KEY_PASSWORD_FALLBACK=oridev-ephemeral" >> "$GITHUB_ENV"
-            echo "mode=ephemeral" >> "$GITHUB_OUTPUT"
-            echo "::warning::KEYSTORE_BASE64 secret not set — generated ephemeral keystore. This build is signed but NOT Play Store uploadable (cert mismatch on re-install). See docs/SECRETS_SETUP.md."
-          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$GITHUB_WORKSPACE/app/release.keystore"
+          echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/app/release.keystore" >> "$GITHUB_ENV"
+          echo "mode=release" >> "$GITHUB_OUTPUT"
+          echo "Release keystore loaded from secret."
 
       - name: Build signed AAB and APK
         if: steps.check_tag.outputs.exists == 'false'
         shell: bash
         env:
           KEYSTORE_PATH: ${{ env.KEYSTORE_PATH }}
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD || env.KEYSTORE_PASSWORD_FALLBACK }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS || env.KEY_ALIAS_FALLBACK }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || env.KEY_PASSWORD_FALLBACK }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           ./gradlew :app:bundleRelease :app:assembleRelease \
                     :wear:bundleRelease :wear:assembleRelease
@@ -270,12 +273,8 @@ jobs:
           PREV_TAG=$(git describe --tags --abbrev=0 --match 'v*.*.*' 2>/dev/null || echo "")
           {
             echo "changelog<<CHANGELOG_EOF"
-            echo "**Release v${NEW_VERSION}** · Signing: \`${{ steps.signing.outputs.mode }}\`"
+            echo "**Release v${NEW_VERSION}** · Signed with release keystore"
             echo ""
-            if [ "${{ steps.signing.outputs.mode }}" = "ephemeral" ]; then
-              echo "> ⚠️ **Ephemeral-signed build** — the release keystore secret is not configured in this repo. APK is installable via \`adb install\` but NOT Play Store uploadable (each run uses a fresh cert). See \`docs/SECRETS_SETUP.md\` to enable production signing."
-              echo ""
-            fi
             echo "### Artifacts"
             echo "- \`oridev-*.aab\` / \`oridev-*.apk\` — Phone build (R8 minified)"
             echo "- \`oridev-wear-*.aab\` / \`oridev-wear-*.apk\` — Wear OS companion"
@@ -337,10 +336,7 @@ jobs:
         env:
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
-          if [ "${{ steps.signing.outputs.mode }}" != "release" ]; then
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping Play Store upload: ephemeral keystore (not stable for Play Console)."
-          elif [ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+          if [ -z "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
             echo "available=false" >> "$GITHUB_OUTPUT"
             echo "::warning::Skipping Play Store upload: PLAY_SERVICE_ACCOUNT_JSON secret not set. See docs/SECRETS_SETUP.md section 2."
           else
