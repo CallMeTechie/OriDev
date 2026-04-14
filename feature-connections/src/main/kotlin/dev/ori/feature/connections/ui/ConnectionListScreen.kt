@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
@@ -49,9 +48,12 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.ui.component.LoadingIndicator
-import dev.ori.core.ui.component.OriDevTopBar
 import dev.ori.core.ui.component.ProtocolBadge
 import dev.ori.core.ui.component.StatusDot
+import dev.ori.core.ui.components.OriIconButton
+import dev.ori.core.ui.components.OriTopBar
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.Server
 import dev.ori.domain.model.ConnectionStatus
 import dev.ori.domain.model.ServerProfile
 import kotlinx.coroutines.launch
@@ -123,15 +125,20 @@ fun ConnectionListScreen(
 
     Scaffold(
         topBar = {
-            OriDevTopBar(
+            // Phase 11 P2.3 — replaces deprecated OriDevTopBar with the
+            // 60 dp OriTopBar per connection-manager.html mockup spec.
+            // The Cloud icon was semantically wrong for "Proxmox Manager"
+            // (Lucide's Cloud is for cloud storage). Server is the right
+            // metaphor for a server management dashboard.
+            OriTopBar(
                 title = "Connections",
+                height = 60.dp,
                 actions = {
-                    IconButton(onClick = onNavigateToProxmox) {
-                        Icon(
-                            imageVector = Icons.Default.Cloud,
-                            contentDescription = "Proxmox Manager öffnen",
-                        )
-                    }
+                    OriIconButton(
+                        icon = LucideIcons.Server,
+                        contentDescription = "Proxmox Manager öffnen",
+                        onClick = onNavigateToProxmox,
+                    )
                 },
             )
         },

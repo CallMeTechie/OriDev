@@ -56,7 +56,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.common.model.AuthMethod
 import dev.ori.core.common.model.Protocol
-import dev.ori.core.ui.component.OriDevTopBar
+import dev.ori.core.ui.components.OriIconButton
+import dev.ori.core.ui.components.OriTopBar
+import dev.ori.core.ui.icons.lucide.ChevronLeft
+import dev.ori.core.ui.icons.lucide.LucideIcons
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,9 +81,16 @@ fun AddEditConnectionScreen(
 
     Scaffold(
         topBar = {
-            OriDevTopBar(
+            // Phase 11 P2.3 — OriTopBar with Lucide ChevronLeft as nav icon.
+            OriTopBar(
                 title = formState.title,
-                onNavigateBack = onNavigateBack,
+                navigationIcon = {
+                    OriIconButton(
+                        icon = LucideIcons.ChevronLeft,
+                        contentDescription = "Zurück",
+                        onClick = onNavigateBack,
+                    )
+                },
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
