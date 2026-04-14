@@ -34,7 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.ori.core.ui.component.OriDevTopBar
+import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.theme.Gray400
 import dev.ori.core.ui.theme.Indigo500
 
@@ -54,8 +54,11 @@ fun TransferQueueScreen(
 
     Scaffold(
         topBar = {
-            OriDevTopBar(
+            // Phase 11 P2.4 — replaces deprecated OriDevTopBar with OriTopBar
+            // per transfer-queue.html mockup spec (60 dp height).
+            OriTopBar(
                 title = "Transfers",
+                height = 60.dp,
                 actions = {
                     TextButton(onClick = { viewModel.onEvent(TransferEvent.ClearCompleted) }) {
                         Text("Clear", color = Indigo500)
