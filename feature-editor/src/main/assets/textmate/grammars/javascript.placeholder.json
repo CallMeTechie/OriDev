@@ -1,0 +1,35 @@
+{
+  "name": "JavaScript (placeholder)",
+  "scopeName": "source.js",
+  "fileTypes": ["js", "mjs", "cjs", "jsx"],
+  "patterns": [
+    {
+      "match": "\\b(var|let|const|function|return|if|else|for|while|do|switch|case|default|break|continue|new|delete|typeof|instanceof|in|of|void|this|super|class|extends|import|export|from|as|async|await|yield|try|catch|finally|throw|null|undefined|true|false)\\b",
+      "name": "keyword.control.js"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.js"
+    },
+    {
+      "begin": "'",
+      "end": "'",
+      "name": "string.quoted.single.js"
+    },
+    {
+      "begin": "`",
+      "end": "`",
+      "name": "string.template.js"
+    },
+    {
+      "match": "//[^\\n]*",
+      "name": "comment.line.double-slash.js"
+    },
+    {
+      "begin": "/\\*",
+      "end": "\\*/",
+      "name": "comment.block.js"
+    }
+  ]
+}

@@ -24,6 +24,56 @@
       "name": "yaml",
       "scopeName": "source.yaml",
       "grammar": "textmate/grammars/yaml.placeholder.json"
+    },
+    {
+      "name": "python",
+      "scopeName": "source.python",
+      "grammar": "textmate/grammars/python.placeholder.json"
+    },
+    {
+      "name": "java",
+      "scopeName": "source.java",
+      "grammar": "textmate/grammars/java.placeholder.json"
+    },
+    {
+      "name": "javascript",
+      "scopeName": "source.js",
+      "grammar": "textmate/grammars/javascript.placeholder.json"
+    },
+    {
+      "name": "typescript",
+      "scopeName": "source.ts",
+      "grammar": "textmate/grammars/typescript.placeholder.json"
+    },
+    {
+      "name": "rust",
+      "scopeName": "source.rust",
+      "grammar": "textmate/grammars/rust.placeholder.json"
+    },
+    {
+      "name": "go",
+      "scopeName": "source.go",
+      "grammar": "textmate/grammars/go.placeholder.json"
+    },
+    {
+      "name": "c",
+      "scopeName": "source.c",
+      "grammar": "textmate/grammars/c.placeholder.json"
+    },
+    {
+      "name": "cpp",
+      "scopeName": "source.cpp",
+      "grammar": "textmate/grammars/cpp.placeholder.json"
+    },
+    {
+      "name": "html",
+      "scopeName": "text.html.basic",
+      "grammar": "textmate/grammars/html.placeholder.json"
+    },
+    {
+      "name": "css",
+      "scopeName": "source.css",
+      "grammar": "textmate/grammars/css.placeholder.json"
     }
   ]
 }

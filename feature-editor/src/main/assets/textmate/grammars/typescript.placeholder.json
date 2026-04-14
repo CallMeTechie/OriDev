@@ -1,0 +1,35 @@
+{
+  "name": "TypeScript (placeholder)",
+  "scopeName": "source.ts",
+  "fileTypes": ["ts", "tsx"],
+  "patterns": [
+    {
+      "match": "\\b(var|let|const|function|return|if|else|for|while|do|switch|case|default|break|continue|new|delete|typeof|instanceof|in|of|void|this|super|class|extends|implements|interface|type|enum|namespace|module|declare|public|private|protected|readonly|abstract|static|import|export|from|as|async|await|yield|try|catch|finally|throw|null|undefined|true|false|any|unknown|never|number|string|boolean|symbol|object)\\b",
+      "name": "keyword.control.ts"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.ts"
+    },
+    {
+      "begin": "'",
+      "end": "'",
+      "name": "string.quoted.single.ts"
+    },
+    {
+      "begin": "`",
+      "end": "`",
+      "name": "string.template.ts"
+    },
+    {
+      "match": "//[^\\n]*",
+      "name": "comment.line.double-slash.ts"
+    },
+    {
+      "begin": "/\\*",
+      "end": "\\*/",
+      "name": "comment.block.ts"
+    }
+  ]
+}

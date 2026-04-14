@@ -1,0 +1,29 @@
+{
+  "name": "Rust (placeholder)",
+  "scopeName": "source.rust",
+  "fileTypes": ["rs"],
+  "patterns": [
+    {
+      "match": "\\b(fn|let|mut|const|static|struct|enum|trait|impl|pub|crate|mod|use|as|where|for|in|while|loop|if|else|match|return|break|continue|ref|move|self|Self|super|true|false|async|await|dyn|unsafe|extern|type|union)\\b",
+      "name": "keyword.control.rust"
+    },
+    {
+      "match": "\\b(bool|char|str|u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize|f32|f64|String|Vec|Option|Result|Box|Rc|Arc)\\b",
+      "name": "storage.type.rust"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.rust"
+    },
+    {
+      "match": "//[^\\n]*",
+      "name": "comment.line.double-slash.rust"
+    },
+    {
+      "begin": "/\\*",
+      "end": "\\*/",
+      "name": "comment.block.rust"
+    }
+  ]
+}

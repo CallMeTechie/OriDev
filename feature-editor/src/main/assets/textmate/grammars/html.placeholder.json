@@ -1,0 +1,31 @@
+{
+  "name": "HTML (placeholder)",
+  "scopeName": "text.html.basic",
+  "fileTypes": ["html", "htm"],
+  "patterns": [
+    {
+      "begin": "<!--",
+      "end": "-->",
+      "name": "comment.block.html"
+    },
+    {
+      "begin": "<!DOCTYPE",
+      "end": ">",
+      "name": "meta.tag.doctype.html"
+    },
+    {
+      "match": "</?[a-zA-Z][a-zA-Z0-9-]*",
+      "name": "entity.name.tag.html"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.html"
+    },
+    {
+      "begin": "'",
+      "end": "'",
+      "name": "string.quoted.single.html"
+    }
+  ]
+}

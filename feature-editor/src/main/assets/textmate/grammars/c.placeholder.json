@@ -1,0 +1,29 @@
+{
+  "name": "C (placeholder)",
+  "scopeName": "source.c",
+  "fileTypes": ["c", "h"],
+  "patterns": [
+    {
+      "match": "\\b(auto|break|case|char|const|continue|default|do|double|else|enum|extern|float|for|goto|if|inline|int|long|register|restrict|return|short|signed|sizeof|static|struct|switch|typedef|union|unsigned|void|volatile|while|_Bool|_Complex|_Imaginary|NULL|true|false)\\b",
+      "name": "keyword.control.c"
+    },
+    {
+      "match": "^\\s*#\\s*(include|define|undef|if|ifdef|ifndef|else|elif|endif|pragma|error|warning|line)\\b",
+      "name": "keyword.control.directive.c"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.c"
+    },
+    {
+      "match": "//[^\\n]*",
+      "name": "comment.line.double-slash.c"
+    },
+    {
+      "begin": "/\\*",
+      "end": "\\*/",
+      "name": "comment.block.c"
+    }
+  ]
+}
