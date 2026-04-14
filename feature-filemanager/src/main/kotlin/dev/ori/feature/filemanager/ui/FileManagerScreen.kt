@@ -37,10 +37,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.ui.component.OriDevTopBar
 
 @Composable
+@Suppress("UnusedParameter")
 fun FileManagerScreen(
     viewModel: FileManagerViewModel = hiltViewModel(),
+    initialProfileId: Long? = null,
     onNavigateToEditor: (filePath: String, isRemote: Boolean) -> Unit = { _, _ -> },
 ) {
+    // Phase 11 P1.1 — initialProfileId is wired through navigation but the
+    // ViewModel hookup that opens the remote pane rooted on this profile is
+    // P2.5 (file manager screen alignment). Suppressed for now.
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
