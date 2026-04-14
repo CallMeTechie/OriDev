@@ -15,11 +15,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.items
-import androidx.wear.compose.material3.Card
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
 import dev.ori.wear.ui.WearAppViewModel
+import dev.ori.wear.ui.component.OriWearCard
 import dev.ori.wear.ui.component.ProgressRing
 
 @Composable
@@ -50,11 +50,15 @@ fun TransferMonitorScreen(
                 } else {
                     0f
                 }
-                Card(
-                    onClick = {},
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                // Phase 11 P3.2 — OriWearCard replaces Wear M3 Card.
+                // Active transfers (status == "ACTIVE") get the accent ring
+                // to match the .s3-card.running mockup styling.
+                OriWearCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    accentBorder = t.status == "ACTIVE",
                 ) {
                     Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
