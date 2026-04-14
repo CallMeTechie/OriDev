@@ -62,7 +62,84 @@ class CodeEditorViewModel @Inject constructor(
             CodeEditorEvent.FindPrevious -> { /* UI-level navigation -- no state change */ }
             CodeEditorEvent.ClearSavedMessage -> _uiState.update { it.copy(savedMessage = null) }
             CodeEditorEvent.ClearError -> _uiState.update { it.copy(error = null) }
+            is CodeEditorEvent.ShowPicker -> showPicker(event.isRemote, event.startPath)
+            CodeEditorEvent.HidePicker -> _uiState.update { it.copy(pickerState = null) }
+            is CodeEditorEvent.PickerNavigate -> pickerNavigate(event.path)
+            is CodeEditorEvent.PickerSetRemote -> pickerSetRemote(event.isRemote)
         }
+    }
+
+    // --- Phase 11 P4.3 — remote file picker ---
+
+    private fun showPicker(isRemote: Boolean, startPath: String) {
+        _uiState.update {
+            it.copy(pickerState = PickerState(isRemote = isRemote, currentPath = startPath, isLoading = true))
+        }
+        loadPickerEntries(isRemote, startPath)
+    }
+
+    private fun pickerNavigate(path: String) {
+        val current = _uiState.value.pickerState ?: return
+        _uiState.update {
+            it.copy(pickerState = current.copy(currentPath = path, isLoading = true, error = null))
+        }
+        loadPickerEntries(current.isRemote, path)
+    }
+
+    private fun pickerSetRemote(isRemote: Boolean) {
+        val current = _uiState.value.pickerState ?: return
+        if (current.isRemote == isRemote) return
+        val newPath = if (isRemote) "/" else DEFAULT_LOCAL_PICKER_PATH
+        _uiState.update {
+            it.copy(
+                pickerState = current.copy(
+                    isRemote = isRemote,
+                    currentPath = newPath,
+                    isLoading = true,
+                    error = null,
+                ),
+            )
+        }
+        loadPickerEntries(isRemote, newPath)
+    }
+
+    private fun loadPickerEntries(isRemote: Boolean, path: String) {
+        viewModelScope.launch {
+            val result = runCatching { repoFor(isRemote).listFiles(path) }
+            result.fold(
+                onSuccess = { entries ->
+                    _uiState.update { state ->
+                        val picker = state.pickerState ?: return@update state
+                        state.copy(
+                            pickerState = picker.copy(
+                                entries = entries.sortedWith(
+                                    compareByDescending<dev.ori.domain.model.FileItem> { it.isDirectory }
+                                        .thenBy { it.name.lowercase() },
+                                ),
+                                isLoading = false,
+                                error = null,
+                            ),
+                        )
+                    }
+                },
+                onFailure = { err ->
+                    _uiState.update { state ->
+                        val picker = state.pickerState ?: return@update state
+                        state.copy(
+                            pickerState = picker.copy(
+                                entries = emptyList(),
+                                isLoading = false,
+                                error = err.message ?: "Failed to list files",
+                            ),
+                        )
+                    }
+                },
+            )
+        }
+    }
+
+    private companion object {
+        const val DEFAULT_LOCAL_PICKER_PATH = "/storage/emulated/0"
     }
 
     private fun repoFor(isRemote: Boolean): FileSystemRepository =

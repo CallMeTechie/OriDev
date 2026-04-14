@@ -19,6 +19,7 @@ import dev.ori.core.ui.components.OriIconButton
 import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.components.OriTopBarDefaults
 import dev.ori.core.ui.icons.lucide.ChevronLeft
+import dev.ori.core.ui.icons.lucide.FolderOpen
 import dev.ori.core.ui.icons.lucide.LucideIcons
 import dev.ori.core.ui.icons.lucide.Save
 import dev.ori.core.ui.icons.lucide.Search
@@ -71,6 +72,22 @@ fun CodeEditorScreen(
                     null
                 },
                 actions = {
+                    // Phase 11 P4.3 — "Open file" action reveals the
+                    // RemoteFilePickerSheet. Starts on the current tab's
+                    // parent dir if a tab is open, otherwise on the local
+                    // storage root.
+                    OriIconButton(
+                        icon = LucideIcons.FolderOpen,
+                        contentDescription = "Datei öffnen",
+                        onClick = {
+                            val start = activeTab?.let { tab ->
+                                tab.filePath.substringBeforeLast('/', missingDelimiterValue = "/")
+                                    .ifEmpty { "/" }
+                            } ?: "/storage/emulated/0"
+                            val startRemote = activeTab?.isRemote ?: false
+                            viewModel.onEvent(CodeEditorEvent.ShowPicker(startRemote, start))
+                        },
+                    )
                     OriIconButton(
                         icon = LucideIcons.Save,
                         contentDescription = "Datei speichern",
@@ -131,5 +148,19 @@ fun CodeEditorScreen(
                 GitDiffStatusBar(summary = activeTab.gitDiffSummary)
             }
         }
+    }
+
+    // Phase 11 P4.3 — remote file picker sheet, rendered when pickerState is set.
+    uiState.pickerState?.let { picker ->
+        RemoteFilePickerSheet(
+            picker = picker,
+            onDismiss = { viewModel.onEvent(CodeEditorEvent.HidePicker) },
+            onNavigate = { path -> viewModel.onEvent(CodeEditorEvent.PickerNavigate(path)) },
+            onSetRemote = { isRemote -> viewModel.onEvent(CodeEditorEvent.PickerSetRemote(isRemote)) },
+            onOpenFile = { path, isRemote ->
+                viewModel.onEvent(CodeEditorEvent.OpenFile(path, isRemote))
+                viewModel.onEvent(CodeEditorEvent.HidePicker)
+            },
+        )
     }
 }
