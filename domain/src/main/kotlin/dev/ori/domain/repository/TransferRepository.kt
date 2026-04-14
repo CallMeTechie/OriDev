@@ -1,5 +1,6 @@
 package dev.ori.domain.repository
 
+import dev.ori.core.common.model.TransferStatus
 import dev.ori.domain.model.TransferRequest
 import kotlinx.coroutines.flow.Flow
 
@@ -11,4 +12,18 @@ interface TransferRepository {
     suspend fun resume(transferId: Long)
     suspend fun cancel(transferId: Long)
     suspend fun clearCompleted()
+
+    // Phase 12 P12.2 — additions consumed by the TransferEngineService workers.
+    suspend fun updateProgress(id: Long, transferred: Long, total: Long)
+
+    suspend fun updateStatus(
+        id: Long,
+        status: TransferStatus,
+        error: String? = null,
+        completedAt: Long? = null,
+    )
+
+    suspend fun setNextRetryAt(id: Long, nextRetryAt: Long)
+
+    suspend fun getTransferById(id: Long): TransferRequest?
 }
