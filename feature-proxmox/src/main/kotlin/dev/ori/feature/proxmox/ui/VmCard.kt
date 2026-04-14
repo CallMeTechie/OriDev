@@ -2,20 +2,12 @@ package dev.ori.feature.proxmox.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,17 +17,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.ori.core.ui.components.OriCard
+import dev.ori.core.ui.components.OriStatusBadge
+import dev.ori.core.ui.components.OriStatusBadgeIntent
+import dev.ori.core.ui.icons.lucide.CircleStop
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.Play
+import dev.ori.core.ui.icons.lucide.RotateCcw
+import dev.ori.core.ui.icons.lucide.Trash2
 import dev.ori.core.ui.theme.Gray100
 import dev.ori.core.ui.theme.Gray500
 import dev.ori.core.ui.theme.Gray700
 import dev.ori.core.ui.theme.Indigo600
 import dev.ori.core.ui.theme.StatusConnected
-import dev.ori.core.ui.theme.StatusWarning
 import dev.ori.domain.model.ProxmoxVm
 import dev.ori.domain.model.ProxmoxVmStatus
 
@@ -52,12 +50,8 @@ fun VmCard(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-        ),
-    ) {
+    // Phase 11 P2.6-polish — OriCard replaces M3 Card.
+    OriCard(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -96,6 +90,10 @@ fun VmCard(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                 )
+                // Phase 11 P2.6-polish — OriStatusBadge replaces the ad-hoc
+                // badge with darkened-alpha background. Mockup
+                // `.badge-running/.badge-stopped/.badge-paused` map to
+                // Running/Stopped/Paused intents (green/red/yellow).
                 VmStatusBadge(status = vm.status)
             }
             if (vm.status == ProxmoxVmStatus.RUNNING) {
@@ -128,18 +126,21 @@ fun VmCard(
                         color = Indigo600,
                     )
                 } else {
+                    // Phase 11 P2.6-polish — Lucide icons replace Material:
+                    // PlayArrow → Play, Stop → CircleStop, Refresh → RotateCcw,
+                    // Delete → Trash2.
                     when (vm.status) {
                         ProxmoxVmStatus.STOPPED -> {
                             IconButton(onClick = onStart) {
                                 Icon(
-                                    imageVector = Icons.Filled.PlayArrow,
+                                    imageVector = LucideIcons.Play,
                                     contentDescription = "VM starten",
                                     tint = StatusConnected,
                                 )
                             }
                             IconButton(onClick = onDelete) {
                                 Icon(
-                                    imageVector = Icons.Filled.Delete,
+                                    imageVector = LucideIcons.Trash2,
                                     contentDescription = "VM löschen",
                                     tint = MaterialTheme.colorScheme.error,
                                 )
@@ -148,14 +149,14 @@ fun VmCard(
                         ProxmoxVmStatus.RUNNING -> {
                             IconButton(onClick = onStop) {
                                 Icon(
-                                    imageVector = Icons.Filled.Stop,
+                                    imageVector = LucideIcons.CircleStop,
                                     contentDescription = "VM stoppen",
                                     tint = MaterialTheme.colorScheme.error,
                                 )
                             }
                             IconButton(onClick = onRestart) {
                                 Icon(
-                                    imageVector = Icons.Filled.Refresh,
+                                    imageVector = LucideIcons.RotateCcw,
                                     contentDescription = "VM neu starten",
                                     tint = Indigo600,
                                 )
@@ -164,7 +165,7 @@ fun VmCard(
                         ProxmoxVmStatus.PAUSED -> {
                             IconButton(onClick = onStop) {
                                 Icon(
-                                    imageVector = Icons.Filled.Stop,
+                                    imageVector = LucideIcons.CircleStop,
                                     contentDescription = "VM stoppen",
                                     tint = MaterialTheme.colorScheme.error,
                                 )
@@ -180,30 +181,11 @@ fun VmCard(
 
 @Composable
 private fun VmStatusBadge(status: ProxmoxVmStatus) {
-    val (label, color) = when (status) {
-        ProxmoxVmStatus.RUNNING -> "RUNNING" to StatusConnected
-        ProxmoxVmStatus.STOPPED -> "STOPPED" to Gray500
-        ProxmoxVmStatus.PAUSED -> "PAUSED" to StatusWarning
-        ProxmoxVmStatus.UNKNOWN -> "UNKNOWN" to Gray500
+    val (label, intent) = when (status) {
+        ProxmoxVmStatus.RUNNING -> "RUNNING" to OriStatusBadgeIntent.Running
+        ProxmoxVmStatus.STOPPED -> "STOPPED" to OriStatusBadgeIntent.Stopped
+        ProxmoxVmStatus.PAUSED -> "PAUSED" to OriStatusBadgeIntent.Paused
+        ProxmoxVmStatus.UNKNOWN -> "UNKNOWN" to OriStatusBadgeIntent.Stopped
     }
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(color.copy(alpha = 0.15f))
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = darken(color),
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
+    OriStatusBadge(label = label, intent = intent)
 }
-
-private fun darken(color: Color): Color = Color(
-    red = color.red * 0.8f,
-    green = color.green * 0.8f,
-    blue = color.blue * 0.8f,
-    alpha = 1f,
-)

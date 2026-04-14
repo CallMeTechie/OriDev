@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +22,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.ori.core.ui.component.StatusDot
+import dev.ori.core.ui.components.OriCard
+import dev.ori.core.ui.components.OriProgressBar
+import dev.ori.core.ui.theme.Gray200
 import dev.ori.core.ui.theme.Gray500
 import dev.ori.core.ui.theme.Indigo600
 import dev.ori.domain.model.ProxmoxNode
@@ -39,10 +39,13 @@ fun NodeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Phase 11 P2.6-polish — OriCard replaces M3 Card (flat, bordered, 14 dp
+    // radius). Selection state is conveyed via a 2 dp Indigo600 border per the
+    // proxmox.html `.node-card.selected` mockup styling.
     val border = if (selected) {
         BorderStroke(2.dp, Indigo600)
     } else {
-        BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        BorderStroke(1.dp, Gray200)
     }
     val statusText = if (node.isOnline) "online" else "offline"
     val cpuText = node.cpuUsage?.let { ", CPU ${(it * 100).toInt()} Prozent" }.orEmpty()
@@ -56,7 +59,7 @@ fun NodeCard(
         }
     }
     val nodeDescription = "Proxmox-Node ${node.name}, ${node.host}, $statusText$cpuText$memText"
-    Card(
+    OriCard(
         modifier = modifier
             .width(NODE_CARD_WIDTH_DP.dp)
             .semantics(mergeDescendants = true) {
@@ -64,11 +67,8 @@ fun NodeCard(
                 role = Role.Button
                 this.selected = selected
             },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-        ),
-        border = border,
         onClick = onClick,
+        border = border,
     ) {
         Column(
             modifier = Modifier
@@ -101,13 +101,9 @@ fun NodeCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = Gray500,
                 )
-                LinearProgressIndicator(
-                    progress = { cpu.toFloat().coerceIn(0f, 1f) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp),
-                    color = Indigo600,
-                )
+                // Phase 11 P2.6-polish — OriProgressBar replaces M3
+                // LinearProgressIndicator (fixed 4 dp track, animated fill).
+                OriProgressBar(progress = cpu.toFloat(), height = 6.dp)
             }
             val memUsed = node.memUsedBytes
             val memTotal = node.memTotalBytes
@@ -118,13 +114,7 @@ fun NodeCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = Gray500,
                 )
-                LinearProgressIndicator(
-                    progress = { frac.coerceIn(0f, 1f) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(4.dp),
-                    color = Indigo600,
-                )
+                OriProgressBar(progress = frac, height = 6.dp)
             }
         }
     }
