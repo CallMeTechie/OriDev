@@ -1,6 +1,5 @@
 package dev.ori.feature.connections.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,14 +13,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,12 +42,17 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.ori.core.common.model.Protocol
 import dev.ori.core.ui.component.LoadingIndicator
-import dev.ori.core.ui.component.ProtocolBadge
 import dev.ori.core.ui.component.StatusDot
+import dev.ori.core.ui.components.OriCard
+import dev.ori.core.ui.components.OriFab
 import dev.ori.core.ui.components.OriIconButton
+import dev.ori.core.ui.components.OriStatusBadge
+import dev.ori.core.ui.components.OriStatusBadgeIntent
 import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.Plus
 import dev.ori.core.ui.icons.lucide.Server
 import dev.ori.domain.model.ConnectionStatus
 import dev.ori.domain.model.ServerProfile
@@ -125,11 +125,6 @@ fun ConnectionListScreen(
 
     Scaffold(
         topBar = {
-            // Phase 11 P2.3 — replaces deprecated OriDevTopBar with the
-            // 60 dp OriTopBar per connection-manager.html mockup spec.
-            // The Cloud icon was semantically wrong for "Proxmox Manager"
-            // (Lucide's Cloud is for cloud storage). Server is the right
-            // metaphor for a server management dashboard.
             OriTopBar(
                 title = "Connections",
                 height = 60.dp,
@@ -143,14 +138,14 @@ fun ConnectionListScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            // Phase 11 P2.3-polish — OriFab (52 dp, 16 dp radius, Indigo500)
+            // replaces the Material3 FloatingActionButton (56 dp default)
+            // per connection-manager.html mockup spec.
+            OriFab(
+                icon = LucideIcons.Plus,
+                contentDescription = "Verbindung hinzufügen",
                 onClick = onNavigateToAdd,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.semantics { role = Role.Button },
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Verbindung hinzufügen")
-            }
+            )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
@@ -244,6 +239,18 @@ fun ConnectionListScreen(
     }
 }
 
+/**
+ * Phase 11 P2.3-polish — maps domain [Protocol] to the mockup colour token
+ * in [OriStatusBadgeIntent]. SFTP/SCP share the SFTP indigo palette, FTPS
+ * shares FTP sky-blue, PROXMOX has its own red palette.
+ */
+private fun Protocol.toBadgeIntent(): OriStatusBadgeIntent = when (this) {
+    Protocol.SSH -> OriStatusBadgeIntent.Ssh
+    Protocol.SFTP, Protocol.SCP -> OriStatusBadgeIntent.Sftp
+    Protocol.FTP, Protocol.FTPS -> OriStatusBadgeIntent.Ftp
+    Protocol.PROXMOX -> OriStatusBadgeIntent.Proxmox
+}
+
 @Composable
 private fun ServerProfileCard(
     profile: ServerProfile,
@@ -256,24 +263,23 @@ private fun ServerProfileCard(
     val favoriteText = if (profile.isFavorite) ", Favorit" else ""
     val rowDescription = "${profile.name}, ${profile.protocol.name}, " +
         "${profile.host}:${profile.port}, $statusText$favoriteText"
-    Card(
+    // Phase 11 P2.3-polish — OriCard replaces M3 Card (flat, 14 dp radius,
+    // Gray200 border, no elevation) per connection-manager.html spec.
+    // Card padding 14 dp × 16 dp matches `.server-card` in the mockup.
+    OriCard(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
-            .clickable(onClick = onClick)
             .semantics(mergeDescendants = true) {
                 contentDescription = rowDescription
                 role = Role.Button
             },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        onClick = onClick,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             StatusDot(isConnected = isConnected)
@@ -294,7 +300,13 @@ private fun ServerProfileCard(
                 )
             }
 
-            ProtocolBadge(protocol = profile.protocol.name)
+            // Phase 11 P2.3-polish — OriStatusBadge with mockup-matching
+            // colour pairs per protocol (SFTP=indigo, SSH=amber, FTP/FTPS=sky,
+            // PROXMOX=red) replaces the v0 ProtocolBadge stub.
+            OriStatusBadge(
+                label = profile.protocol.displayName,
+                intent = profile.protocol.toBadgeIntent(),
+            )
 
             Spacer(modifier = Modifier.width(8.dp))
 
