@@ -40,59 +40,77 @@ import dev.ori.core.fonts.R as FontsR
 @RunWith(AndroidJUnit4::class)
 class SoraThemingSpike {
 
+    /**
+     * Sora's [CodeEditor] extends [android.view.View] and instantiates an
+     * Android [android.os.Handler] in its constructor — that requires the
+     * thread to have a [android.os.Looper]. The instrumentation thread does
+     * not. We force every test body onto the main thread (which is the only
+     * thread guaranteed to have a Looper in an Android app process) via
+     * [androidx.test.platform.app.Instrumentation.runOnMainSync].
+     */
+    private fun runOnMain(block: () -> Unit) {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(block)
+    }
+
     @Test
     fun sora_editor_accepts_jetbrains_mono_typeface() {
-        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-        val typeface: Typeface = requireNotNull(
-            ResourcesCompat.getFont(ctx, FontsR.font.jetbrains_mono_regular),
-        ) { "JetBrains Mono Regular not found in :core:core-fonts" }
+        runOnMain {
+            val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+            val typeface: Typeface = requireNotNull(
+                ResourcesCompat.getFont(ctx, FontsR.font.jetbrains_mono_regular),
+            ) { "JetBrains Mono Regular not found in :core:core-fonts" }
 
-        val editor = CodeEditor(ctx)
-        editor.typefaceText = typeface
+            val editor = CodeEditor(ctx)
+            editor.typefaceText = typeface
 
-        // Sora exposes the typeface back via the same property — assert the
-        // editor really stored what we passed.
-        assertThat(editor.typefaceText).isEqualTo(typeface)
+            // Sora exposes the typeface back via the same property — assert
+            // the editor really stored what we passed.
+            assertThat(editor.typefaceText).isEqualTo(typeface)
+        }
     }
 
     @Test
     fun sora_editor_accepts_github_palette_color_scheme() {
-        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-        val editor = CodeEditor(ctx)
+        runOnMain {
+            val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+            val editor = CodeEditor(ctx)
 
-        val scheme = EditorColorScheme()
-        scheme.setColor(EditorColorScheme.KEYWORD, AndroidColor.parseColor("#CF222E"))
-        scheme.setColor(EditorColorScheme.LITERAL, AndroidColor.parseColor("#0A3069"))
-        scheme.setColor(EditorColorScheme.COMMENT, AndroidColor.parseColor("#6E7781"))
-        scheme.setColor(EditorColorScheme.FUNCTION_NAME, AndroidColor.parseColor("#8250DF"))
-        scheme.setColor(EditorColorScheme.IDENTIFIER_VAR, AndroidColor.parseColor("#0550AE"))
-        scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, AndroidColor.WHITE)
-        scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND, AndroidColor.WHITE)
+            val scheme = EditorColorScheme()
+            scheme.setColor(EditorColorScheme.KEYWORD, AndroidColor.parseColor("#CF222E"))
+            scheme.setColor(EditorColorScheme.LITERAL, AndroidColor.parseColor("#0A3069"))
+            scheme.setColor(EditorColorScheme.COMMENT, AndroidColor.parseColor("#6E7781"))
+            scheme.setColor(EditorColorScheme.FUNCTION_NAME, AndroidColor.parseColor("#8250DF"))
+            scheme.setColor(EditorColorScheme.IDENTIFIER_VAR, AndroidColor.parseColor("#0550AE"))
+            scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, AndroidColor.WHITE)
+            scheme.setColor(EditorColorScheme.LINE_NUMBER_BACKGROUND, AndroidColor.WHITE)
 
-        editor.colorScheme = scheme
+            editor.colorScheme = scheme
 
-        // Verify the editor really stored our scheme (not Sora's default).
-        assertThat(editor.colorScheme).isSameInstanceAs(scheme)
+            // Verify the editor really stored our scheme (not Sora's default).
+            assertThat(editor.colorScheme).isSameInstanceAs(scheme)
 
-        // And that the colours are readable back unmodified.
-        assertThat(editor.colorScheme.getColor(EditorColorScheme.KEYWORD))
-            .isEqualTo(AndroidColor.parseColor("#CF222E"))
-        assertThat(editor.colorScheme.getColor(EditorColorScheme.COMMENT))
-            .isEqualTo(AndroidColor.parseColor("#6E7781"))
+            // And that the colours are readable back unmodified.
+            assertThat(editor.colorScheme.getColor(EditorColorScheme.KEYWORD))
+                .isEqualTo(AndroidColor.parseColor("#CF222E"))
+            assertThat(editor.colorScheme.getColor(EditorColorScheme.COMMENT))
+                .isEqualTo(AndroidColor.parseColor("#6E7781"))
+        }
     }
 
     @Test
     fun sora_editor_accepts_text_size_in_sp() {
-        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-        val editor = CodeEditor(ctx)
+        runOnMain {
+            val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+            val editor = CodeEditor(ctx)
 
-        // Plan v6 §P2.2 specifies font size = 13 sp / line height 20 px / 13 sp ≈ 1.54 em
-        // for the editor body. setTextSize is in sp.
-        editor.setTextSize(13f)
-        // Sora doesn't expose textSize back via a direct getter, but if the
-        // setter accepts the value without throwing, the API contract holds.
-        // We additionally exercise setText to ensure the editor renders.
-        editor.setText("val example = \"Hello, Editor\"")
-        assertThat(editor.text.toString()).isEqualTo("val example = \"Hello, Editor\"")
+            // Plan v6 §P2.2 specifies font size = 13 sp / line height 20 px / 13 sp
+            // ≈ 1.54 em for the editor body. setTextSize is in sp.
+            editor.setTextSize(13f)
+            // Sora doesn't expose textSize back via a direct getter, but if the
+            // setter accepts the value without throwing, the API contract holds.
+            // We additionally exercise setText to ensure the editor renders.
+            editor.setText("val example = \"Hello, Editor\"")
+            assertThat(editor.text.toString()).isEqualTo("val example = \"Hello, Editor\"")
+        }
     }
 }

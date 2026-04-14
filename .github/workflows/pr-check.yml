@@ -281,7 +281,14 @@ jobs:
           # shell constructs (see PR #39 first run failure logs). The retry loop
           # was moved to a fresh re-run via the GitHub UI when an emulator boot
           # flake actually happens.
-          script: ./gradlew :feature-settings:connectedDebugAndroidTest :feature-editor:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.ori.feature.settings.ui.SettingsScreenLayoutTest,dev.ori.feature.editor.SoraThemingSpike
+          # Two separate Gradle invocations chained with &&. A single invocation
+          # with both module tasks and a comma-separated class filter caused
+          # DirectTestLoader.doCreateRunner to fail with `initializationError`
+          # because the runner tried to instantiate dev.ori.feature.editor.*
+          # classes from inside the feature-settings test APK (and vice versa).
+          # `&&` is a single-line shell construct so it survives the action's
+          # newline-splitting `sh -c` invocation (PR #39 lesson).
+          script: ./gradlew :feature-settings:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.ori.feature.settings.ui.SettingsScreenLayoutTest && ./gradlew :feature-editor:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.ori.feature.editor.SoraThemingSpike
 
       - name: Upload mockup-layout-tests results
         if: always()
