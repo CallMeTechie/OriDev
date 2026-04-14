@@ -8,6 +8,7 @@ data class CommandResult(
     val stderr: String,
 )
 
+@Suppress("TooManyFunctions")
 interface SshClient {
     suspend fun connect(
         host: String,
@@ -70,6 +71,14 @@ interface SshClient {
         offsetBytes: Long,
         onProgress: suspend (transferred: Long, total: Long) -> Unit = { _, _ -> },
     )
+
+    /**
+     * Phase 12 P12.5 — minimal stat helper the transfer engine calls to
+     * decide whether a remote destination already exists (overwrite policy)
+     * and whether an in-progress resume offset matches the server-side size.
+     * Returns `null` when [remotePath] does not exist or cannot be stat-ed.
+     */
+    suspend fun fileSize(sessionId: String, remotePath: String): Long?
 
     suspend fun deleteFile(sessionId: String, path: String)
 

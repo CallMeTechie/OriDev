@@ -1,23 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
-    <application>
-        <!--
-            TransferWorker returns ForegroundInfo with
-            FOREGROUND_SERVICE_TYPE_DATA_SYNC. WorkManager hosts long-running
-            workers in its own SystemForegroundService, so we declare the
-            matching foregroundServiceType here. The entry is merged into the
-            consuming app manifest via the manifest merger.
-        -->
-        <service
-            android:name="androidx.work.impl.foreground.SystemForegroundService"
-            android:foregroundServiceType="dataSync"
-            tools:node="merge"
-            tools:replace="android:foregroundServiceType" />
-    </application>
+    <!--
+        Phase 12 P12.5 — TransferWorker has been deleted and the transfer
+        engine now runs as `dev.ori.app.service.TransferEngineService` in
+        the `:app` module. WorkManager is still initialised by the
+        application's Configuration.Provider for potential future workers,
+        but `:data` no longer contributes any foreground service entries.
+    -->
+    <application />
 
 </manifest>

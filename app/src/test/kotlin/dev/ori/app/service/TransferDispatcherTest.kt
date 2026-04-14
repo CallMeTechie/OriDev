@@ -313,6 +313,12 @@ internal class FakeTransferRecordDao(
     }
 
     override fun observeNonTerminalCount(): Flow<Int> = count
+
+    override suspend fun getByStatus(status: TransferStatus): List<TransferRecordEntity> =
+        rows.values.filter { it.status == status }
+
+    override suspend fun getByStatuses(statuses: List<TransferStatus>): List<TransferRecordEntity> =
+        rows.values.filter { it.status in statuses }
 }
 
 /** Adapts the DAO-backed fake into a [TransferRepository]. */

@@ -36,6 +36,11 @@
             android:exported="false" />
 
         <service
+            android:name=".service.TransferEngineService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
+
+        <service
             android:name=".wear.WearMessageListenerService"
             android:exported="true"
             android:permission="com.google.android.gms.permission.BIND_LISTENER">

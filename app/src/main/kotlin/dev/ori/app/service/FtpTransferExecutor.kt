@@ -1,19 +1,26 @@
 package dev.ori.app.service
 
+import dev.ori.core.network.ftp.FtpClient
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Phase 12 P12.4 — skeletal FTP [TransferExecutor]. P12.5 wires the real
- * Apache Commons Net-backed calls once P12.3's resumable overloads
- * (`FtpClient.uploadFileResumable`, `downloadFileResumable`) are merged.
+ * Phase 12 P12.5 — FTP/FTPS [TransferExecutor] wired to [FtpClient]'s
+ * resumable overloads (`uploadFileResumable` / `downloadFileResumable`
+ * landed in P12.3).
  *
- * Intentionally throws [NotImplementedError] from every method: no
- * production code calls it in this PR. Tests use a fake [TransferExecutor]
- * injected into [TransferWorkerCoroutine] directly.
+ * TODO(P12.7+): per the plan's Q3 decision, each transfer should ultimately
+ * open its own dedicated `FtpClient` connection to avoid serialising all
+ * FTP transfers through the singleton Apache-Commons-Net client. For P12.5
+ * we reuse the app-scoped singleton — the parallelism budget is still
+ * honoured at the [TransferDispatcher] level — and will split the backing
+ * field into a `FtpClientFactory` in a follow-up PR once the connection
+ * lifecycle is wired into `ConnectionRepository` for FTP.
  */
 @Singleton
-internal class FtpTransferExecutor @Inject constructor() : TransferExecutor {
+internal class FtpTransferExecutor @Inject constructor(
+    private val ftpClient: FtpClient,
+) : TransferExecutor {
 
     override suspend fun upload(
         sessionId: String,
@@ -22,7 +29,12 @@ internal class FtpTransferExecutor @Inject constructor() : TransferExecutor {
         offsetBytes: Long,
         onProgress: suspend (Long, Long) -> Unit,
     ) {
-        throw NotImplementedError("wired in P12.5")
+        ftpClient.uploadFileResumable(
+            localPath = localPath,
+            remotePath = remotePath,
+            offsetBytes = offsetBytes,
+            onProgress = onProgress,
+        )
     }
 
     override suspend fun download(
@@ -32,8 +44,14 @@ internal class FtpTransferExecutor @Inject constructor() : TransferExecutor {
         offsetBytes: Long,
         onProgress: suspend (Long, Long) -> Unit,
     ) {
-        throw NotImplementedError("wired in P12.5")
+        ftpClient.downloadFileResumable(
+            remotePath = remotePath,
+            localPath = localPath,
+            offsetBytes = offsetBytes,
+            onProgress = onProgress,
+        )
     }
 
-    override suspend fun remoteFileSize(sessionId: String, remotePath: String): Long? = null
+    override suspend fun remoteFileSize(sessionId: String, remotePath: String): Long? =
+        if (ftpClient.isConnected) ftpClient.fileSize(remotePath) else null
 }

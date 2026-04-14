@@ -57,6 +57,14 @@ interface FtpClient {
         onProgress: suspend (transferred: Long, total: Long) -> Unit = { _, _ -> },
     )
 
+    /**
+     * Phase 12 P12.5 — minimal stat helper the transfer engine calls to
+     * decide whether a remote destination already exists (overwrite policy).
+     * Returns `null` when [remotePath] does not exist, is a directory, or
+     * cannot be stat-ed via the FTP LIST command.
+     */
+    suspend fun fileSize(remotePath: String): Long?
+
     suspend fun deleteFile(path: String)
 
     suspend fun rename(oldPath: String, newPath: String)

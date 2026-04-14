@@ -174,6 +174,17 @@ class FtpClientImpl @Inject constructor() : FtpClient {
         }
     }
 
+    override suspend fun fileSize(remotePath: String): Long? = withContext(Dispatchers.IO) {
+        val c = requireClient()
+        try {
+            val files = c.listFiles(remotePath)
+            val match = files.firstOrNull { it != null && it.isFile }
+            match?.size
+        } catch (_: IOException) {
+            null
+        }
+    }
+
     override suspend fun deleteFile(path: String) = withContext(Dispatchers.IO) {
         val c = requireClient()
         val success = c.deleteFile(path)
