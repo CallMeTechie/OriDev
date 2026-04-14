@@ -33,20 +33,36 @@ if [ "${1:-}" = "--self-test" ]; then
     self_test=true
 fi
 
-# ---- Resolve scope file list -------------------------------------------------
+# ---- Resolve scope file list + diff content ---------------------------------
+#
+# Real-mode semantics (cycle 5 fix from PR #41 first-run failure):
+#   - Only NEW lines added by the current PR are checked, not the whole file.
+#     v1 of the script greppped the whole file and any PR that touched a
+#     pre-existing un-migrated screen tripped on its existing material.icons
+#     imports. Plan v6 §P0.10 explicitly said "only NEW violations fail",
+#     and grepping whole files violated that.
+#   - Per-file diff content is collected up-front into a Bash associative
+#     array (`added_lines[$file]`) so the regex helper can iterate over it.
+#
+# Self-test semantics (unchanged): the script scans the entire fixture file
+# at .github/fixtures/bad-imports.kt.txt and expects violations.
+
+declare -A added_lines
 
 if [ "$self_test" = "true" ]; then
-    # Self-test mode: scan the fixture file directly. Expect violations.
-    scope_files=(.github/fixtures/bad-imports.kt.txt)
-    if [ ! -f "${scope_files[0]}" ]; then
-        echo "::error::Self-test fixture missing at ${scope_files[0]}"
+    # Self-test mode: pretend the whole fixture file is "added" so all 4
+    # forbidden patterns trigger.
+    fixture=".github/fixtures/bad-imports.kt.txt"
+    if [ ! -f "$fixture" ]; then
+        echo "::error::Self-test fixture missing at $fixture"
         exit 2
     fi
+    added_lines["$fixture"]=$(cat "$fixture")
+    scope_files=("$fixture")
 else
-    # Real run: diff against the merge base of origin/<base>.
     base_ref="${GITHUB_BASE_REF:-main}"
 
-    # Use null-delimited output so paths with spaces survive (mapfile -d '').
+    # First: list of changed files in scope.
     if ! mapfile -d '' scope_files < <(
         git diff --name-only -z "origin/${base_ref}...HEAD" -- \
             'feature-*/src/*.kt' \
@@ -61,45 +77,68 @@ else
         echo "No Kotlin files in scope on this diff — skip."
         exit 0
     fi
+
+    # For each changed file, get only the lines this PR ADDED (not the whole
+    # file). Diff format with -U0 (no context lines) yields:
+    #
+    #   diff --git a/foo.kt b/foo.kt
+    #   index abc..def 100644
+    #   --- a/foo.kt
+    #   +++ b/foo.kt
+    #   @@ -10,0 +11,2 @@
+    #   +import androidx.compose.foo
+    #   +import androidx.compose.bar
+    #
+    # Filter: lines starting with `+` but NOT `+++` (which is the file header).
+    # Strip the leading `+` so the regex sees just the source line content.
+    for f in "${scope_files[@]}"; do
+        [ -z "$f" ] && continue
+        added_lines["$f"]=$(
+            git diff -U0 "origin/${base_ref}...HEAD" -- "$f" 2>/dev/null \
+                | grep -E '^\+[^+]' \
+                | sed 's/^+//' \
+                || true
+        )
+    done
 fi
 
-# ---- Helper: run one regex against the scope, optionally restricted by glob -
+# ---- Helper: run one regex against ADDED lines for each file in scope -------
 
 run_grep() {
     local label="$1"
     local pattern="$2"
     local restrict_glob="${3:-}"
-    local targets=("${scope_files[@]}")
+    local file_output
+    local found=0
 
-    # Self-test mode bypasses the feature-* glob restriction so that the
-    # fixture (which lives under .github/fixtures/) still triggers the
-    # Material 3 TopAppBar checks. Real runs honor the restriction so that
-    # core-ui's own OriTopBar.kt (which IS allowed to import M3 internals)
-    # never trips the rule.
-    if [ -n "$restrict_glob" ] && [ "$self_test" != "true" ]; then
-        local filtered=()
-        for f in "${targets[@]}"; do
+    for f in "${scope_files[@]}"; do
+        [ -z "$f" ] && continue
+
+        # Skip files outside the restrict_glob in real mode. Self-test mode
+        # bypasses the glob so the fixture (under .github/fixtures/) still
+        # triggers the Material 3 TopAppBar checks.
+        if [ -n "$restrict_glob" ] && [ "$self_test" != "true" ]; then
             # shellcheck disable=SC2254
             case "$f" in
-                $restrict_glob) filtered+=("$f") ;;
+                $restrict_glob) ;;
+                *) continue ;;
             esac
-        done
-        targets=("${filtered[@]}")
-    fi
+        fi
 
-    if [ "${#targets[@]}" -eq 0 ]; then
-        return 0
-    fi
+        local content="${added_lines[$f]}"
+        [ -z "$content" ] && continue
 
-    # Each grep call wrapped with `|| true` so its exit-1-on-no-match
-    # doesn't propagate via set -e (which we're not using anyway, but be safe).
-    local output
-    output=$(printf '%s\n' "${targets[@]}" | xargs -r -I{} grep -EnH "$pattern" "{}" 2>/dev/null || true)
-    if [ -n "$output" ]; then
-        echo "::error::$label"
-        echo "$output"
-        fail=1
-    fi
+        file_output=$(printf '%s\n' "$content" | grep -E "$pattern" || true)
+        if [ -n "$file_output" ]; then
+            if [ "$found" -eq 0 ]; then
+                echo "::error::$label"
+                found=1
+            fi
+            # Print each matching added line, prefixed with the file path.
+            printf '%s\n' "$file_output" | sed "s|^|$f: |"
+            fail=1
+        fi
+    done
 }
 
 # ---- Forbidden patterns ------------------------------------------------------
