@@ -116,3 +116,43 @@ dependencies {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
+
+// ============================================================================
+// Phase 11 / P0.10.4 — checkWearLeakage
+// Mirror of :core:core-fonts:checkCoreFontsLeakage. Walks debugRuntimeClasspath
+// via incoming.resolutionResult and asserts that no androidx.compose.material3
+// (the PHONE Material 3 artifact) appears in the resolved component graph.
+// Wear legitimately uses androidx.wear.compose:compose-material3 — that's a
+// different artifact group and is allowed; only the phone variant is forbidden.
+//
+// Catches the regression where someone adds :core:core-ui as a wear dep by
+// mistake (which would pull phone Compose Material 3 into the wear APK,
+// defeating the whole point of the :core:core-fonts isolation in PR 1).
+// ============================================================================
+tasks.register("checkWearLeakage") {
+    group = "verification"
+    description = "Fails if :wear transitively depends on androidx.compose.material3 (phone variant)"
+    val rootProvider = configurations.named("debugRuntimeClasspath")
+        .flatMap { it.incoming.resolutionResult.rootComponent }
+    doLast {
+        val all = mutableSetOf<String>()
+        fun walk(component: org.gradle.api.artifacts.result.ResolvedComponentResult) {
+            if (!all.add(component.id.displayName)) return
+            component.dependencies
+                .filterIsInstance<org.gradle.api.artifacts.result.ResolvedDependencyResult>()
+                .forEach { walk(it.selected) }
+        }
+        walk(rootProvider.get())
+        // Match exactly androidx.compose.material3:material3 (phone variant).
+        // androidx.wear.compose:compose-material3 is a different group and allowed.
+        val leak = all.filter {
+            val displayName = it
+            displayName.startsWith("androidx.compose.material3:")
+        }
+        check(leak.isEmpty()) {
+            "wear transitively depends on phone-side material3 (Compose isolation broken):\n" +
+                leak.joinToString("\n")
+        }
+    }
+}
+tasks.named("check") { dependsOn("checkWearLeakage") }

@@ -1,0 +1,68 @@
+name: CI Self-Test
+
+# Phase 11 §P0.10.8 — weekly canary that runs every custom CI check above
+# against fixtures designed to FAIL. If a self-test reports "OK" without
+# triggering its expected violations, the check has silently regressed
+# and is accepting bad input — the canary catches that drift.
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"   # Monday 04:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    name: CI Check Self-Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Forbidden-imports script positive control.
+      # Should report 4 forbidden-pattern groups and exit 0. If the regex
+      # has regressed and reports nothing, the script exits 2.
+      - name: Forbidden-imports positive control
+        run: bash .github/ci/check-forbidden-imports.sh --self-test
+
+      # Mockup-hash positive control.
+      # Hashes a fixture HTML file against a deliberately wrong baseline.
+      # If they match, the hashing pipeline is broken and the script exits 2.
+      - name: Mockup-hash positive control
+        run: bash .github/ci/check-mockup-hash.sh --self-test
+
+      # Font-budget positive control.
+      # Forces the budget to 0 bytes so the task MUST fail. If the task
+      # silently passes (e.g. because the configuration name was renamed
+      # and walkTopDown returned empty), the canary catches it.
+      - name: Font-budget positive control (-Pfont.budget=0 must fail)
+        run: |
+          if ./gradlew :core:core-fonts:checkFontBudget -Pfont.budget=0 2>&1 | tee /tmp/font-budget.log; then
+            echo "::error::Self-test FAILED: checkFontBudget did not reject -Pfont.budget=0"
+            exit 2
+          fi
+          if ! grep -q "exceed budget" /tmp/font-budget.log; then
+            echo "::error::Self-test FAILED: checkFontBudget exited non-zero but with the wrong message"
+            exit 2
+          fi
+          echo "::notice::checkFontBudget correctly rejects budget=0"
+
+      # Leak checks — real run; positive control would require a poisoned
+      # dependency tree which we don't ship. These tasks are deterministic
+      # enough that running them weekly catches any regression where a
+      # dependency drift introduces material3 into core-fonts or wear.
+      - name: core-fonts leak check
+        run: ./gradlew :core:core-fonts:checkCoreFontsLeakage
+
+      - name: wear leak check
+        run: ./gradlew :wear:checkWearLeakage

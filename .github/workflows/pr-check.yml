@@ -21,7 +21,13 @@ jobs:
     name: Code Quality
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 is required by .github/ci/check-forbidden-imports.sh
+      # which runs `git diff --name-only -z origin/<base>...HEAD` to scope its
+      # check to changed files only. Default fetch-depth: 1 makes origin/<base>
+      # unavailable and the diff fails with "unknown revision".
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-java@v4
         with:
@@ -31,6 +37,29 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: true
+
+      # Phase 11 P0.10.2 - diff-scoped grep guard for forbidden imports.
+      # Self-test runs first as a positive control: if the script regex has
+      # regressed and stops matching the fixture, this step exits 2 and CI
+      # fails before scanning the actual PR diff.
+      - name: Forbidden-imports self-test (positive control)
+        run: bash .github/ci/check-forbidden-imports.sh --self-test
+
+      - name: Forbidden-imports check (PR diff)
+        if: github.ref_type != 'tag'
+        run: bash .github/ci/check-forbidden-imports.sh
+
+      # Phase 11 P0.10.3 + P0.10.4 + P0.10.5 - Gradle isolation + budget
+      # verification. These tasks are also wired into each module check task,
+      # but we invoke them explicitly here so a green checkmark in the Code
+      # Quality job demonstrably proves they ran (rather than relying on
+      # implicit aggregation that could silently skip if check is bypassed).
+      - name: Verify Compose isolation and font budget
+        run: |
+          ./gradlew \
+            :core:core-fonts:checkCoreFontsLeakage \
+            :core:core-fonts:checkFontBudget \
+            :wear:checkWearLeakage
 
       - name: Run detekt
         run: ./gradlew detekt
