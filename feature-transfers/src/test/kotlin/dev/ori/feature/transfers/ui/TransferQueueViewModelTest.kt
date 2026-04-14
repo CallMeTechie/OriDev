@@ -4,19 +4,28 @@ import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import dev.ori.core.common.model.TransferDirection
 import dev.ori.core.common.model.TransferStatus
+import dev.ori.domain.model.ConflictRequest
+import dev.ori.domain.model.ConflictResolution
 import dev.ori.domain.model.TransferRequest
+import dev.ori.domain.repository.TransferConflictRepository
+import dev.ori.domain.usecase.CancelAllTransfersUseCase
 import dev.ori.domain.usecase.CancelTransferUseCase
 import dev.ori.domain.usecase.ClearCompletedTransfersUseCase
 import dev.ori.domain.usecase.EnqueueTransferUseCase
 import dev.ori.domain.usecase.GetTransfersUseCase
+import dev.ori.domain.usecase.PauseAllTransfersUseCase
 import dev.ori.domain.usecase.PauseTransferUseCase
+import dev.ori.domain.usecase.ResolveConflictUseCase
 import dev.ori.domain.usecase.ResumeTransferUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -38,6 +47,10 @@ class TransferQueueViewModelTest {
     private lateinit var cancelTransferUseCase: CancelTransferUseCase
     private lateinit var enqueueTransferUseCase: EnqueueTransferUseCase
     private lateinit var clearCompletedTransfersUseCase: ClearCompletedTransfersUseCase
+    private lateinit var conflictRepository: FakeTransferConflictRepository
+    private lateinit var pauseAllTransfersUseCase: PauseAllTransfersUseCase
+    private lateinit var cancelAllTransfersUseCase: CancelAllTransfersUseCase
+    private lateinit var resolveConflictUseCase: ResolveConflictUseCase
 
     private val sampleTransfers = listOf(
         TransferRequest(
@@ -80,6 +93,10 @@ class TransferQueueViewModelTest {
         cancelTransferUseCase = mockk(relaxed = true)
         enqueueTransferUseCase = mockk(relaxed = true)
         clearCompletedTransfersUseCase = mockk(relaxed = true)
+        conflictRepository = FakeTransferConflictRepository()
+        pauseAllTransfersUseCase = mockk(relaxed = true)
+        cancelAllTransfersUseCase = mockk(relaxed = true)
+        resolveConflictUseCase = mockk(relaxed = true)
 
         every { getTransfersUseCase() } returns flowOf(sampleTransfers)
     }
@@ -96,6 +113,10 @@ class TransferQueueViewModelTest {
         cancelTransferUseCase = cancelTransferUseCase,
         enqueueTransferUseCase = enqueueTransferUseCase,
         clearCompletedTransfersUseCase = clearCompletedTransfersUseCase,
+        conflictRepository = conflictRepository,
+        pauseAllTransfersUseCase = pauseAllTransfersUseCase,
+        cancelAllTransfersUseCase = cancelAllTransfersUseCase,
+        resolveConflictUseCase = resolveConflictUseCase,
     )
 
     @Test
@@ -222,5 +243,104 @@ class TransferQueueViewModelTest {
             assertThat(state.error).isEqualTo("Pause failed")
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `pauseAll invokes use case and clears nothing`() = runTest {
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(TransferEvent.PauseAll)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { pauseAllTransfersUseCase() }
+        viewModel.uiState.test {
+            val state = awaitItem()
+            assertThat(state.error).isNull()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `cancelAll invokes use case`() = runTest {
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(TransferEvent.CancelAll)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { cancelAllTransfersUseCase() }
+    }
+
+    @Test
+    fun `conflictRequest flows into ui state`() = runTest {
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val request = ConflictRequest(
+            id = "conflict-1",
+            transferId = 1L,
+            conflictedPath = "/remote/existing.txt",
+            existingSize = 4096L,
+            existingLastModified = 0L,
+        )
+
+        viewModel.uiState.test {
+            // Initial state — no pending conflict after init load.
+            assertThat(awaitItem().pendingConflict).isNull()
+
+            conflictRepository.emit(request)
+            advanceUntilIdle()
+
+            assertThat(awaitItem().pendingConflict).isEqualTo(request)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `resolveConflict calls use case and clears pending conflict`() = runTest {
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        val request = ConflictRequest(
+            id = "conflict-7",
+            transferId = 2L,
+            conflictedPath = "/remote/already.bin",
+            existingSize = 2_097_152L,
+            existingLastModified = 0L,
+        )
+        conflictRepository.emit(request)
+        advanceUntilIdle()
+
+        viewModel.onEvent(
+            TransferEvent.ResolveConflict(request.id, ConflictResolution.OVERWRITE),
+        )
+        advanceUntilIdle()
+
+        verify(exactly = 1) { resolveConflictUseCase(request.id, ConflictResolution.OVERWRITE) }
+        viewModel.uiState.test {
+            assertThat(awaitItem().pendingConflict).isNull()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+}
+
+private class FakeTransferConflictRepository : TransferConflictRepository {
+    private val _conflictRequests = MutableSharedFlow<ConflictRequest>(extraBufferCapacity = 8)
+    override val conflictRequests = _conflictRequests.asSharedFlow()
+
+    suspend fun emit(request: ConflictRequest) {
+        _conflictRequests.emit(request)
+    }
+
+    override fun emitConflict(request: ConflictRequest) {
+        _conflictRequests.tryEmit(request)
+    }
+
+    override suspend fun awaitResolution(conflictId: String): ConflictResolution =
+        ConflictResolution.SKIP
+
+    override fun resolve(conflictId: String, resolution: ConflictResolution) {
+        // no-op for tests
     }
 }

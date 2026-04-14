@@ -4,11 +4,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -20,17 +26,24 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.common.model.TransferStatus
 import dev.ori.core.ui.components.OriEmptyState
+import dev.ori.core.ui.components.OriIconButton
 import dev.ori.core.ui.components.OriSegmentedControl
 import dev.ori.core.ui.components.OriServiceIndicator
 import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.icons.lucide.ArrowLeftRight
 import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.Pause
+import dev.ori.core.ui.icons.lucide.X
+import dev.ori.core.ui.theme.Gray500
 import dev.ori.core.ui.theme.Indigo500
+import dev.ori.domain.model.ConflictRequest
+import dev.ori.domain.model.ConflictResolution
 
 @Composable
 fun TransferQueueScreen(
@@ -64,6 +77,23 @@ fun TransferQueueScreen(
                     TextButton(onClick = { viewModel.onEvent(TransferEvent.ClearCompleted) }) {
                         Text("Clear", color = Indigo500)
                     }
+
+                    // Phase 12 P12.6 — bulk actions. `Pause all` only makes
+                    // sense while at least one transfer is ACTIVE; `Cancel
+                    // all` stays enabled while there is any non-terminal
+                    // transfer in the queue.
+                    OriIconButton(
+                        icon = LucideIcons.Pause,
+                        contentDescription = "Alle Übertragungen pausieren",
+                        onClick = { viewModel.onEvent(TransferEvent.PauseAll) },
+                        enabled = uiState.transfers.any { it.status == TransferStatus.ACTIVE },
+                    )
+                    OriIconButton(
+                        icon = LucideIcons.X,
+                        contentDescription = "Alle Übertragungen abbrechen",
+                        onClick = { viewModel.onEvent(TransferEvent.CancelAll) },
+                        enabled = uiState.transfers.any { !it.status.isTerminal },
+                    )
                 },
             )
         },
@@ -112,6 +142,25 @@ fun TransferQueueScreen(
                 }
             }
         }
+
+        // Phase 12 P12.6 — conflict resolution dialog. Dismiss maps to SKIP
+        // so the engine-side 60 s worker timeout (Q4) and user-dismissal
+        // converge on the same semantics.
+        uiState.pendingConflict?.let { conflict ->
+            ConflictResolutionDialog(
+                conflict = conflict,
+                onResolve = { resolution ->
+                    viewModel.onEvent(
+                        TransferEvent.ResolveConflict(conflict.id, resolution),
+                    )
+                },
+                onDismiss = {
+                    viewModel.onEvent(
+                        TransferEvent.ResolveConflict(conflict.id, ConflictResolution.SKIP),
+                    )
+                },
+            )
+        }
     }
 }
 
@@ -134,4 +183,56 @@ private fun TransferList(
             )
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConflictResolutionDialog(
+    conflict: ConflictRequest,
+    onResolve: (ConflictResolution) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Datei existiert bereits") },
+        text = {
+            Column {
+                Text(
+                    text = conflict.conflictedPath,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Größe: ${humanReadableSize(conflict.existingSize)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Gray500,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onResolve(ConflictResolution.OVERWRITE) }) {
+                Text("Überschreiben")
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { onResolve(ConflictResolution.RENAME) }) {
+                    Text("Umbenennen")
+                }
+                TextButton(onClick = { onResolve(ConflictResolution.SKIP) }) {
+                    Text("Überspringen")
+                }
+            }
+        },
+    )
+}
+
+private fun humanReadableSize(bytes: Long): String {
+    if (bytes < 1024) return "$bytes B"
+    val kib = bytes / 1024.0
+    if (kib < 1024) return "%.1f KiB".format(kib)
+    val mib = kib / 1024.0
+    if (mib < 1024) return "%.1f MiB".format(mib)
+    return "%.1f GiB".format(mib / 1024.0)
 }

@@ -5,11 +5,15 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.ori.core.common.model.TransferStatus
 import dev.ori.domain.model.TransferRequest
+import dev.ori.domain.repository.TransferConflictRepository
+import dev.ori.domain.usecase.CancelAllTransfersUseCase
 import dev.ori.domain.usecase.CancelTransferUseCase
 import dev.ori.domain.usecase.ClearCompletedTransfersUseCase
 import dev.ori.domain.usecase.EnqueueTransferUseCase
 import dev.ori.domain.usecase.GetTransfersUseCase
+import dev.ori.domain.usecase.PauseAllTransfersUseCase
 import dev.ori.domain.usecase.PauseTransferUseCase
+import dev.ori.domain.usecase.ResolveConflictUseCase
 import dev.ori.domain.usecase.ResumeTransferUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +31,10 @@ class TransferQueueViewModel @Inject constructor(
     private val cancelTransferUseCase: CancelTransferUseCase,
     private val enqueueTransferUseCase: EnqueueTransferUseCase,
     private val clearCompletedTransfersUseCase: ClearCompletedTransfersUseCase,
+    private val conflictRepository: TransferConflictRepository,
+    private val pauseAllTransfersUseCase: PauseAllTransfersUseCase,
+    private val cancelAllTransfersUseCase: CancelAllTransfersUseCase,
+    private val resolveConflictUseCase: ResolveConflictUseCase,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TransferQueueUiState())
@@ -34,6 +42,11 @@ class TransferQueueViewModel @Inject constructor(
 
     init {
         loadTransfers()
+        viewModelScope.launch {
+            conflictRepository.conflictRequests.collect { conflict ->
+                _uiState.update { it.copy(pendingConflict = conflict) }
+            }
+        }
     }
 
     fun onEvent(event: TransferEvent) {
@@ -45,6 +58,18 @@ class TransferQueueViewModel @Inject constructor(
             is TransferEvent.RetryTransfer -> retryTransfer(event.transfer)
             is TransferEvent.ClearCompleted -> clearCompleted()
             is TransferEvent.ClearError -> _uiState.update { it.copy(error = null) }
+            TransferEvent.PauseAll -> viewModelScope.launch {
+                runCatching { pauseAllTransfersUseCase() }
+                    .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
+            }
+            TransferEvent.CancelAll -> viewModelScope.launch {
+                runCatching { cancelAllTransfersUseCase() }
+                    .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
+            }
+            is TransferEvent.ResolveConflict -> {
+                resolveConflictUseCase(event.conflictId, event.resolution)
+                _uiState.update { it.copy(pendingConflict = null) }
+            }
         }
     }
 
