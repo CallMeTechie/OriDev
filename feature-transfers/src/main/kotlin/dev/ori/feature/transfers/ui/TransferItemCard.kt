@@ -1,8 +1,6 @@
 package dev.ori.feature.transfers.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,17 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,8 +16,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -39,17 +26,22 @@ import androidx.compose.ui.unit.dp
 import dev.ori.core.common.extension.toHumanReadableSize
 import dev.ori.core.common.model.TransferDirection
 import dev.ori.core.common.model.TransferStatus
-import dev.ori.core.ui.theme.Gray200
+import dev.ori.core.ui.components.OriCard
+import dev.ori.core.ui.components.OriProgressBar
+import dev.ori.core.ui.components.OriStatusBadge
+import dev.ori.core.ui.components.OriStatusBadgeIntent
+import dev.ori.core.ui.icons.lucide.Download
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.Pause
+import dev.ori.core.ui.icons.lucide.Play
+import dev.ori.core.ui.icons.lucide.RotateCcw
+import dev.ori.core.ui.icons.lucide.Upload
+import dev.ori.core.ui.icons.lucide.X
 import dev.ori.core.ui.theme.Gray400
 import dev.ori.core.ui.theme.Indigo500
-import dev.ori.core.ui.theme.StatusConnected
 import dev.ori.core.ui.theme.StatusDisconnected
-import dev.ori.core.ui.theme.StatusWarning
 import dev.ori.domain.model.TransferRequest
 
-private val ProgressTrackColor = Gray200
-private val ProgressBarColor = Indigo500
-private const val PROGRESS_BAR_HEIGHT = 6
 private const val FULL_PROGRESS = 100
 
 @Composable
@@ -62,11 +54,12 @@ fun TransferItemCard(
     modifier: Modifier = Modifier,
 ) {
     val fileName = transfer.sourcePath.substringAfterLast('/')
-    val progressPercent = if (transfer.totalBytes > 0) {
-        ((transfer.transferredBytes.toFloat() / transfer.totalBytes) * FULL_PROGRESS).toInt()
+    val progressFraction = if (transfer.totalBytes > 0) {
+        (transfer.transferredBytes.toFloat() / transfer.totalBytes).coerceIn(0f, 1f)
     } else {
-        0
+        0f
     }
+    val progressPercent = (progressFraction * FULL_PROGRESS).toInt()
     val statusLabel = when (transfer.status) {
         TransferStatus.ACTIVE -> "aktiv"
         TransferStatus.QUEUED -> "in Warteschlange"
@@ -79,16 +72,11 @@ fun TransferItemCard(
         TransferDirection.DOWNLOAD -> "Download"
     }
     val cardDescription = "$directionLabel $fileName, $progressPercent Prozent, $statusLabel"
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-        ) {
+
+    // Phase 11 P2.4-polish — OriCard replaces M3 Card per transfer-queue.html
+    // spec (flat, bordered, 14 dp radius).
+    OriCard(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp)) {
             Column(
                 modifier = Modifier.semantics(mergeDescendants = true) {
                     contentDescription = cardDescription
@@ -96,7 +84,7 @@ fun TransferItemCard(
             ) {
                 DirectionAndFileRow(transfer)
                 Spacer(modifier = Modifier.height(8.dp))
-                ProgressSection(transfer)
+                ProgressSection(transfer, progressFraction, progressPercent)
             }
             Spacer(modifier = Modifier.height(8.dp))
             StatusAndActionsRow(transfer, onPause, onResume, onCancel, onRetry)
@@ -117,10 +105,12 @@ fun TransferItemCard(
 @Composable
 private fun DirectionAndFileRow(transfer: TransferRequest) {
     Row(verticalAlignment = Alignment.CenterVertically) {
+        // Phase 11 P2.4-polish — Lucide Upload/Download replace Material
+        // CloudUpload/CloudDownload (mockup uses simple arrow-in-box glyphs).
         Icon(
             imageVector = when (transfer.direction) {
-                TransferDirection.UPLOAD -> Icons.Default.CloudUpload
-                TransferDirection.DOWNLOAD -> Icons.Default.CloudDownload
+                TransferDirection.UPLOAD -> LucideIcons.Upload
+                TransferDirection.DOWNLOAD -> LucideIcons.Download
             },
             contentDescription = null,
             tint = Indigo500,
@@ -147,29 +137,13 @@ private fun DirectionAndFileRow(transfer: TransferRequest) {
 }
 
 @Composable
-private fun ProgressSection(transfer: TransferRequest) {
-    val progress = if (transfer.totalBytes > 0) {
-        (transfer.transferredBytes.toFloat() / transfer.totalBytes).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
-    val percentage = (progress * FULL_PROGRESS).toInt()
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(PROGRESS_BAR_HEIGHT.dp)
-            .clip(RoundedCornerShape(3.dp))
-            .background(ProgressTrackColor),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(progress)
-                .height(PROGRESS_BAR_HEIGHT.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(ProgressBarColor),
-        )
-    }
+private fun ProgressSection(
+    transfer: TransferRequest,
+    progressFraction: Float,
+    progressPercent: Int,
+) {
+    // Phase 11 P2.4-polish — OriProgressBar replaces inline Box/background stack.
+    OriProgressBar(progress = progressFraction)
 
     Spacer(modifier = Modifier.height(4.dp))
 
@@ -184,7 +158,7 @@ private fun ProgressSection(transfer: TransferRequest) {
             color = Gray400,
         )
         Text(
-            text = "$percentage%",
+            text = "$progressPercent%",
             style = MaterialTheme.typography.labelSmall,
             color = Indigo500,
             fontWeight = FontWeight.Medium,
@@ -205,35 +179,16 @@ private fun StatusAndActionsRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StatusBadge(transfer.status)
+        // Phase 11 P2.4-polish — OriStatusBadge replaces custom dot+text badge.
+        val (label, intent) = when (transfer.status) {
+            TransferStatus.ACTIVE -> "ACTIVE" to OriStatusBadgeIntent.Running
+            TransferStatus.QUEUED -> "QUEUED" to OriStatusBadgeIntent.Queued
+            TransferStatus.PAUSED -> "PAUSED" to OriStatusBadgeIntent.Paused
+            TransferStatus.COMPLETED -> "COMPLETED" to OriStatusBadgeIntent.Completed
+            TransferStatus.FAILED -> "FAILED" to OriStatusBadgeIntent.Failed
+        }
+        OriStatusBadge(label = label, intent = intent)
         ActionButtons(transfer, onPause, onResume, onCancel, onRetry)
-    }
-}
-
-@Composable
-private fun StatusBadge(status: TransferStatus) {
-    val (text, color) = when (status) {
-        TransferStatus.ACTIVE -> "Active" to Indigo500
-        TransferStatus.QUEUED -> "Queued" to Gray400
-        TransferStatus.PAUSED -> "Paused" to StatusWarning
-        TransferStatus.COMPLETED -> "Completed" to StatusConnected
-        TransferStatus.FAILED -> "Failed" to StatusDisconnected
-    }
-
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(color),
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            color = color,
-            fontWeight = FontWeight.Medium,
-        )
     }
 }
 
@@ -249,10 +204,10 @@ private fun ActionButtons(
     Row {
         when (transfer.status) {
             TransferStatus.ACTIVE -> {
-                SmallActionButton(Icons.Default.Pause, "Übertragung pausieren", Indigo500, onPause)
+                SmallActionButton(LucideIcons.Pause, "Übertragung pausieren", Indigo500, onPause)
                 Spacer(modifier = Modifier.width(4.dp))
                 SmallActionButton(
-                    Icons.Default.Close,
+                    LucideIcons.X,
                     "Übertragung abbrechen",
                     StatusDisconnected,
                     onCancel,
@@ -260,14 +215,14 @@ private fun ActionButtons(
             }
             TransferStatus.PAUSED -> {
                 SmallActionButton(
-                    Icons.Default.PlayArrow,
+                    LucideIcons.Play,
                     "Übertragung fortsetzen",
                     Indigo500,
                     onResume,
                 )
                 Spacer(modifier = Modifier.width(4.dp))
                 SmallActionButton(
-                    Icons.Default.Close,
+                    LucideIcons.X,
                     "Übertragung abbrechen",
                     StatusDisconnected,
                     onCancel,
@@ -275,7 +230,7 @@ private fun ActionButtons(
             }
             TransferStatus.QUEUED -> {
                 SmallActionButton(
-                    Icons.Default.Close,
+                    LucideIcons.X,
                     "Übertragung abbrechen",
                     StatusDisconnected,
                     onCancel,
@@ -283,7 +238,7 @@ private fun ActionButtons(
             }
             TransferStatus.FAILED -> {
                 SmallActionButton(
-                    Icons.Default.Refresh,
+                    LucideIcons.RotateCcw,
                     "Übertragung erneut versuchen",
                     Indigo500,
                     onRetry,
@@ -298,7 +253,7 @@ private fun ActionButtons(
 
 @Composable
 private fun SmallActionButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     contentDescription: String,
     tint: Color,
     onClick: () -> Unit,

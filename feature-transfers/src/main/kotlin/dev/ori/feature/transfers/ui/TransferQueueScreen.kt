@@ -4,22 +4,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -34,8 +23,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.ori.core.ui.components.OriEmptyState
+import dev.ori.core.ui.components.OriSegmentedControl
 import dev.ori.core.ui.components.OriTopBar
-import dev.ori.core.ui.theme.Gray400
+import dev.ori.core.ui.icons.lucide.ArrowLeftRight
+import dev.ori.core.ui.icons.lucide.LucideIcons
 import dev.ori.core.ui.theme.Indigo500
 
 @Composable
@@ -54,8 +46,6 @@ fun TransferQueueScreen(
 
     Scaffold(
         topBar = {
-            // Phase 11 P2.4 — replaces deprecated OriDevTopBar with OriTopBar
-            // per transfer-queue.html mockup spec (60 dp height).
             OriTopBar(
                 title = "Transfers",
                 height = 60.dp,
@@ -73,9 +63,14 @@ fun TransferQueueScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            FilterChipRow(
-                selectedFilter = uiState.filter,
-                onFilterSelected = { viewModel.onEvent(TransferEvent.SetFilter(it)) },
+            // Phase 11 P2.4-polish — OriSegmentedControl replaces M3 FilterChipRow.
+            // Wrapped in horizontal padding to match mockup `.filter-scroll` inset.
+            OriSegmentedControl(
+                options = TransferFilter.entries,
+                selectedValue = uiState.filter,
+                onValueChange = { viewModel.onEvent(TransferEvent.SetFilter(it)) },
+                optionLabel = { it.name.lowercase().replaceFirstChar(Char::uppercase) },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
 
             when {
@@ -88,7 +83,15 @@ fun TransferQueueScreen(
                     }
                 }
                 uiState.transfers.isEmpty() -> {
-                    EmptyTransfersState()
+                    // Phase 11 P2.4-polish — OriEmptyState replaces inline Box+Column.
+                    // Lucide ArrowLeftRight replaces Material SwapVert (Lucide has no
+                    // direct "swap vertical" primitive; left/right is the closest
+                    // semantic match for "transfer between panes").
+                    OriEmptyState(
+                        icon = LucideIcons.ArrowLeftRight,
+                        title = "No transfers",
+                        subtitle = "Drag files between panes to start a transfer",
+                    )
                 }
                 else -> {
                     TransferList(
@@ -97,31 +100,6 @@ fun TransferQueueScreen(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun FilterChipRow(
-    selectedFilter: TransferFilter,
-    onFilterSelected: (TransferFilter) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        TransferFilter.entries.forEach { filter ->
-            FilterChip(
-                selected = selectedFilter == filter,
-                onClick = { onFilterSelected(filter) },
-                label = { Text(filter.name.lowercase().replaceFirstChar { it.uppercase() }) },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = Indigo500.copy(alpha = 0.12f),
-                    selectedLabelColor = Indigo500,
-                ),
-            )
         }
     }
 }
@@ -142,34 +120,6 @@ private fun TransferList(
                 onResume = { onEvent(TransferEvent.ResumeTransfer(transfer.id)) },
                 onCancel = { onEvent(TransferEvent.CancelTransfer(transfer.id)) },
                 onRetry = { onEvent(TransferEvent.RetryTransfer(transfer)) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun EmptyTransfersState() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                imageVector = Icons.Default.SwapVert,
-                contentDescription = "Keine Übertragungen",
-                modifier = Modifier.size(48.dp),
-                tint = Gray400,
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "No transfers",
-                style = MaterialTheme.typography.titleMedium,
-                color = Gray400,
-            )
-            Text(
-                text = "Drag files between panes to start a transfer",
-                style = MaterialTheme.typography.bodySmall,
-                color = Gray400,
             )
         }
     }
