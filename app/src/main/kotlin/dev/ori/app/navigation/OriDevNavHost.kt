@@ -12,6 +12,7 @@ import dev.ori.feature.editor.navigation.diffViewerScreen
 import dev.ori.feature.editor.navigation.editorScreen
 import dev.ori.feature.editor.navigation.navigateToEditor
 import dev.ori.feature.filemanager.navigation.fileManagerScreen
+import dev.ori.feature.filemanager.navigation.navigateToFileManager
 import dev.ori.feature.proxmox.navigation.navigateToCreateVm
 import dev.ori.feature.proxmox.navigation.navigateToProxmox
 import dev.ori.feature.proxmox.navigation.proxmoxDashboardScreen
@@ -33,6 +34,11 @@ fun OriDevNavHost(
         connectionsScreen(
             navController = navController,
             onNavigateToProxmox = { navController.navigateToProxmox() },
+            // Phase 11 P1.1 — unblock connection → terminal/filemanager nav.
+            // Replaces the empty stubs at ConnectionListScreen.kt:109-110 that
+            // were the #1 P0 blocker identified in the v6 plan review.
+            onOpenTerminal = { profileId -> navController.navigateToTerminal(profileId) },
+            onOpenFileManager = { profileId -> navController.navigateToFileManager(profileId) },
         )
 
         proxmoxDashboardScreen(

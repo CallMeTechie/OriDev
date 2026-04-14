@@ -62,6 +62,8 @@ fun ConnectionListScreen(
     onNavigateToAdd: () -> Unit = {},
     onNavigateToEdit: (Long) -> Unit = {},
     onNavigateToProxmox: () -> Unit = {},
+    onOpenTerminal: (Long) -> Unit = {},
+    onOpenFileManager: (Long) -> Unit = {},
     viewModel: ConnectionListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -106,8 +108,16 @@ fun ConnectionListScreen(
                 viewModel.onEvent(ConnectionListEvent.Delete(profile))
                 selectedProfile = null
             },
-            onOpenTerminal = { /* TODO: navigate to terminal */ },
-            onOpenFileManager = { /* TODO: navigate to file manager */ },
+            onOpenTerminal = {
+                scope.launch { sheetState.hide() }
+                selectedProfile = null
+                onOpenTerminal(profile.id)
+            },
+            onOpenFileManager = {
+                scope.launch { sheetState.hide() }
+                selectedProfile = null
+                onOpenFileManager(profile.id)
+            },
         )
     }
 

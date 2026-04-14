@@ -16,6 +16,8 @@ const val EDIT_CONNECTION_ROUTE = "connections/edit/{profileId}"
 fun NavGraphBuilder.connectionsScreen(
     navController: NavController,
     onNavigateToProxmox: () -> Unit = {},
+    onOpenTerminal: (Long) -> Unit = {},
+    onOpenFileManager: (Long) -> Unit = {},
 ) {
     composable(route = CONNECTIONS_ROUTE) {
         ConnectionListScreen(
@@ -24,6 +26,8 @@ fun NavGraphBuilder.connectionsScreen(
                 navController.navigate("connections/edit/$profileId")
             },
             onNavigateToProxmox = onNavigateToProxmox,
+            onOpenTerminal = onOpenTerminal,
+            onOpenFileManager = onOpenFileManager,
         )
     }
 }
