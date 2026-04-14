@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -35,6 +33,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.ui.components.OriTopBar
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.Trash2
 
 @Composable
 @Suppress("UnusedParameter")
@@ -122,8 +122,9 @@ fun FileManagerScreen(
                                 contentColor = MaterialTheme.colorScheme.onError,
                             ),
                         ) {
+                            // Phase 11 P2.5-polish — Lucide Trash2 replaces Material Delete.
                             Icon(
-                                Icons.Default.Delete,
+                                LucideIcons.Trash2,
                                 contentDescription = "Ausgewählte Dateien löschen",
                             )
                             Spacer(modifier = Modifier.width(4.dp))

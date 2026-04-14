@@ -15,10 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.CreateNewFolder
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,6 +35,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ori.core.ui.component.StatusDot
+import dev.ori.core.ui.icons.lucide.Grid2x2
+import dev.ori.core.ui.icons.lucide.List
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.RefreshCw
 import dev.ori.domain.model.FileItem
 
 @Suppress("LongParameterList")
@@ -114,11 +115,13 @@ fun FileListPane(
                     onSetViewMode(newMode)
                 },
             ) {
+                // Phase 11 P2.5-polish — Lucide Grid2x2 / List replace
+                // Material GridView / ViewList.
                 Icon(
                     imageVector = if (paneState.viewMode == ViewMode.LIST) {
-                        Icons.Default.GridView
+                        LucideIcons.Grid2x2
                     } else {
-                        Icons.AutoMirrored.Filled.ViewList
+                        LucideIcons.List
                     },
                     contentDescription = if (paneState.viewMode == ViewMode.LIST) {
                         "Zu Rasteransicht wechseln"
@@ -136,8 +139,9 @@ fun FileListPane(
                 )
             }
             IconButton(onClick = onRefresh) {
+                // Phase 11 P2.5-polish — Lucide RefreshCw replaces Material Refresh.
                 Icon(
-                    Icons.Default.Refresh,
+                    LucideIcons.RefreshCw,
                     contentDescription = "Aktualisieren",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
