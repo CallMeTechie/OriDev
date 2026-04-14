@@ -34,7 +34,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.ori.core.ui.component.OriDevTopBar
+import dev.ori.core.ui.components.OriTopBar
 
 @Composable
 @Suppress("UnusedParameter")
@@ -85,7 +85,9 @@ fun FileManagerScreen(
 
     Scaffold(
         topBar = {
-            OriDevTopBar(title = "File Manager")
+            // Phase 11 P2.5 — replaces deprecated OriDevTopBar with 60 dp
+            // OriTopBar per file-manager.html mockup spec.
+            OriTopBar(title = "File Manager", height = 60.dp)
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
