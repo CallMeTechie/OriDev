@@ -61,4 +61,10 @@ interface TransferRecordDao {
 
     @Query("SELECT COUNT(*) FROM transfer_records WHERE status IN ('QUEUED','ACTIVE','PAUSED')")
     fun observeNonTerminalCount(): Flow<Int>
+
+    @Query("SELECT * FROM transfer_records WHERE status = :status")
+    suspend fun getByStatus(status: TransferStatus): List<TransferRecordEntity>
+
+    @Query("SELECT * FROM transfer_records WHERE status IN (:statuses)")
+    suspend fun getByStatuses(statuses: List<TransferStatus>): List<TransferRecordEntity>
 }

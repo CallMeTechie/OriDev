@@ -1,19 +1,27 @@
 package dev.ori.app.service
 
+import dev.ori.core.network.ssh.SshClient
+import dev.ori.domain.repository.ConnectionRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Phase 12 P12.4 — skeletal SSH/SFTP [TransferExecutor]. P12.5 wires the
- * real SSHJ-backed calls once P12.3's resumable overloads
- * (`SshClient.uploadFileResumable`, `downloadFileResumable`) are merged.
+ * Phase 12 P12.5 — SSH/SFTP [TransferExecutor] wired to [SshClient]'s
+ * resumable overloads (`uploadFileResumable` / `downloadFileResumable`
+ * landed in P12.3).
  *
- * Intentionally throws [NotImplementedError] from every method: no
- * production code calls it in this PR. Tests use a fake [TransferExecutor]
- * injected into [TransferWorkerCoroutine] directly.
+ * The `sessionId` parameter arriving from [TransferWorkerCoroutine] is the
+ * stringified `serverProfileId`. This executor resolves it to the
+ * currently-active SSHJ session id via [ConnectionRepository]; if no
+ * session is active we throw [IllegalStateException] and let the worker's
+ * retry machinery handle it (the dispatcher will back off and retry per
+ * the user's `maxRetryAttempts` / `retryBackoffSeconds` prefs).
  */
 @Singleton
-internal class SshTransferExecutor @Inject constructor() : TransferExecutor {
+internal class SshTransferExecutor @Inject constructor(
+    private val sshClient: SshClient,
+    private val connectionRepository: ConnectionRepository,
+) : TransferExecutor {
 
     override suspend fun upload(
         sessionId: String,
@@ -22,7 +30,14 @@ internal class SshTransferExecutor @Inject constructor() : TransferExecutor {
         offsetBytes: Long,
         onProgress: suspend (Long, Long) -> Unit,
     ) {
-        throw NotImplementedError("wired in P12.5")
+        val resolved = resolveSessionId(sessionId)
+        sshClient.uploadFileResumable(
+            sessionId = resolved,
+            localPath = localPath,
+            remotePath = remotePath,
+            offsetBytes = offsetBytes,
+            onProgress = onProgress,
+        )
     }
 
     override suspend fun download(
@@ -32,8 +47,30 @@ internal class SshTransferExecutor @Inject constructor() : TransferExecutor {
         offsetBytes: Long,
         onProgress: suspend (Long, Long) -> Unit,
     ) {
-        throw NotImplementedError("wired in P12.5")
+        val resolved = resolveSessionId(sessionId)
+        sshClient.downloadFileResumable(
+            sessionId = resolved,
+            remotePath = remotePath,
+            localPath = localPath,
+            offsetBytes = offsetBytes,
+            onProgress = onProgress,
+        )
     }
 
-    override suspend fun remoteFileSize(sessionId: String, remotePath: String): Long? = null
+    override suspend fun remoteFileSize(sessionId: String, remotePath: String): Long? {
+        val resolved = resolveActiveSessionIdOrNull(sessionId) ?: return null
+        return sshClient.fileSize(resolved, remotePath)
+    }
+
+    private suspend fun resolveSessionId(sessionId: String): String {
+        val profileId = sessionId.toLongOrNull()
+            ?: error("SshTransferExecutor: invalid sessionId=$sessionId (expected serverProfileId)")
+        return connectionRepository.getActiveSessionId(profileId)
+            ?: error("SshTransferExecutor: no active SSH session for profile=$profileId")
+    }
+
+    private suspend fun resolveActiveSessionIdOrNull(sessionId: String): String? {
+        val profileId = sessionId.toLongOrNull() ?: return null
+        return connectionRepository.getActiveSessionId(profileId)
+    }
 }

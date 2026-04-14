@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Lucide ArrowLeftRight icon (https://lucide.dev/icons/arrow-left-right),
+  24dp VectorDrawable. Used as the small icon for the aggregate ongoing
+  progress notification posted by TransferEngineService while one or more
+  transfers are active.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M8,3L4,7L8,11M4,7L20,7M16,13L20,17L16,21M20,17L4,17"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>

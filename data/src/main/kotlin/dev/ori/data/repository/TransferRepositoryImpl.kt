@@ -1,30 +1,43 @@
 package dev.ori.data.repository
 
-import android.content.Context
-import androidx.work.Data
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.ori.core.common.model.TransferStatus
 import dev.ori.data.dao.TransferRecordDao
 import dev.ori.data.mapper.toDomain
 import dev.ori.data.mapper.toEntity
-import dev.ori.data.worker.TransferWorker
 import dev.ori.domain.model.TransferRequest
+import dev.ori.domain.repository.TransferEngineController
 import dev.ori.domain.repository.TransferRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
+/**
+ * Phase 12 P12.5 — Room-backed implementation of [TransferRepository].
+ *
+ * Previously this class enqueued `OneTimeWorkRequest<TransferWorker>`
+ * instances through WorkManager. The Phase 12 engine replaces that
+ * machinery with a foreground service driven by [TransferEngineController]
+ * (whose `:app`-side impl dispatches Intents to `TransferEngineService`).
+ * Work lifetime is no longer WorkManager's concern: inserts simply create
+ * a `QUEUED` row and call `ensureRunning()`; pause/resume/cancel delegate
+ * to the controller and mutate the row directly.
+ */
 @Singleton
 class TransferRepositoryImpl @Inject constructor(
     private val dao: TransferRecordDao,
-    @ApplicationContext private val context: Context,
+    // Lazy `Provider<T>` breaks the Hilt dependency cycle: the
+    // `TransferEngineController` impl's transitive graph also needs a
+    // `TransferRepository`, and the two would otherwise reference each
+    // other synchronously. Deferring the controller lookup until the
+    // first `enqueue`/`pause`/… call keeps the graph acyclic while
+    // preserving singleton semantics.
+    private val engineControllerProvider: Provider<TransferEngineController>,
 ) : TransferRepository {
 
-    private val workManager: WorkManager get() = WorkManager.getInstance(context)
+    private val engineController: TransferEngineController
+        get() = engineControllerProvider.get()
 
     override fun getAllTransfers(): Flow<List<TransferRequest>> =
         dao.getAll().map { entities -> entities.map { it.toDomain() } }
@@ -35,39 +48,32 @@ class TransferRepositoryImpl @Inject constructor(
     override suspend fun enqueue(transfer: TransferRequest): Long {
         val entity = transfer.copy(status = TransferStatus.QUEUED).toEntity()
         val id = dao.insert(entity)
-        scheduleWork(id, transfer.transferredBytes)
+        engineController.ensureRunning()
         return id
     }
 
     override suspend fun pause(transferId: Long) {
-        workManager.cancelUniqueWork(workName(transferId))
+        engineController.pauseTransfer(transferId)
         val record = dao.getById(transferId) ?: return
-        dao.update(record.copy(status = TransferStatus.PAUSED))
+        // Only flip to PAUSED if the worker's own CancellationException
+        // handler hasn't already done so (idempotent).
+        if (record.status != TransferStatus.PAUSED) {
+            dao.updateStatus(transferId, TransferStatus.PAUSED, null, null)
+        }
     }
 
     override suspend fun resume(transferId: Long) {
-        val record = dao.getById(transferId) ?: return
-        dao.update(record.copy(status = TransferStatus.QUEUED))
-        scheduleWork(transferId, record.transferredBytes)
+        engineController.resumeTransfer(transferId)
     }
 
     override suspend fun cancel(transferId: Long) {
-        workManager.cancelUniqueWork(workName(transferId))
-        val record = dao.getById(transferId) ?: return
-        dao.update(
-            record.copy(
-                status = TransferStatus.FAILED,
-                errorMessage = "Cancelled by user",
-                completedAt = System.currentTimeMillis(),
-            ),
-        )
+        engineController.cancelTransfer(transferId)
     }
 
     override suspend fun clearCompleted() {
         dao.clearCompleted()
     }
 
-    // Phase 12 P12.2 — minimal DAO delegations used by the new engine workers.
     override suspend fun updateProgress(id: Long, transferred: Long, total: Long) {
         dao.updateProgress(id, transferred, total)
     }
@@ -91,23 +97,4 @@ class TransferRepositoryImpl @Inject constructor(
 
     override suspend fun getTransferById(id: Long): TransferRequest? =
         dao.getById(id)?.toDomain()
-
-    private fun scheduleWork(transferId: Long, offsetBytes: Long) {
-        val inputData = Data.Builder()
-            .putLong(TransferWorker.KEY_TRANSFER_ID, transferId)
-            .putLong(TransferWorker.KEY_OFFSET_BYTES, offsetBytes)
-            .build()
-
-        val request = OneTimeWorkRequestBuilder<TransferWorker>()
-            .setInputData(inputData)
-            .build()
-
-        workManager.enqueueUniqueWork(
-            workName(transferId),
-            ExistingWorkPolicy.REPLACE,
-            request,
-        )
-    }
-
-    private fun workName(transferId: Long): String = "transfer_$transferId"
 }

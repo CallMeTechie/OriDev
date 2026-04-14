@@ -303,6 +303,17 @@ class SshClientImpl @Inject constructor(
         }
     }
 
+    override suspend fun fileSize(sessionId: String, remotePath: String): Long? =
+        withContext(Dispatchers.IO) {
+            withSftpClient(sessionId) { sftp ->
+                try {
+                    sftp.stat(remotePath).size
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+
     override suspend fun deleteFile(sessionId: String, path: String) {
         withSftpClient(sessionId) { sftp ->
             sftp.rm(path)
