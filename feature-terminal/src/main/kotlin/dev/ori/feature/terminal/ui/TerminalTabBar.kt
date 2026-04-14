@@ -14,9 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,12 +28,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.Plus
+import dev.ori.core.ui.icons.lucide.X
+import dev.ori.core.ui.theme.Gray200
 import dev.ori.core.ui.theme.Indigo500
 import dev.ori.core.ui.theme.StatusConnected
 import dev.ori.core.ui.theme.StatusDisconnected
 
+// Phase 11 P2.1-polish — replaced hardcoded hex #E5E7EB with the Gray200
+// theme token so the tab bar border tracks the rest of the palette.
 private val TabBarBackground = Color.White
-private val TabBarBorder = Color(0xFFE5E7EB)
+private val TabBarBorder = Gray200
 
 @Composable
 fun TerminalTabBar(
@@ -111,8 +114,10 @@ fun TerminalTabBar(
                     onClick = { onTabClose(tab.id) },
                     modifier = Modifier.size(20.dp),
                 ) {
+                    // Phase 11 P2.1-polish — LucideIcons.X replaces Material Close
+                    // (forbidden-imports policy).
                     Icon(
-                        imageVector = Icons.Default.Close,
+                        imageVector = LucideIcons.X,
                         contentDescription = "Close tab",
                         modifier = Modifier.size(14.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -126,8 +131,9 @@ fun TerminalTabBar(
             onClick = onAddTab,
             modifier = Modifier.size(36.dp),
         ) {
+            // Phase 11 P2.1-polish — LucideIcons.Plus replaces Material Add.
             Icon(
-                imageVector = Icons.Default.Add,
+                imageVector = LucideIcons.Plus,
                 contentDescription = "New tab",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
