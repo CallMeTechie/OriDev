@@ -14,9 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CreateNewFolder
-import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +32,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ori.core.ui.component.StatusDot
+import dev.ori.core.ui.icons.lucide.CheckSquare
+import dev.ori.core.ui.icons.lucide.FolderPlus
 import dev.ori.core.ui.icons.lucide.Grid2x2
 import dev.ori.core.ui.icons.lucide.List
 import dev.ori.core.ui.icons.lucide.LucideIcons
@@ -100,7 +99,7 @@ fun FileListPane(
         ) {
             IconButton(onClick = onSelectAll) {
                 Icon(
-                    Icons.Default.SelectAll,
+                    LucideIcons.CheckSquare,
                     contentDescription = "Alle auswählen",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -133,7 +132,7 @@ fun FileListPane(
             }
             IconButton(onClick = onCreateDirectory) {
                 Icon(
-                    Icons.Default.CreateNewFolder,
+                    LucideIcons.FolderPlus,
                     contentDescription = "Neuen Ordner anlegen",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
