@@ -16,7 +16,12 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 lets .github/ci/check-forbidden-imports.sh diff against
+      # origin/master when this workflow runs on push (default fetch-depth: 1
+      # would make origin/master unavailable).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-java@v4
         with:
@@ -24,6 +29,23 @@ jobs:
           java-version: 21
 
       - uses: gradle/actions/setup-gradle@v4
+
+      # Phase 11 P0.10.2 - forbidden-imports grep self-test (positive control).
+      # On push to master we don't strictly need the diff-scoped check (master
+      # is the source of truth), but the self-test catches script regression
+      # the same way it does on PRs.
+      - name: Forbidden-imports self-test (positive control)
+        run: bash .github/ci/check-forbidden-imports.sh --self-test
+
+      # Phase 11 P0.10.3 + P0.10.4 + P0.10.5 - Compose isolation + font budget
+      # verification. Wired explicitly here (not via implicit `check`) so the
+      # green checkmark proves they ran.
+      - name: Verify Compose isolation and font budget
+        run: |
+          ./gradlew \
+            :core:core-fonts:checkCoreFontsLeakage \
+            :core:core-fonts:checkFontBudget \
+            :wear:checkWearLeakage
 
       # Static analysis
       - name: Run detekt
