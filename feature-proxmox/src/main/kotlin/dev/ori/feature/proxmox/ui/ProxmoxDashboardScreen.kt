@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.ui.component.LoadingIndicator
-import dev.ori.core.ui.component.OriDevTopBar
+import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.theme.Gray500
 
 private const val NODE_ROW_HEIGHT_DP = 140
@@ -61,7 +61,9 @@ fun ProxmoxDashboardScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        topBar = { OriDevTopBar(title = "Proxmox Manager") },
+        // Phase 11 P2.6 — replaces deprecated OriDevTopBar with 60 dp
+        // OriTopBar per proxmox-dashboard.html mockup spec.
+        topBar = { OriTopBar(title = "Proxmox Manager", height = 60.dp) },
         snackbarHost = {
             SnackbarHost(hostState = snackbarHostState) { data ->
                 Snackbar(snackbarData = data)
