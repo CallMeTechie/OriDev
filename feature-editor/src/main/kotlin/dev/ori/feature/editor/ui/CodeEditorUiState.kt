@@ -29,6 +29,22 @@ data class CodeEditorUiState(
     val isReadOnly: Boolean = false,
     val savedMessage: String? = null,
     val error: String? = null,
+    // Phase 11 P4.3 — remote file picker state.
+    val pickerState: PickerState? = null,
+)
+
+/**
+ * Phase 11 P4.3 — transient state for the "Open file" bottom sheet in the
+ * Code Editor. Tracks which source (local vs remote) is being browsed, the
+ * current directory, the loaded file listing, and loading / error flags.
+ * Nulled out when the sheet is dismissed.
+ */
+data class PickerState(
+    val isRemote: Boolean,
+    val currentPath: String,
+    val entries: List<dev.ori.domain.model.FileItem> = emptyList(),
+    val isLoading: Boolean = false,
+    val error: String? = null,
 )
 
 val CodeEditorUiState.activeTab: EditorTab?
@@ -49,4 +65,17 @@ sealed class CodeEditorEvent {
     data object FindPrevious : CodeEditorEvent()
     data object ClearSavedMessage : CodeEditorEvent()
     data object ClearError : CodeEditorEvent()
+
+    // Phase 11 P4.3 — remote file picker events.
+    /** Open the picker at [startPath] on either local or remote file system. */
+    data class ShowPicker(val isRemote: Boolean, val startPath: String) : CodeEditorEvent()
+
+    /** Dismiss the picker without opening anything. */
+    data object HidePicker : CodeEditorEvent()
+
+    /** Navigate the open picker to [path] (refreshes the listing). */
+    data class PickerNavigate(val path: String) : CodeEditorEvent()
+
+    /** Switch the open picker between local and remote file systems. */
+    data class PickerSetRemote(val isRemote: Boolean) : CodeEditorEvent()
 }
