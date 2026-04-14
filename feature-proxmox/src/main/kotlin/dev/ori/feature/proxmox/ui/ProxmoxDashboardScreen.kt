@@ -10,12 +10,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -35,7 +31,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.ui.component.LoadingIndicator
+import dev.ori.core.ui.components.OriFab
 import dev.ori.core.ui.components.OriTopBar
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.Plus
 import dev.ori.core.ui.theme.Gray500
 
 private const val NODE_ROW_HEIGHT_DP = 140
@@ -70,16 +69,14 @@ fun ProxmoxDashboardScreen(
             }
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            // Phase 11 P2.6-polish — OriFab (52 dp icon-only) replaces
+            // ExtendedFloatingActionButton. Proxmox mockup uses icon-only FAB,
+            // matching connection-manager/transfer-queue styling for
+            // consistency. Lucide Plus replaces Material Icons.Filled.Add.
+            OriFab(
+                icon = LucideIcons.Plus,
+                contentDescription = "Proxmox-Node hinzufügen",
                 onClick = { viewModel.onEvent(ProxmoxEvent.ShowAddNodeSheet) },
-                icon = {
-                    Icon(
-                        imageVector = Icons.Filled.Add,
-                        contentDescription = "Proxmox-Node hinzufügen",
-                    )
-                },
-                text = { Text("Add Node") },
-                containerColor = MaterialTheme.colorScheme.primary,
             )
         },
     ) { padding ->
