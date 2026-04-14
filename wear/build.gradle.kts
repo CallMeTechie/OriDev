@@ -82,6 +82,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-common"))
+    implementation(project(":core:core-fonts"))
     implementation(project(":core:core-security"))
     implementation(project(":domain"))
 

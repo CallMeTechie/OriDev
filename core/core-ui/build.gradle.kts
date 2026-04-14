@@ -29,6 +29,7 @@ android {
 
 dependencies {
     implementation(project(":core:core-common"))
+    implementation(project(":core:core-fonts"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

@@ -1,0 +1,36 @@
+Roboto Flex — bundled in Ori:Dev under :core:core-fonts.
+
+Source release:    Roboto Flex 3.200 (googlefonts/roboto-flex, 2023-08-11)
+Source URL:        https://github.com/googlefonts/roboto-flex/releases/tag/3.200
+Source ZIP SHA-256: 6b2b14e11308c7d3e8388b623cf740c46b872e7519198e0cff8062e52b75239b
+
+Bundled asset in res/font/:
+  roboto_flex.ttf   (variable font, all weights via the wght axis)
+
+The bundled file is a subset (pyftsubset) of the upstream
+RobotoFlex[GRAD,XOPQ,XTRA,YOPQ,YTAS,YTDE,YTFI,YTLC,YTUC,opsz,slnt,wdth,wght].ttf
+variable font from fonts/variable/ in the source ZIP. Subsetting keeps the
+same Unicode ranges as Inter (Latin-1 + dashes + curly quotes + ellipsis) and
+preserves all 13 variation axes so Compose can drive weight via
+FontVariation.weight() at render time.
+
+Why Roboto Flex (not Inter) on Wear: Inter at 8–12 sp on round OLED watch
+displays renders poorly (review cycle 1, finding F8). Google specifically
+recommends Roboto / Roboto Flex for Wear OS where readability at small sizes
+on low-PPI round displays matters.
+
+================================================================================
+Copyright 2017 The Roboto Flex Project Authors
+(https://github.com/googlefonts/roboto-flex)
+
+This Font Software is licensed under the Apache License, Version 2.0 (the
+"License"); you may not use this file except in compliance with the License.
+You may obtain a copy of the License at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
