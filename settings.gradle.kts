@@ -23,6 +23,7 @@ rootProject.name = "OriDev"
 
 include(":app")
 include(":core:core-common")
+include(":core:core-fonts")
 include(":core:core-ui")
 include(":core:core-network")
 include(":core:core-security")
