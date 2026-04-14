@@ -49,6 +49,13 @@ jobs:
         if: github.ref_type != 'tag'
         run: bash .github/ci/check-forbidden-imports.sh
 
+      # Phase 11 P0.7 - mockup-hash drift guard. Warns (not fails) if any
+      # Mockups/*.html file has changed since the Phase 11 baseline. The
+      # script + fixture were added in PR 3.5; the actual baseline file
+      # .github/mockup-hash.txt is added in this PR (4b).
+      - name: Mockup-hash drift check
+        run: bash .github/ci/check-mockup-hash.sh
+
       # Phase 11 P0.10.3 + P0.10.4 + P0.10.5 - Gradle isolation + budget
       # verification. These tasks are also wired into each module check task,
       # but we invoke them explicitly here so a green checkmark in the Code
@@ -274,7 +281,7 @@ jobs:
           # shell constructs (see PR #39 first run failure logs). The retry loop
           # was moved to a fresh re-run via the GitHub UI when an emulator boot
           # flake actually happens.
-          script: ./gradlew :feature-settings:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.ori.feature.settings.ui.SettingsScreenLayoutTest
+          script: ./gradlew :feature-settings:connectedDebugAndroidTest :feature-editor:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.ori.feature.settings.ui.SettingsScreenLayoutTest,dev.ori.feature.editor.SoraThemingSpike
 
       - name: Upload mockup-layout-tests results
         if: always()
