@@ -9,18 +9,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -30,8 +28,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.ori.core.ui.components.OriCard
+import dev.ori.core.ui.components.OriSectionLabel
+import dev.ori.core.ui.components.OriToggle
+import dev.ori.core.ui.components.OriTopBar
+import dev.ori.core.ui.components.OriTopBarDefaults
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
@@ -45,7 +47,6 @@ fun SettingsScreen(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SettingsContent(
     state: SettingsState,
@@ -55,15 +56,11 @@ internal fun SettingsContent(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Einstellungen",
-                        modifier = Modifier.semantics {
-                            contentDescription = "Bildschirm Einstellungen"
-                        },
-                    )
-                },
+            // Phase 11 PR 4a — replaces Material 3 TopAppBar (64 dp default,
+            // way too tall for the mockup) with the 56 dp OriTopBar.
+            OriTopBar(
+                title = "Einstellungen",
+                height = OriTopBarDefaults.Height,
             )
         },
     ) { innerPadding ->
@@ -71,6 +68,7 @@ internal fun SettingsContent(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .testTag("settings_content")
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -91,10 +89,14 @@ private fun PrivacySection(
     onCrashReportingChanged: (Boolean) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionHeader(title = "Datenschutz")
-        Surface(
-            tonalElevation = 1.dp,
-            color = MaterialTheme.colorScheme.surfaceContainer,
+        OriSectionLabel(
+            text = "Datenschutz",
+            modifier = Modifier.semantics {
+                contentDescription = "Abschnitt Datenschutz"
+                heading()
+            },
+        )
+        OriCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .semantics {
@@ -106,7 +108,7 @@ private fun PrivacySection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(
@@ -115,16 +117,16 @@ private fun PrivacySection(
                 ) {
                     Text(
                         text = "Anonyme Absturzberichte senden",
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
                         text = "Hilft uns, Bugs zu finden. Keine persönlichen Daten. " +
                             "Wirkt nach dem nächsten Absturz.",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Switch(
+                OriToggle(
                     checked = crashReportingEnabled,
                     onCheckedChange = onCrashReportingChanged,
                     modifier = Modifier.semantics {
@@ -139,16 +141,18 @@ private fun PrivacySection(
 @Composable
 private fun InfoSection(versionName: String) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SectionHeader(title = "Info")
-        Surface(
-            tonalElevation = 1.dp,
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
+        OriSectionLabel(
+            text = "Info",
+            modifier = Modifier.semantics {
+                contentDescription = "Abschnitt Info"
+                heading()
+            },
+        )
+        OriCard(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
                     .semantics {
                         contentDescription = "App-Version $versionName"
                     },
@@ -156,31 +160,16 @@ private fun InfoSection(versionName: String) {
             ) {
                 Text(
                     text = "Version",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
                     text = versionName.ifEmpty { "—" },
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
     }
-}
-
-@Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier
-            .padding(start = 4.dp)
-            .semantics {
-                contentDescription = "Abschnitt $title"
-                heading()
-            },
-    )
 }
 
 @Preview(showBackground = true)

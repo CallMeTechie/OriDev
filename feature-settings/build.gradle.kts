@@ -18,6 +18,11 @@ android {
 
     defaultConfig {
         minSdk = 34
+        // Phase 11 PR 4a: enable instrumented tests for SettingsScreenLayoutTest
+        // (the bail-out gate for the Phase 11 foundation PR stack — verifies
+        // there is no padding leak between OriTopBar's bottom edge and the
+        // first content row of SettingsScreen).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
@@ -53,6 +58,14 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.truth)
     testImplementation(libs.kotlinx.coroutines.test)
+
+    // Phase 11 PR 4a — instrumented test scaffolding for SettingsScreenLayoutTest
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.test.runner)
+    androidTestImplementation(libs.test.ext.junit)
+    androidTestImplementation(libs.truth)
+    debugImplementation(libs.compose.ui.test.manifest)
 
     debugImplementation(libs.compose.ui.tooling)
 }
