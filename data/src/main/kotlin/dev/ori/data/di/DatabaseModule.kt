@@ -15,6 +15,7 @@ import dev.ori.data.dao.ServerProfileDao
 import dev.ori.data.dao.SessionLogDao
 import dev.ori.data.dao.TransferRecordDao
 import dev.ori.data.db.MIGRATION_1_2
+import dev.ori.data.db.MIGRATION_2_3
 import dev.ori.data.db.OriDevDatabase
 import javax.inject.Singleton
 
@@ -30,7 +31,7 @@ object DatabaseModule {
             OriDevDatabase::class.java,
             "oridev.db",
         )
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .build()
 
     @Provides
