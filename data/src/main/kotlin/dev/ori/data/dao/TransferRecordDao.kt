@@ -56,6 +56,9 @@ interface TransferRecordDao {
     )
     suspend fun scheduleRetry(id: Long, nextRetryAt: Long)
 
+    @Query("UPDATE transfer_records SET nextRetryAt = :nextRetryAt WHERE id = :id")
+    suspend fun setNextRetryAt(id: Long, nextRetryAt: Long)
+
     @Query("SELECT COUNT(*) FROM transfer_records WHERE status IN ('QUEUED','ACTIVE','PAUSED')")
     fun observeNonTerminalCount(): Flow<Int>
 }

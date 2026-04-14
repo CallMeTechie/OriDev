@@ -67,6 +67,27 @@ class TransferRepositoryImpl @Inject constructor(
         dao.clearCompleted()
     }
 
+    // Phase 12 P12.2 — minimal DAO delegations used by the new engine workers.
+    override suspend fun updateProgress(id: Long, transferred: Long, total: Long) {
+        dao.updateProgress(id, transferred, total)
+    }
+
+    override suspend fun updateStatus(
+        id: Long,
+        status: TransferStatus,
+        error: String?,
+        completedAt: Long?,
+    ) {
+        dao.updateStatus(id, status, error, completedAt)
+    }
+
+    override suspend fun setNextRetryAt(id: Long, nextRetryAt: Long) {
+        dao.setNextRetryAt(id, nextRetryAt)
+    }
+
+    override suspend fun getTransferById(id: Long): TransferRequest? =
+        dao.getById(id)?.toDomain()
+
     private fun scheduleWork(transferId: Long, offsetBytes: Long) {
         val inputData = Data.Builder()
             .putLong(TransferWorker.KEY_TRANSFER_ID, transferId)
