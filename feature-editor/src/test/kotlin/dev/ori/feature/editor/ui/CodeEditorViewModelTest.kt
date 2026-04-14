@@ -175,4 +175,45 @@ class CodeEditorViewModelTest {
 
         assertThat(vm.uiState.value.activeTab!!.content).isEqualTo("baz bar baz")
     }
+
+    // --- Phase 11 P4.5 — large-file / binary-file guards ---
+
+    @Test
+    fun init_fileAboveSizeLimit_setsErrorAndSkipsContent() = runTest {
+        // 10 MB + 1 byte — just over the hard limit.
+        val oversized = ByteArray(10 * 1024 * 1024 + 1) { 'a'.code.toByte() }
+        coEvery { localRepo.getFileContent(any()) } returns oversized
+
+        val vm = createViewModel()
+
+        val tab = vm.uiState.value.activeTab!!
+        assertThat(tab.content).isEmpty()
+        assertThat(tab.error).contains("editor limit")
+        assertThat(vm.uiState.value.error).contains("Cannot open")
+    }
+
+    @Test
+    fun init_binaryFile_setsErrorAndSkipsContent() = runTest {
+        // Prepend a NULL byte to trip the binary sniff.
+        val binary = byteArrayOf(0x00, 0x01, 0x02, 0x03) + "trailing text".toByteArray()
+        coEvery { localRepo.getFileContent(any()) } returns binary
+
+        val vm = createViewModel()
+
+        val tab = vm.uiState.value.activeTab!!
+        assertThat(tab.content).isEmpty()
+        assertThat(tab.error).contains("Binary")
+    }
+
+    @Test
+    fun init_smallTextFile_loadsNormally() = runTest {
+        // Sanity: ensure the guard doesn't regress the happy path.
+        coEvery { localRepo.getFileContent(any()) } returns "hello world".toByteArray()
+
+        val vm = createViewModel()
+
+        val tab = vm.uiState.value.activeTab!!
+        assertThat(tab.content).isEqualTo("hello world")
+        assertThat(tab.error).isNull()
+    }
 }

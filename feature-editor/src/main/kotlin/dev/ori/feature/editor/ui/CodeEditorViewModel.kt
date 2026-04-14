@@ -138,8 +138,36 @@ class CodeEditorViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Phase 11 P4.5 — returns an error message if [bytes] should not be
+     * opened in the editor, or null to allow the load to proceed.
+     *
+     * Rejects:
+     * - Files larger than [MAX_EDITABLE_BYTES] (10 MB) — Sora-Editor chokes
+     *   on buffers this size and the UI would freeze on edits.
+     * - Binary files, detected as any NULL byte in the first
+     *   [BINARY_SNIFF_BYTES] of the buffer. This catches images, compiled
+     *   binaries, and archives but preserves UTF-8/UTF-16 text.
+     */
+    private fun guardFileContent(bytes: ByteArray): String? {
+        if (bytes.size > MAX_EDITABLE_BYTES) {
+            val mb = bytes.size.toDouble() / BYTES_PER_MB
+            return "File is %.1f MB, editor limit is %d MB".format(mb, MAX_EDITABLE_BYTES / BYTES_PER_MB)
+        }
+        val sniffLen = minOf(bytes.size, BINARY_SNIFF_BYTES)
+        for (i in 0 until sniffLen) {
+            if (bytes[i].toInt() == 0) {
+                return "Binary file is not supported by the editor"
+            }
+        }
+        return null
+    }
+
     private companion object {
         const val DEFAULT_LOCAL_PICKER_PATH = "/storage/emulated/0"
+        private const val BYTES_PER_MB = 1024 * 1024
+        const val MAX_EDITABLE_BYTES = 10 * BYTES_PER_MB
+        const val BINARY_SNIFF_BYTES = 8 * 1024
     }
 
     private fun repoFor(isRemote: Boolean): FileSystemRepository =
@@ -174,6 +202,29 @@ class CodeEditorViewModel @Inject constructor(
             val result = runCatching { repoFor(isRemote).getFileContent(path) }
             result.fold(
                 onSuccess = { bytes ->
+                    // Phase 11 P4.5 — large-file / binary-file guards.
+                    val guard = guardFileContent(bytes)
+                    if (guard != null) {
+                        _uiState.update { state ->
+                            state.copy(
+                                tabs = state.tabs.map { tab ->
+                                    if (tab.id == tabId) {
+                                        tab.copy(
+                                            isLoading = false,
+                                            error = guard,
+                                            // Force read-only so the dirty
+                                            // flag never arms Save on a
+                                            // refused-to-load file.
+                                        )
+                                    } else {
+                                        tab
+                                    }
+                                },
+                                error = "Cannot open $filename: $guard",
+                            )
+                        }
+                        return@fold
+                    }
                     val text = bytes.toString(Charsets.UTF_8)
                     _uiState.update { state ->
                         state.copy(
