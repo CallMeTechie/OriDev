@@ -3,11 +3,6 @@ package dev.ori.feature.editor.ui
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -20,7 +15,13 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.ori.core.ui.component.OriDevTopBar
+import dev.ori.core.ui.components.OriIconButton
+import dev.ori.core.ui.components.OriTopBar
+import dev.ori.core.ui.components.OriTopBarDefaults
+import dev.ori.core.ui.icons.lucide.ChevronLeft
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.Save
+import dev.ori.core.ui.icons.lucide.Search
 
 @Composable
 fun CodeEditorScreen(
@@ -51,19 +52,36 @@ fun CodeEditorScreen(
 
     Scaffold(
         topBar = {
-            OriDevTopBar(
+            // Phase 11 P2.2 — replaces deprecated OriDevTopBar (M3 64dp wrapper)
+            // with the 40 dp HeightDense OriTopBar per code-editor.html mockup.
+            // Material Save/Search icons replaced with Lucide equivalents per
+            // the Phase 11 forbidden-imports policy.
+            OriTopBar(
                 title = title,
-                onNavigateBack = onNavigateBack,
+                height = OriTopBarDefaults.HeightDense,
+                navigationIcon = if (onNavigateBack != null) {
+                    {
+                        OriIconButton(
+                            icon = LucideIcons.ChevronLeft,
+                            contentDescription = "Zurück",
+                            onClick = onNavigateBack,
+                        )
+                    }
+                } else {
+                    null
+                },
                 actions = {
-                    IconButton(
+                    OriIconButton(
+                        icon = LucideIcons.Save,
+                        contentDescription = "Datei speichern",
                         onClick = { viewModel.onEvent(CodeEditorEvent.Save) },
                         enabled = activeTab?.isDirty == true && !uiState.isReadOnly,
-                    ) {
-                        Icon(Icons.Default.Save, contentDescription = "Datei speichern")
-                    }
-                    IconButton(onClick = { viewModel.onEvent(CodeEditorEvent.ToggleSearch) }) {
-                        Icon(Icons.Default.Search, contentDescription = "Suchen und Ersetzen")
-                    }
+                    )
+                    OriIconButton(
+                        icon = LucideIcons.Search,
+                        contentDescription = "Suchen und Ersetzen",
+                        onClick = { viewModel.onEvent(CodeEditorEvent.ToggleSearch) },
+                    )
                 },
             )
         },
