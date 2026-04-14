@@ -21,8 +21,10 @@ import dev.ori.core.ui.components.OriTopBarDefaults
 import dev.ori.core.ui.icons.lucide.ChevronLeft
 import dev.ori.core.ui.icons.lucide.FolderOpen
 import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.Redo2
 import dev.ori.core.ui.icons.lucide.Save
 import dev.ori.core.ui.icons.lucide.Search
+import dev.ori.core.ui.icons.lucide.Undo2
 
 @Composable
 fun CodeEditorScreen(
@@ -31,6 +33,8 @@ fun CodeEditorScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    // Phase 11 P4.4 — imperative handle into Sora's built-in undo stack.
+    val editorController = remember { SoraEditorController() }
 
     LaunchedEffect(uiState.error) {
         uiState.error?.let {
@@ -72,10 +76,6 @@ fun CodeEditorScreen(
                     null
                 },
                 actions = {
-                    // Phase 11 P4.3 — "Open file" action reveals the
-                    // RemoteFilePickerSheet. Starts on the current tab's
-                    // parent dir if a tab is open, otherwise on the local
-                    // storage root.
                     OriIconButton(
                         icon = LucideIcons.FolderOpen,
                         contentDescription = "Datei öffnen",
@@ -87,6 +87,22 @@ fun CodeEditorScreen(
                             val startRemote = activeTab?.isRemote ?: false
                             viewModel.onEvent(CodeEditorEvent.ShowPicker(startRemote, start))
                         },
+                    )
+                    // Phase 11 P4.4 — undo/redo actions driven by
+                    // SoraEditorController (backed by Sora's internal edit
+                    // stack). Disabled when there's nothing to un/redo or
+                    // when the editor is read-only.
+                    OriIconButton(
+                        icon = LucideIcons.Undo2,
+                        contentDescription = "Rückgängig",
+                        onClick = { editorController.undo() },
+                        enabled = editorController.canUndo && !uiState.isReadOnly,
+                    )
+                    OriIconButton(
+                        icon = LucideIcons.Redo2,
+                        contentDescription = "Wiederherstellen",
+                        onClick = { editorController.redo() },
+                        enabled = editorController.canRedo && !uiState.isReadOnly,
                     )
                     OriIconButton(
                         icon = LucideIcons.Save,
@@ -144,6 +160,7 @@ fun CodeEditorScreen(
                         .semantics {
                             contentDescription = "Code-Editor, Sprache $language"
                         },
+                    controller = editorController,
                 )
                 GitDiffStatusBar(summary = activeTab.gitDiffSummary)
             }
