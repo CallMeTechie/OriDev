@@ -35,14 +35,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.ori.core.ui.theme.Gray100
+import dev.ori.core.ui.theme.Gray200
 import dev.ori.core.ui.theme.Indigo500
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-private val KeyboardBackground = Color(0xFFF3F4F6)
+// Phase 11 P2.1-polish — replaced hardcoded hex #F3F4F6 / #E5E7EB with the
+// Gray100 / Gray200 theme tokens per the no-hardcoded-colours convention.
+private val KeyboardBackground = Gray100
 private val KeyBackground = Color.White
-private val KeyBorder = Color(0xFFE5E7EB)
+private val KeyBorder = Gray200
 private val KeyShape = RoundedCornerShape(8.dp)
 
 private const val ESC = "\u001b"
