@@ -1,11 +1,5 @@
 package dev.ori.feature.filemanager.ui
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DriveFileRenameOutline
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -14,8 +8,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import dev.ori.core.ui.icons.lucide.ArrowLeftRight
+import dev.ori.core.ui.icons.lucide.Info
+import dev.ori.core.ui.icons.lucide.Lock
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.PenLine
+import dev.ori.core.ui.icons.lucide.Trash2
 import dev.ori.domain.model.FileItem
 
+// Phase 11 P2.5-polish — Lucide icons replace the entire Material icon set
+// used by this menu (Info, DriveFileRenameOutline, Lock, SwapHoriz, Delete)
+// per the forbidden-imports policy.
 @Composable
 @Suppress("UnusedParameter")
 fun FileContextMenu(
@@ -40,7 +43,7 @@ fun FileContextMenu(
                 onInfo()
                 onDismiss()
             },
-            leadingIcon = { Icon(Icons.Default.Info, null) },
+            leadingIcon = { Icon(LucideIcons.Info, null) },
         )
         DropdownMenuItem(
             text = { Text("Rename") },
@@ -48,7 +51,7 @@ fun FileContextMenu(
                 onRename()
                 onDismiss()
             },
-            leadingIcon = { Icon(Icons.Default.DriveFileRenameOutline, null) },
+            leadingIcon = { Icon(LucideIcons.PenLine, null) },
         )
         DropdownMenuItem(
             text = { Text("Permissions") },
@@ -56,7 +59,7 @@ fun FileContextMenu(
                 onChmod()
                 onDismiss()
             },
-            leadingIcon = { Icon(Icons.Default.Lock, null) },
+            leadingIcon = { Icon(LucideIcons.Lock, null) },
         )
         DropdownMenuItem(
             text = { Text("Transfer") },
@@ -64,7 +67,7 @@ fun FileContextMenu(
                 onTransfer()
                 onDismiss()
             },
-            leadingIcon = { Icon(Icons.Default.SwapHoriz, null) },
+            leadingIcon = { Icon(LucideIcons.ArrowLeftRight, null) },
         )
         HorizontalDivider()
         DropdownMenuItem(
@@ -75,7 +78,7 @@ fun FileContextMenu(
             },
             leadingIcon = {
                 Icon(
-                    Icons.Default.Delete,
+                    LucideIcons.Trash2,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error,
                 )

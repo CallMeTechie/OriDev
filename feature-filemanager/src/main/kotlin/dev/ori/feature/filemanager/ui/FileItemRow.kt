@@ -14,13 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,7 +31,17 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ori.core.common.extension.toHumanReadableSize
+import dev.ori.core.ui.icons.lucide.File
+import dev.ori.core.ui.icons.lucide.FileCode
+import dev.ori.core.ui.icons.lucide.FileText
+import dev.ori.core.ui.icons.lucide.Folder
+import dev.ori.core.ui.icons.lucide.Image
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.Settings
+import dev.ori.core.ui.theme.Gray400
 import dev.ori.core.ui.theme.Indigo50
+import dev.ori.core.ui.theme.StatusConnected
+import dev.ori.core.ui.theme.StatusWarning
 import dev.ori.domain.model.FileItem
 import dev.ori.domain.model.GitStatus
 
@@ -151,10 +154,11 @@ private fun GitStatusDot(
     status: GitStatus,
     modifier: Modifier = Modifier,
 ) {
+    // Phase 11 P2.5-polish — theme tokens replace hardcoded hex.
     val color = when (status) {
-        GitStatus.STAGED -> Color(0xFF10B981)
-        GitStatus.MODIFIED -> Color(0xFFF59E0B)
-        GitStatus.UNTRACKED -> Color(0xFF9CA3AF)
+        GitStatus.STAGED -> StatusConnected
+        GitStatus.MODIFIED -> StatusWarning
+        GitStatus.UNTRACKED -> Gray400
     }
     Box(
         modifier = modifier
@@ -164,23 +168,27 @@ private fun GitStatusDot(
     )
 }
 
+// Phase 11 P2.5-polish — Lucide icons replace Material file glyphs
+// (forbidden-imports policy). FileCode covers source files, FileText covers
+// documents, Image covers raster/vector images, Settings covers config files,
+// and the generic File icon is the fallback (replacing InsertDriveFile).
 private fun fileIcon(file: FileItem): ImageVector {
-    if (file.isDirectory) return Icons.Default.Folder
+    if (file.isDirectory) return LucideIcons.Folder
     val extension = file.name.substringAfterLast('.', "").lowercase()
     return when (extension) {
         "kt", "java", "py", "js", "ts", "c", "cpp", "h", "rs", "go", "rb", "swift",
         "sh", "bash", "zsh", "html", "css", "xml", "json", "yaml", "yml", "toml",
-        -> Icons.Default.Code
+        -> LucideIcons.FileCode
 
         "md", "txt", "doc", "docx", "pdf", "rtf", "odt",
-        -> Icons.Default.Description
+        -> LucideIcons.FileText
 
         "png", "jpg", "jpeg", "gif", "bmp", "svg", "webp", "ico",
-        -> Icons.Default.Image
+        -> LucideIcons.Image
 
         "conf", "cfg", "ini", "properties", "env", "gradle",
-        -> Icons.Default.Settings
+        -> LucideIcons.Settings
 
-        else -> Icons.AutoMirrored.Filled.InsertDriveFile
+        else -> LucideIcons.File
     }
 }
