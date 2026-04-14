@@ -60,6 +60,7 @@ dependencies {
     testImplementation(libs.truth)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.room.testing)
+    testImplementation(libs.turbine)
 
     androidTestImplementation(libs.test.runner)
     androidTestImplementation(libs.test.core)

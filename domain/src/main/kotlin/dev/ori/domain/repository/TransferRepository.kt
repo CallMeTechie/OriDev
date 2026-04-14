@@ -25,5 +25,12 @@ interface TransferRepository {
 
     suspend fun setNextRetryAt(id: Long, nextRetryAt: Long)
 
+    /**
+     * Phase 12 P12.4 — atomic retry scheduling. Increments `retryCount`,
+     * flips the row back to `QUEUED`, and stamps `nextRetryAt`. Used by
+     * the per-transfer worker coroutine after a recoverable failure.
+     */
+    suspend fun scheduleRetry(id: Long, nextRetryAt: Long)
+
     suspend fun getTransferById(id: Long): TransferRequest?
 }

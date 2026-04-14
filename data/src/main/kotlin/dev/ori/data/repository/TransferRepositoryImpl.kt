@@ -85,6 +85,10 @@ class TransferRepositoryImpl @Inject constructor(
         dao.setNextRetryAt(id, nextRetryAt)
     }
 
+    override suspend fun scheduleRetry(id: Long, nextRetryAt: Long) {
+        dao.scheduleRetry(id, nextRetryAt)
+    }
+
     override suspend fun getTransferById(id: Long): TransferRequest? =
         dao.getById(id)?.toDomain()
 
