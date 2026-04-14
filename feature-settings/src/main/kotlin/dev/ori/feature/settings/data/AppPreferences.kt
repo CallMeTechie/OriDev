@@ -81,12 +81,23 @@ public class AppPreferences(
     private val autoResumeKey = booleanPreferencesKey("auto_resume")
     private val overwriteModeKey = stringPreferencesKey("overwrite_mode")
 
+    // Phase 11 P4.6 — retry policy knobs used by the future transfer engine.
+    // maxRetryAttempts caps how many times a failed transfer auto-retries
+    // before surfacing the failure to the user; retryBackoffSeconds is the
+    // *initial* delay in exponential backoff (doubles per attempt).
+    private val maxRetryAttemptsKey = intPreferencesKey("max_retry_attempts")
+    private val retryBackoffSecondsKey = intPreferencesKey("retry_backoff_seconds")
+
     public val maxParallelTransfers: Flow<Int> =
         dataStore.data.map { it[maxParallelTransfersKey] ?: DEFAULT_MAX_TRANSFERS }
     public val autoResume: Flow<Boolean> =
         dataStore.data.map { it[autoResumeKey] ?: true }
     public val overwriteMode: Flow<String> =
         dataStore.data.map { it[overwriteModeKey] ?: "ask" }
+    public val maxRetryAttempts: Flow<Int> =
+        dataStore.data.map { it[maxRetryAttemptsKey] ?: DEFAULT_MAX_RETRY_ATTEMPTS }
+    public val retryBackoffSeconds: Flow<Int> =
+        dataStore.data.map { it[retryBackoffSecondsKey] ?: DEFAULT_RETRY_BACKOFF_SECONDS }
 
     public suspend fun setMaxParallelTransfers(value: Int) {
         dataStore.edit { it[maxParallelTransfersKey] = value }
@@ -96,6 +107,12 @@ public class AppPreferences(
     }
     public suspend fun setOverwriteMode(value: String) {
         dataStore.edit { it[overwriteModeKey] = value }
+    }
+    public suspend fun setMaxRetryAttempts(value: Int) {
+        dataStore.edit { it[maxRetryAttemptsKey] = value }
+    }
+    public suspend fun setRetryBackoffSeconds(value: Int) {
+        dataStore.edit { it[retryBackoffSecondsKey] = value }
     }
 
     // ---- Security ----------------------------------------------------------
@@ -158,6 +175,8 @@ public class AppPreferences(
             maxParallelTransfers = prefs[maxParallelTransfersKey] ?: DEFAULT_MAX_TRANSFERS,
             autoResume = prefs[autoResumeKey] ?: true,
             overwriteMode = prefs[overwriteModeKey] ?: "ask",
+            maxRetryAttempts = prefs[maxRetryAttemptsKey] ?: DEFAULT_MAX_RETRY_ATTEMPTS,
+            retryBackoffSeconds = prefs[retryBackoffSecondsKey] ?: DEFAULT_RETRY_BACKOFF_SECONDS,
             biometricUnlock = prefs[biometricUnlockKey] ?: false,
             autoLockTimeoutMinutes = prefs[autoLockTimeoutKey] ?: DEFAULT_AUTO_LOCK,
             clipboardClearSeconds = prefs[clipboardClearSecondsKey] ?: DEFAULT_CLIPBOARD_CLEAR,
@@ -174,6 +193,8 @@ public class AppPreferences(
         const val DEFAULT_MAX_TRANSFERS = 3
         const val DEFAULT_AUTO_LOCK = 5
         const val DEFAULT_CLIPBOARD_CLEAR = 30
+        const val DEFAULT_MAX_RETRY_ATTEMPTS = 3
+        const val DEFAULT_RETRY_BACKOFF_SECONDS = 10
     }
 }
 
@@ -191,6 +212,9 @@ public data class AppPreferencesSnapshot(
     val maxParallelTransfers: Int,
     val autoResume: Boolean,
     val overwriteMode: String,
+    // Phase 11 P4.6 — retry policy knobs for the transfer engine.
+    val maxRetryAttempts: Int,
+    val retryBackoffSeconds: Int,
     val biometricUnlock: Boolean,
     val autoLockTimeoutMinutes: Int,
     val clipboardClearSeconds: Int,
