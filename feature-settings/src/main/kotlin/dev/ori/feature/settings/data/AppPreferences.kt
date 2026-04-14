@@ -35,7 +35,7 @@ private val Context.appPrefsDataStore: DataStore<Preferences> by preferencesData
  * 14 sp font, "ask before overwrite" transfer mode).
  */
 @Singleton
-public class AppPreferences(
+public open class AppPreferences(
     private val dataStore: DataStore<Preferences>,
 ) {
     @Inject
@@ -88,15 +88,15 @@ public class AppPreferences(
     private val maxRetryAttemptsKey = intPreferencesKey("max_retry_attempts")
     private val retryBackoffSecondsKey = intPreferencesKey("retry_backoff_seconds")
 
-    public val maxParallelTransfers: Flow<Int> =
+    public open val maxParallelTransfers: Flow<Int> =
         dataStore.data.map { it[maxParallelTransfersKey] ?: DEFAULT_MAX_TRANSFERS }
-    public val autoResume: Flow<Boolean> =
+    public open val autoResume: Flow<Boolean> =
         dataStore.data.map { it[autoResumeKey] ?: true }
-    public val overwriteMode: Flow<String> =
+    public open val overwriteMode: Flow<String> =
         dataStore.data.map { it[overwriteModeKey] ?: "ask" }
-    public val maxRetryAttempts: Flow<Int> =
+    public open val maxRetryAttempts: Flow<Int> =
         dataStore.data.map { it[maxRetryAttemptsKey] ?: DEFAULT_MAX_RETRY_ATTEMPTS }
-    public val retryBackoffSeconds: Flow<Int> =
+    public open val retryBackoffSeconds: Flow<Int> =
         dataStore.data.map { it[retryBackoffSecondsKey] ?: DEFAULT_RETRY_BACKOFF_SECONDS }
 
     public suspend fun setMaxParallelTransfers(value: Int) {
