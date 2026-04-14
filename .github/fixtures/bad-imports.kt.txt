@@ -1,0 +1,36 @@
+// Fixture for .github/ci/check-forbidden-imports.sh self-test (Phase 11 §P0.10.9)
+//
+// This file deliberately contains EVERY forbidden import pattern the script
+// is supposed to catch. The `--self-test` flag of the grep script points at
+// this file and asserts the script reports all 4 violations; if it does not,
+// the script's regexes have regressed and CI fails before any real run.
+//
+// File extension is .txt (not .kt) so IntelliJ does not try to index it as
+// Kotlin source. The .github/ directory is outside any Gradle source set
+// root, so Gradle does not compile it either.
+//
+// DO NOT use this as actual code — it imports Material Icons / Material 3
+// TopAppBar which are forbidden in feature modules and primitive components.
+
+package fixture
+
+// 1) Material Icons — direct import (forbidden)
+import androidx.compose.material.icons.Icons
+
+// 1b) Material Icons — aliased (forbidden, must still trigger)
+import androidx.compose.material.icons.filled.Home as HomeIcon
+
+// 2) Material Icons — wildcard (forbidden)
+import androidx.compose.material.icons.filled.*
+
+// 3) Material 3 TopAppBar family — direct (forbidden in feature-*)
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.MediumTopAppBar
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.CenterAlignedTopAppBar
+
+// 3b) Material 3 TopAppBar family — aliased (forbidden, must still trigger)
+import androidx.compose.material3.MediumTopAppBar as M3Bar
+
+// 4) Material 3 wildcard import in feature module (forbidden)
+import androidx.compose.material3.*

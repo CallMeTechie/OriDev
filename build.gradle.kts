@@ -20,6 +20,19 @@ detekt {
     source.setFrom(files(rootProject.subprojects.map { "${it.projectDir}/src" }))
 }
 
+// Exclude vendored third-party source from detekt + lint analysis. Phase 11
+// PR 3 vendors the icons-lucide-cmp module from composablehorizons/compose-icons
+// (1666 source files; we keep 68 of them) at a pinned tag with package and
+// receiver names rewritten via sed. The vendored files do not follow our
+// detekt formatting rules and we deliberately do not modify them so that
+// future re-vendor diffs against upstream stay clean.
+tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
+    exclude("**/dev/ori/core/ui/icons/lucide/**")
+}
+tasks.withType<io.gitlab.arturbosch.detekt.DetektCreateBaselineTask>().configureEach {
+    exclude("**/dev/ori/core/ui/icons/lucide/**")
+}
+
 dependencies {
     detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:${libs.versions.detekt.get()}")
 }
