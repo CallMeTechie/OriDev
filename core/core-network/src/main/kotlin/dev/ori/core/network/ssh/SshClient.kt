@@ -39,6 +39,38 @@ interface SshClient {
         onProgress: (transferred: Long, total: Long) -> Unit = { _, _ -> },
     )
 
+    /**
+     * Resumable upload overload: streams bytes from [localPath] starting at
+     * [offsetBytes] and appends them to [remotePath].
+     *
+     * Used by the Transfer Engine (Phase 12) to resume a paused transfer without
+     * re-sending bytes that already made it to the destination. Throws on any
+     * SSHJ/IO error; on success, [remotePath] contains exactly `offsetBytes +
+     * (localSize - offsetBytes)` bytes.
+     */
+    suspend fun uploadFileResumable(
+        sessionId: String,
+        localPath: String,
+        remotePath: String,
+        offsetBytes: Long,
+        onProgress: suspend (transferred: Long, total: Long) -> Unit = { _, _ -> },
+    )
+
+    /**
+     * Resumable download overload: streams bytes from [remotePath] starting at
+     * [offsetBytes] and writes them into [localPath] at the same offset.
+     *
+     * Used by the Transfer Engine (Phase 12) to resume a paused download. Throws
+     * on any SSHJ/IO error.
+     */
+    suspend fun downloadFileResumable(
+        sessionId: String,
+        remotePath: String,
+        localPath: String,
+        offsetBytes: Long,
+        onProgress: suspend (transferred: Long, total: Long) -> Unit = { _, _ -> },
+    )
+
     suspend fun deleteFile(sessionId: String, path: String)
 
     suspend fun rename(sessionId: String, oldPath: String, newPath: String)

@@ -12,6 +12,7 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.io.RandomAccessFile
 import javax.inject.Inject
 
 class FtpClientImpl @Inject constructor() : FtpClient {
@@ -94,6 +95,85 @@ class FtpClientImpl @Inject constructor() : FtpClient {
         }
     }
 
+    /**
+     * Resumable upload using FTP REST (`setRestartOffset`).
+     *
+     * Uses the currently-connected `FTPClient` field; per the Phase 12 plan
+     * (Q3), the higher-level `FtpTransferExecutor` is responsible for owning
+     * its own dedicated `FtpClient`/`FTPClient` per invocation, so this
+     * overload simply mirrors the existing `uploadFile` contract and does not
+     * open a secondary connection itself. Throws on protocol failure.
+     */
+    override suspend fun uploadFileResumable(
+        localPath: String,
+        remotePath: String,
+        offsetBytes: Long,
+        onProgress: suspend (transferred: Long, total: Long) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        val c = requireClient()
+        val localFile = java.io.File(localPath)
+        val totalSize = localFile.length()
+        val safeOffset = offsetBytes.coerceIn(0L, totalSize)
+        FileInputStream(localFile).use { fis ->
+            var skipped = 0L
+            while (skipped < safeOffset) {
+                val s = fis.skip(safeOffset - skipped)
+                if (s <= 0) break
+                skipped += s
+            }
+            if (safeOffset > 0L) {
+                c.setRestartOffset(safeOffset)
+            }
+            val countingStream = ResumableCountingInputStream(
+                delegate = fis,
+                totalSize = totalSize,
+                initialBytes = safeOffset,
+                onProgress = onProgress,
+            )
+            val success = c.storeFile(remotePath, countingStream)
+            if (!success) {
+                throw IOException("FTP resumable upload failed: ${c.replyString}")
+            }
+        }
+    }
+
+    /**
+     * Resumable download using FTP REST (`setRestartOffset`).
+     *
+     * Opens the local file as `RandomAccessFile("rw")`, seeks to `offsetBytes`,
+     * then streams the remote file via `retrieveFile` into an output stream
+     * backed by the seeked `FileChannel`. Throws on protocol failure.
+     */
+    override suspend fun downloadFileResumable(
+        remotePath: String,
+        localPath: String,
+        offsetBytes: Long,
+        onProgress: suspend (transferred: Long, total: Long) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        val c = requireClient()
+        val localFile = java.io.File(localPath)
+        val safeOffset = offsetBytes.coerceAtLeast(0L)
+        RandomAccessFile(localFile, "rw").use { raf ->
+            if (safeOffset == 0L) {
+                raf.setLength(0L)
+            }
+            raf.seek(safeOffset)
+            if (safeOffset > 0L) {
+                c.setRestartOffset(safeOffset)
+            }
+            val out = java.nio.channels.Channels.newOutputStream(raf.channel)
+            val countingStream = ResumableCountingOutputStream(
+                delegate = out,
+                initialBytes = safeOffset,
+                onProgress = onProgress,
+            )
+            val success = c.retrieveFile(remotePath, countingStream)
+            if (!success) {
+                throw IOException("FTP resumable download failed: ${c.replyString}")
+            }
+        }
+    }
+
     override suspend fun deleteFile(path: String) = withContext(Dispatchers.IO) {
         val c = requireClient()
         val success = c.deleteFile(path)
@@ -136,6 +216,67 @@ class FtpClientImpl @Inject constructor() : FtpClient {
             permissions = rawListing?.substring(0, 10) ?: "",
             owner = user ?: "",
         )
+    }
+}
+
+private class ResumableCountingInputStream(
+    private val delegate: InputStream,
+    private val totalSize: Long,
+    initialBytes: Long,
+    private val onProgress: suspend (Long, Long) -> Unit,
+) : InputStream() {
+
+    private var bytesRead: Long = initialBytes
+
+    override fun read(): Int {
+        val b = delegate.read()
+        if (b != -1) {
+            bytesRead++
+            kotlinx.coroutines.runBlocking { onProgress(bytesRead, totalSize) }
+        }
+        return b
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        val n = delegate.read(b, off, len)
+        if (n > 0) {
+            bytesRead += n
+            kotlinx.coroutines.runBlocking { onProgress(bytesRead, totalSize) }
+        }
+        return n
+    }
+
+    override fun close() {
+        delegate.close()
+    }
+}
+
+private class ResumableCountingOutputStream(
+    private val delegate: OutputStream,
+    initialBytes: Long,
+    private val onProgress: suspend (Long, Long) -> Unit,
+) : OutputStream() {
+
+    private var bytesWritten: Long = initialBytes
+
+    override fun write(b: Int) {
+        delegate.write(b)
+        bytesWritten++
+        kotlinx.coroutines.runBlocking { onProgress(bytesWritten, -1) }
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        delegate.write(b, off, len)
+        bytesWritten += len
+        kotlinx.coroutines.runBlocking { onProgress(bytesWritten, -1) }
+    }
+
+    override fun flush() {
+        delegate.flush()
+    }
+
+    override fun close() {
+        delegate.close()
     }
 }
 
