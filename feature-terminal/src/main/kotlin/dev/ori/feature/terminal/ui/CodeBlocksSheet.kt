@@ -10,9 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +25,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.ori.core.ui.icons.lucide.Copy
+import dev.ori.core.ui.icons.lucide.ExternalLink
+import dev.ori.core.ui.icons.lucide.LucideIcons
 import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -151,10 +151,10 @@ private fun CodeBlockRow(
             horizontalArrangement = Arrangement.End,
         ) {
             IconButton(onClick = onCopy) {
-                Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
+                Icon(LucideIcons.Copy, contentDescription = "Copy")
             }
             IconButton(onClick = onOpenInEditor) {
-                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = "Open in Editor")
+                Icon(LucideIcons.ExternalLink, contentDescription = "Open in Editor")
             }
         }
     }
