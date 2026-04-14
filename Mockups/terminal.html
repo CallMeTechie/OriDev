@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<title>Ori:Dev — SSH Terminal</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    /* Light Chrome */
+    --chrome-bg: #FFFFFF;
+    --chrome-border: #E5E7EB;
+    --chrome-text: #111827;
+    --chrome-text-secondary: #6B7280;
+    --chrome-surface: #F3F4F6;
+    --chrome-surface-hover: #E5E7EB;
+
+    /* Accent */
+    --accent: #6366F1;
+    --accent-hover: #4F46E5;
+    --accent-light: #EEF2FF;
+    --accent-text: #FFFFFF;
+
+    /* Terminal (Tokyo Night) */
+    --term-bg: #1A1B26;
+    --term-fg: #A9B1D6;
+    --term-green: #9ECE6A;
+    --term-red: #F7768E;
+    --term-yellow: #E0AF68;
+    --term-blue: #7AA2F7;
+    --term-purple: #BB9AF7;
+    --term-cyan: #7DCFFF;
+    --term-comment: #565F89;
+    --term-selection: #283457;
+    --term-cursor: #C0CAF5;
+
+    /* Layout */
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-xs: 6px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+    --shadow-xl: 0 16px 48px rgba(0,0,0,0.16);
+
+    --keyboard-height: 40%;
+    --terminal-height: 60%;
+  }
+
+  html, body {
+    height: 100%; width: 100%;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--chrome-surface);
+    color: var(--chrome-text);
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  /* ======================== MAIN LAYOUT ======================== */
+  .app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+    background: var(--chrome-bg);
+  }
+
+  /* ======================== TOP BAR ======================== */
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    height: 44px;
+    min-height: 44px;
+    background: var(--chrome-bg);
+    border-bottom: 1px solid var(--chrome-border);
+    z-index: 10;
+  }
+
+  .top-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .app-logo {
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--accent);
+    letter-spacing: -0.3px;
+  }
+
+  .app-logo span {
+    color: var(--chrome-text);
+    font-weight: 500;
+  }
+
+  .connection-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--chrome-text-secondary);
+    background: var(--chrome-surface);
+    padding: 3px 10px;
+    border-radius: 100px;
+    font-weight: 500;
+  }
+
+  .connection-badge .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--term-green);
+  }
+
+  .top-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .top-icon-btn {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-sm);
+    border: none;
+    background: transparent;
+    color: var(--chrome-text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .top-icon-btn:hover {
+    background: var(--chrome-surface);
+    color: var(--chrome-text);
+  }
+
+  .top-icon-btn svg { width: 18px; height: 18px; }
+
+  .recording-indicator {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--term-red);
+    padding: 3px 10px;
+    border-radius: 100px;
+    background: #FEF2F2;
+  }
+
+  .recording-indicator .rec-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--term-red);
+    animation: pulse-rec 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse-rec {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ======================== TAB BAR ======================== */
+  .tab-bar {
+    display: flex;
+    align-items: stretch;
+    height: 40px;
+    min-height: 40px;
+    background: var(--chrome-bg);
+    border-bottom: 1px solid var(--chrome-border);
+    padding: 0 12px;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .tab-bar::-webkit-scrollbar { display: none; }
+
+  .tab-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 14px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--chrome-text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    position: relative;
+  }
+
+  .tab-item:hover {
+    color: var(--chrome-text);
+    background: var(--chrome-surface);
+  }
+
+  .tab-item.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+  }
+
+  .tab-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .tab-dot.green { background: var(--term-green); }
+  .tab-dot.blue { background: var(--term-blue); }
+  .tab-dot.yellow { background: var(--term-yellow); }
+
+  .tab-label-sub {
+    font-size: 10.5px;
+    color: var(--chrome-text-secondary);
+    font-weight: 400;
+    opacity: 0.7;
+  }
+
+  .tab-close {
+    width: 16px; height: 16px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    color: var(--chrome-text-secondary);
+    opacity: 0;
+    transition: all 0.1s;
+    margin-left: 2px;
+  }
+
+  .tab-item:hover .tab-close { opacity: 0.6; }
+  .tab-close:hover { opacity: 1; background: var(--chrome-surface-hover); }
+
+  .tab-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    min-width: 32px;
+    color: var(--chrome-text-secondary);
+    cursor: pointer;
+    font-size: 16px;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s;
+  }
+
+  .tab-add:hover { color: var(--accent); }
+
+  /* ======================== MAIN CONTENT ======================== */
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    position: relative;
+  }
+
+  /* ======================== TERMINAL ======================== */
+  .terminal-wrapper {
+    flex: var(--terminal-height);
+    min-height: 100px;
+    position: relative;
+    background: var(--term-bg);
+    overflow: hidden;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .terminal-content {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 12px 14px;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--term-fg);
+    scrollbar-width: thin;
+    scrollbar-color: var(--term-comment) transparent;
+  }
+
+  .terminal-content::-webkit-scrollbar { width: 6px; }
+  .terminal-content::-webkit-scrollbar-track { background: transparent; }
+  .terminal-content::-webkit-scrollbar-thumb { background: var(--term-comment); border-radius: 3px; }
+
+  .term-line { white-space: pre-wrap; word-break: break-all; }
+  .term-prompt { color: var(--term-green); font-weight: 600; }
+  .term-command { color: var(--term-fg); font-weight: 500; }
+  .term-dir { color: var(--term-blue); }
+  .term-file { color: var(--term-fg); }
+  .term-exec { color: var(--term-green); }
+  .term-link { color: var(--term-cyan); }
+  .term-size { color: var(--term-yellow); }
+  .term-date { color: var(--term-purple); }
+  .term-comment { color: var(--term-comment); }
+  .term-error { color: var(--term-red); }
+  .term-keyword { color: var(--term-purple); }
+  .term-string { color: var(--term-green); }
+  .term-function { color: var(--term-blue); }
+  .term-type { color: var(--term-cyan); }
+  .term-number { color: var(--term-yellow); }
+  .term-bold { font-weight: 700; }
+  .term-dim { opacity: 0.5; }
+
+  .cursor-block {
+    display: inline-block;
+    width: 7.2px;
+    height: 15px;
+    background: var(--term-cursor);
+    animation: blink 1s step-end infinite;
+    vertical-align: text-bottom;
+    margin-left: 1px;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  /* Copy/Paste floating toolbar */
+  .clipboard-toolbar {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    display: flex;
+    gap: 2px;
+    background: var(--chrome-bg);
+    border-radius: 100px;
+    padding: 3px;
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--chrome-border);
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .terminal-wrapper:hover .clipboard-toolbar { opacity: 1; }
+
+  .clip-btn {
+    display: flex; align-items: center; gap: 4px;
+    padding: 4px 10px;
+    border: none;
+    background: transparent;
+    color: var(--chrome-text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    font-family: inherit;
+    border-radius: 100px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .clip-btn:hover {
+    background: var(--chrome-surface);
+    color: var(--chrome-text);
+  }
+
+  .clip-btn svg { width: 13px; height: 13px; }
+
+  /* ======================== SPLIT DIVIDER ======================== */
+  .split-divider {
+    height: 8px;
+    min-height: 8px;
+    background: var(--chrome-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: row-resize;
+    z-index: 5;
+    border-top: 1px solid var(--chrome-border);
+    border-bottom: 1px solid var(--chrome-border);
+    transition: background 0.15s;
+  }
+
+  .split-divider:hover, .split-divider.dragging {
+    background: var(--accent-light);
+  }
+
+  .split-divider-handle {
+    width: 36px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--chrome-border);
+    transition: background 0.15s;
+  }
+
+  .split-divider:hover .split-divider-handle,
+  .split-divider.dragging .split-divider-handle {
+    background: var(--accent);
+  }
+
+  /* ======================== KEYBOARD PANEL ======================== */
+  .keyboard-panel {
+    flex: var(--keyboard-height);
+    min-height: 120px;
+    background: var(--chrome-surface);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 8px 6px 10px;
+    overflow: hidden;
+  }
+
+  .key-row {
+    display: flex;
+    gap: 4px;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .key {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 34px;
+    padding: 0 8px;
+    background: var(--chrome-bg);
+    border: 1px solid var(--chrome-border);
+    border-radius: var(--radius-xs);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--chrome-text);
+    cursor: pointer;
+    transition: all 0.1s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+  }
+
+  .key:active, .key.pressed {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+    transform: scale(0.95);
+    box-shadow: 0 0 0 2px var(--accent-light);
+  }
+
+  .key:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .key.modifier {
+    background: var(--chrome-surface);
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--chrome-text-secondary);
+    letter-spacing: 0.2px;
+  }
+
+  .key.modifier.active {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+  }
+
+  .key.modifier:hover {
+    background: var(--chrome-surface-hover);
+  }
+
+  .key.wide { min-width: 48px; }
+  .key.wider { min-width: 64px; }
+  .key.widest { flex: 1; min-width: 80px; }
+  .key.space-key { flex: 3; min-width: 120px; }
+
+  .key.fn-key {
+    font-size: 10px;
+    min-width: 36px;
+    height: 28px;
+    color: var(--chrome-text-secondary);
+  }
+
+  .key.arrow-key {
+    min-width: 36px;
+    font-size: 14px;
+    color: var(--chrome-text-secondary);
+  }
+
+  .key.arrow-key svg { width: 14px; height: 14px; }
+
+  .key.enter-key {
+    background: var(--accent);
+    color: var(--accent-text);
+    border-color: var(--accent);
+    font-weight: 600;
+    min-width: 56px;
+  }
+
+  .key.enter-key:hover {
+    background: var(--accent-hover);
+    color: var(--accent-text);
+  }
+
+  /* ======================== BOTTOM TOOLBAR ======================== */
+  .bottom-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 36px;
+    min-height: 36px;
+    padding: 0 12px;
+    background: var(--chrome-bg);
+    border-top: 1px solid var(--chrome-border);
+  }
+
+  .toolbar-left, .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .toolbar-chip {
+    display: flex; align-items: center; gap: 4px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--chrome-text-secondary);
+    background: var(--chrome-surface);
+    border-radius: 100px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+
+  .toolbar-chip:hover {
+    background: var(--chrome-surface-hover);
+    color: var(--chrome-text);
+  }
+
+  .toolbar-chip svg { width: 13px; height: 13px; }
+
+  .toolbar-chip.active {
+    background: var(--accent-light);
+    color: var(--accent);
+  }
+
+  /* ======================== FAB ======================== */
+  .fab-claude {
+    position: absolute;
+    bottom: 56px;
+    right: 16px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 18px;
+    background: var(--accent);
+    color: var(--accent-text);
+    border: none;
+    border-radius: 100px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: var(--shadow-lg);
+    z-index: 20;
+    transition: all 0.2s;
+    letter-spacing: -0.1px;
+  }
+
+  .fab-claude:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-xl);
+  }
+
+  .fab-claude svg { width: 16px; height: 16px; }
+
+  /* ======================== ORIENTATION TOGGLE ======================== */
+  .app-container.portrait {
+    /* Reconfigure for portrait */
+  }
+
+  .app-container.portrait .keyboard-panel {
+    flex: 50%;
+  }
+
+  .app-container.portrait .terminal-wrapper {
+    flex: 50%;
+  }
+
+  /* ======================== SELECTION HIGHLIGHT ======================== */
+  .term-selection-highlight {
+    background: var(--term-selection);
+    border-radius: 2px;
+  }
+
+  /* Smooth animations */
+  .terminal-wrapper, .keyboard-panel {
+    transition: flex 0.2s ease;
+  }
+
+  /* Mobile adjustments */
+  @media (max-width: 600px) {
+    .key { min-width: 26px; height: 30px; font-size: 10.5px; }
+    .key.fn-key { min-width: 28px; height: 24px; font-size: 9px; }
+    .terminal-content { font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app-container" id="appContainer">
+
+  <!-- TOP BAR -->
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <div class="app-logo">Ori<span>:Dev</span></div>
+      <div class="connection-badge">
+        <div class="dot"></div>
+        <span>ssh root@192.168.1.42</span>
+      </div>
+    </div>
+    <div class="top-bar-right">
+      <div class="recording-indicator">
+        <div class="rec-dot"></div>
+        REC
+      </div>
+      <button class="top-icon-btn" id="orientationToggle" title="Toggle orientation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="2" width="16" height="20" rx="2"/>
+          <line x1="12" y1="18" x2="12" y2="18"/>
+        </svg>
+      </button>
+      <button class="top-icon-btn" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
+      </button>
+      <button class="top-icon-btn" title="More">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- TAB BAR -->
+  <div class="tab-bar" id="tabBar">
+    <div class="tab-item active" data-tab="server01">
+      <div class="tab-dot green"></div>
+      <span>server01</span>
+      <div class="tab-close">&times;</div>
+    </div>
+    <div class="tab-item" data-tab="server02">
+      <div class="tab-dot blue"></div>
+      <span>server02</span>
+      <span class="tab-label-sub">(Claude Code)</span>
+      <div class="tab-close">&times;</div>
+    </div>
+    <div class="tab-item" data-tab="server03">
+      <div class="tab-dot yellow"></div>
+      <span>server03</span>
+      <span class="tab-label-sub">(Logs)</span>
+      <div class="tab-close">&times;</div>
+    </div>
+    <div class="tab-add" title="New tab">+</div>
+  </div>
+
+  <!-- MAIN CONTENT AREA -->
+  <div class="main-content">
+
+    <!-- TERMINAL -->
+    <div class="terminal-wrapper" id="terminalWrapper">
+      <!-- Clipboard toolbar -->
+      <div class="clipboard-toolbar">
+        <button class="clip-btn" id="btnCopy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          Copy
+        </button>
+        <button class="clip-btn" id="btnPaste">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+          Paste
+        </button>
+        <button class="clip-btn" id="btnSelect">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 10H3M21 6H3M21 14H3M17 18H3"/></svg>
+          Select
+        </button>
+      </div>
+
+      <div class="terminal-content" id="terminalContent"></div>
+    </div>
+
+    <!-- SPLIT DIVIDER -->
+    <div class="split-divider" id="splitDivider">
+      <div class="split-divider-handle"></div>
+    </div>
+
+    <!-- KEYBOARD PANEL -->
+    <div class="keyboard-panel" id="keyboardPanel">
+      <!-- F-keys row -->
+      <div class="key-row">
+        <button class="key fn-key" data-key="Escape">Esc</button>
+        <button class="key fn-key" data-key="F1">F1</button>
+        <button class="key fn-key" data-key="F2">F2</button>
+        <button class="key fn-key" data-key="F3">F3</button>
+        <button class="key fn-key" data-key="F4">F4</button>
+        <button class="key fn-key" data-key="F5">F5</button>
+        <button class="key fn-key" data-key="F6">F6</button>
+        <button class="key fn-key" data-key="F7">F7</button>
+        <button class="key fn-key" data-key="F8">F8</button>
+        <button class="key fn-key" data-key="F9">F9</button>
+        <button class="key fn-key" data-key="F10">F10</button>
+        <button class="key fn-key" data-key="F11">F11</button>
+        <button class="key fn-key" data-key="F12">F12</button>
+      </div>
+      <!-- Modifier row -->
+      <div class="key-row">
+        <button class="key modifier wide" data-key="Tab">Tab</button>
+        <button class="key modifier wide" id="ctrlKey" data-key="Ctrl">Ctrl</button>
+        <button class="key modifier wide" id="altKey" data-key="Alt">Alt</button>
+        <button class="key" data-key="~">~</button>
+        <button class="key" data-key="`">`</button>
+        <button class="key" data-key="|">|</button>
+        <button class="key" data-key="\">\</button>
+        <button class="key" data-key="/">/</button>
+        <button class="key" data-key="-">-</button>
+        <button class="key" data-key="_">_</button>
+        <button class="key" data-key="=">=</button>
+        <button class="key" data-key="[">[</button>
+        <button class="key" data-key="]">]</button>
+        <button class="key" data-key="{">{</button>
+        <button class="key" data-key="}">}</button>
+      </div>
+      <!-- Number row -->
+      <div class="key-row">
+        <button class="key" data-key="1">1</button>
+        <button class="key" data-key="2">2</button>
+        <button class="key" data-key="3">3</button>
+        <button class="key" data-key="4">4</button>
+        <button class="key" data-key="5">5</button>
+        <button class="key" data-key="6">6</button>
+        <button class="key" data-key="7">7</button>
+        <button class="key" data-key="8">8</button>
+        <button class="key" data-key="9">9</button>
+        <button class="key" data-key="0">0</button>
+        <button class="key" data-key="!">!</button>
+        <button class="key" data-key="@">@</button>
+        <button class="key" data-key="#">#</button>
+        <button class="key" data-key="$">$</button>
+      </div>
+      <!-- QWERTY rows -->
+      <div class="key-row">
+        <button class="key" data-key="q">q</button>
+        <button class="key" data-key="w">w</button>
+        <button class="key" data-key="e">e</button>
+        <button class="key" data-key="r">r</button>
+        <button class="key" data-key="t">t</button>
+        <button class="key" data-key="y">y</button>
+        <button class="key" data-key="u">u</button>
+        <button class="key" data-key="i">i</button>
+        <button class="key" data-key="o">o</button>
+        <button class="key" data-key="p">p</button>
+        <button class="key" data-key=";">;</button>
+        <button class="key" data-key=":"">:</button>
+        <button class="key" data-key="'">'</button>
+        <button class="key" data-key='"'>"</button>
+      </div>
+      <div class="key-row">
+        <button class="key" data-key="a">a</button>
+        <button class="key" data-key="s">s</button>
+        <button class="key" data-key="d">d</button>
+        <button class="key" data-key="f">f</button>
+        <button class="key" data-key="g">g</button>
+        <button class="key" data-key="h">h</button>
+        <button class="key" data-key="j">j</button>
+        <button class="key" data-key="k">k</button>
+        <button class="key" data-key="l">l</button>
+        <button class="key" data-key=".">.</button>
+        <button class="key" data-key=",">,</button>
+        <button class="key" data-key="?">?</button>
+        <button class="key" data-key="&">&amp;</button>
+        <button class="key" data-key="*">*</button>
+      </div>
+      <div class="key-row">
+        <button class="key" data-key="z">z</button>
+        <button class="key" data-key="x">x</button>
+        <button class="key" data-key="c">c</button>
+        <button class="key" data-key="v">v</button>
+        <button class="key" data-key="b">b</button>
+        <button class="key" data-key="n">n</button>
+        <button class="key" data-key="m">m</button>
+        <button class="key" data-key="+">+</button>
+        <button class="key" data-key="%">%</button>
+        <button class="key" data-key="^">^</button>
+        <button class="key" data-key="()">(</button>
+        <button class="key" data-key=")">)</button>
+        <button class="key" data-key="<">&lt;</button>
+        <button class="key" data-key=">">&gt;</button>
+      </div>
+      <!-- Bottom row: arrows, space, enter -->
+      <div class="key-row">
+        <button class="key modifier wider" data-key="Backspace">&#9003;</button>
+        <button class="key arrow-key" data-key="ArrowLeft">&larr;</button>
+        <button class="key arrow-key" data-key="ArrowUp">&uarr;</button>
+        <button class="key arrow-key" data-key="ArrowDown">&darr;</button>
+        <button class="key arrow-key" data-key="ArrowRight">&rarr;</button>
+        <button class="key space-key" data-key=" ">Space</button>
+        <button class="key enter-key wider" data-key="Enter">Enter &#9166;</button>
+      </div>
+    </div>
+
+    <!-- FAB -->
+    <button class="fab-claude" id="fabClaude">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+      </svg>
+      Send to Claude
+    </button>
+  </div>
+
+  <!-- BOTTOM TOOLBAR -->
+  <div class="bottom-toolbar">
+    <div class="toolbar-left">
+      <button class="toolbar-chip active" id="toggleKeyboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/></svg>
+        Keyboard
+      </button>
+      <button class="toolbar-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Snippets
+      </button>
+      <button class="toolbar-chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        Quick Cmd
+      </button>
+    </div>
+    <div class="toolbar-right">
+      <span style="font-size:11px;color:var(--chrome-text-secondary);font-weight:500;">UTF-8</span>
+      <span style="font-size:11px;color:var(--chrome-text-secondary);opacity:0.3;">|</span>
+      <span style="font-size:11px;color:var(--chrome-text-secondary);font-weight:500;">zsh</span>
+      <span style="font-size:11px;color:var(--chrome-text-secondary);opacity:0.3;">|</span>
+      <span style="font-size:11px;color:var(--chrome-text-secondary);font-weight:500;" id="termSize">120x36</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================ STATE ============================
+const state = {
+  activeTab: 'server01',
+  commandBuffer: '',
+  ctrlActive: false,
+  altActive: false,
+  history: [],
+  historyIndex: -1,
+  isDragging: false,
+  isPortrait: false,
+  keyboardVisible: true,
+};
+
+// ============================ TERMINAL CONTENT PER TAB ============================
+const tabContents = {
+  server01: { lines: [], inputLine: '' },
+  server02: { lines: [], inputLine: '' },
+  server03: { lines: [], inputLine: '' },
+};
+
+// Pre-populate server01 with ls -la and claude output
+tabContents.server01.lines = [
+  { html: '<span class="term-prompt">root@server01</span>:<span class="term-dir">~/project</span>$ <span class="term-command">ls -la</span>' },
+  { html: '<span class="term-dim">total 48</span>' },
+  { html: 'drwxr-xr-x  <span class="term-number">8</span> root root <span class="term-size">4096</span> <span class="term-date">Apr 10 09:14</span> <span class="term-dir">.</span>' },
+  { html: 'drwxr-xr-x  <span class="term-number">3</span> root root <span class="term-size">4096</span> <span class="term-date">Apr  8 11:02</span> <span class="term-dir">..</span>' },
+  { html: 'drwxr-xr-x  <span class="term-number">2</span> root root <span class="term-size">4096</span> <span class="term-date">Apr 10 09:14</span> <span class="term-dir">.git</span>' },
+  { html: '-rw-r--r--  <span class="term-number">1</span> root root  <span class="term-size"> 847</span> <span class="term-date">Apr  9 15:33</span> <span class="term-file">.gitignore</span>' },
+  { html: '-rw-r--r--  <span class="term-number">1</span> root root <span class="term-size">2104</span> <span class="term-date">Apr 10 08:47</span> <span class="term-file">build.gradle.kts</span>' },
+  { html: 'drwxr-xr-x  <span class="term-number">4</span> root root <span class="term-size">4096</span> <span class="term-date">Apr 10 09:12</span> <span class="term-dir">src</span>' },
+  { html: '-rwxr-xr-x  <span class="term-number">1</span> root root <span class="term-size">8192</span> <span class="term-date">Apr 10 09:14</span> <span class="term-exec">gradlew</span>' },
+  { html: '-rw-r--r--  <span class="term-number">1</span> root root <span class="term-size">1536</span> <span class="term-date">Apr  9 16:20</span> <span class="term-file">settings.gradle.kts</span>' },
+  { html: '-rw-r--r--  <span class="term-number">1</span> root root  <span class="term-size"> 412</span> <span class="term-date">Apr 10 08:51</span> <span class="term-file">README.md</span>' },
+  { html: '' },
+  { html: '<span class="term-prompt">root@server01</span>:<span class="term-dir">~/project</span>$ <span class="term-command">claude -p "review src/main.kt"</span>' },
+  { html: '' },
+  { html: '<span class="term-bold" style="color:var(--term-purple);">  Claude Code</span> <span class="term-dim">v1.0.26</span>' },
+  { html: '<span class="term-dim">  ──────────────────────────────────────────────</span>' },
+  { html: '' },
+  { html: '  <span class="term-bold" style="color:var(--term-blue);">Code Review: src/main.kt</span>' },
+  { html: '' },
+  { html: '  <span class="term-green">+</span> Clean architecture pattern correctly applied' },
+  { html: '  <span class="term-green">+</span> Dependency injection setup looks solid' },
+  { html: '  <span class="term-green">+</span> Coroutine scopes properly managed' },
+  { html: '' },
+  { html: '  <span class="term-yellow">!</span> <span class="term-yellow">Warning:</span> Consider adding error handling at line 42:' },
+  { html: '' },
+  { html: '    <span class="term-comment">  // Current implementation:</span>' },
+  { html: '    <span class="term-keyword">suspend fun</span> <span class="term-function">fetchData</span>(): <span class="term-type">Result</span>&lt;<span class="term-type">List</span>&lt;<span class="term-type">Item</span>&gt;&gt; {' },
+  { html: '        <span class="term-keyword">val</span> response = api.<span class="term-function">getItems</span>()' },
+  { html: '        <span class="term-keyword">return</span> Result.<span class="term-function">success</span>(response.body)' },
+  { html: '    }' },
+  { html: '' },
+  { html: '    <span class="term-comment">  // Suggested improvement:</span>' },
+  { html: '    <span class="term-keyword">suspend fun</span> <span class="term-function">fetchData</span>(): <span class="term-type">Result</span>&lt;<span class="term-type">List</span>&lt;<span class="term-type">Item</span>&gt;&gt; = <span class="term-keyword">runCatching</span> {' },
+  { html: '        <span class="term-keyword">val</span> response = api.<span class="term-function">getItems</span>()' },
+  { html: '        response.body ?: <span class="term-keyword">throw</span> <span class="term-type">IllegalStateException</span>(<span class="term-string">"Empty response"</span>)' },
+  { html: '    }' },
+  { html: '' },
+  { html: '  <span class="term-red">✗</span> <span class="term-red">Issue:</span> Memory leak potential in <span class="term-function">ViewModel.init{}</span> block' },
+  { html: '    Coroutine launched without proper cancellation scope.' },
+  { html: '    Use <span class="term-type">viewModelScope</span>.<span class="term-function">launch</span> instead of <span class="term-type">GlobalScope</span>.<span class="term-function">launch</span>' },
+  { html: '' },
+  { html: '  <span class="term-dim">──────────────────────────────────────────────</span>' },
+  { html: '  <span class="term-bold">Summary:</span> <span class="term-green">7 passed</span> <span class="term-yellow">2 warnings</span> <span class="term-red">1 issue</span>' },
+  { html: '' },
+];
+
+tabContents.server02.lines = [
+  { html: '<span class="term-prompt">root@server02</span>:<span class="term-dir">~/app</span>$ <span class="term-command">claude</span>' },
+  { html: '' },
+  { html: '<span class="term-bold" style="color:var(--term-purple);">  Claude Code</span> <span class="term-dim">v1.0.26 (interactive)</span>' },
+  { html: '' },
+  { html: '  <span class="term-dim">Type your message or use /help for commands.</span>' },
+  { html: '' },
+  { html: '  <span class="term-bold" style="color:var(--term-blue);">You:</span> Explain the authentication flow in this codebase' },
+  { html: '' },
+  { html: '  <span class="term-bold" style="color:var(--term-purple);">Claude:</span> Looking at the codebase, the auth flow works as follows:' },
+  { html: '' },
+  { html: '  <span class="term-number">1.</span> User calls <span class="term-function">AuthManager.login()</span> with credentials' },
+  { html: '  <span class="term-number">2.</span> Credentials are validated via <span class="term-function">AuthRepository.authenticate()</span>' },
+  { html: '  <span class="term-number">3.</span> On success, a JWT is stored in <span class="term-type">SecurePreferences</span>' },
+  { html: '  <span class="term-number">4.</span> <span class="term-type">AuthInterceptor</span> attaches the token to all API requests' },
+  { html: '  <span class="term-number">5.</span> Token refresh is handled by <span class="term-function">TokenRefreshAuthenticator</span>' },
+  { html: '' },
+  { html: '  The implementation uses the <span class="term-keyword">sealed class</span> <span class="term-type">AuthState</span> pattern:' },
+  { html: '    <span class="term-keyword">sealed class</span> <span class="term-type">AuthState</span> {' },
+  { html: '        <span class="term-keyword">object</span> <span class="term-type">Unauthenticated</span> : <span class="term-type">AuthState</span>()' },
+  { html: '        <span class="term-keyword">data class</span> <span class="term-type">Authenticated</span>(<span class="term-keyword">val</span> user: <span class="term-type">User</span>) : <span class="term-type">AuthState</span>()' },
+  { html: '        <span class="term-keyword">object</span> <span class="term-type">Loading</span> : <span class="term-type">AuthState</span>()' },
+  { html: '    }' },
+  { html: '' },
+];
+
+tabContents.server03.lines = [
+  { html: '<span class="term-prompt">root@server03</span>:<span class="term-dir">~</span>$ <span class="term-command">tail -f /var/log/app/production.log</span>' },
+  { html: '' },
+  { html: '<span class="term-date">[2026-04-10 09:12:01]</span> <span class="term-green">INFO </span> Application started on port 8080' },
+  { html: '<span class="term-date">[2026-04-10 09:12:03]</span> <span class="term-green">INFO </span> Database connection pool initialized (max: 20)' },
+  { html: '<span class="term-date">[2026-04-10 09:12:04]</span> <span class="term-green">INFO </span> Redis cache connected at redis://10.0.0.5:6379' },
+  { html: '<span class="term-date">[2026-04-10 09:13:15]</span> <span class="term-blue">DEBUG</span> GET /api/v1/users - 200 OK (12ms)' },
+  { html: '<span class="term-date">[2026-04-10 09:13:16]</span> <span class="term-blue">DEBUG</span> GET /api/v1/items?page=1 - 200 OK (28ms)' },
+  { html: '<span class="term-date">[2026-04-10 09:14:02]</span> <span class="term-yellow">WARN </span> Slow query detected: SELECT * FROM orders (1240ms)' },
+  { html: '<span class="term-date">[2026-04-10 09:14:33]</span> <span class="term-red">ERROR</span> Connection timeout to payment-service:443' },
+  { html: '<span class="term-date">[2026-04-10 09:14:34]</span> <span class="term-red">ERROR</span> Retry 1/3 for payment-service:443' },
+  { html: '<span class="term-date">[2026-04-10 09:14:36]</span> <span class="term-green">INFO </span> Retry successful: payment-service:443 connected' },
+  { html: '<span class="term-date">[2026-04-10 09:15:00]</span> <span class="term-blue">DEBUG</span> POST /api/v1/orders - 201 Created (45ms)' },
+  { html: '<span class="term-date">[2026-04-10 09:15:01]</span> <span class="term-green">INFO </span> Order #4821 processed successfully' },
+  { html: '<span class="term-date">[2026-04-10 09:15:30]</span> <span class="term-blue">DEBUG</span> Health check: all services operational' },
+  { html: '<span class="term-dim">  ...</span> <span class="term-comment">streaming</span>' },
+  { html: '' },
+];
+
+// ============================ COMMAND RESPONSES ============================
+const commandResponses = {
+  'ls': [
+    { html: '<span class="term-dir">src</span>  <span class="term-file">build.gradle.kts</span>  <span class="term-exec">gradlew</span>  <span class="term-file">settings.gradle.kts</span>  <span class="term-file">README.md</span>  <span class="term-file">.gitignore</span>' },
+  ],
+  'pwd': [
+    { html: '/root/project' },
+  ],
+  'whoami': [
+    { html: 'root' },
+  ],
+  'date': [
+    { html: 'Thu Apr 10 09:16:42 UTC 2026' },
+  ],
+  'uname -a': [
+    { html: 'Linux server01 6.1.0-18-arm64 #1 SMP Debian 6.1.76-1 aarch64 GNU/Linux' },
+  ],
+  'free -h': [
+    { html: '              total        used        free      shared  buff/cache   available' },
+    { html: 'Mem:          <span class="term-number">7.6Gi</span>       <span class="term-red">4.2Gi</span>       <span class="term-green">1.8Gi</span>       256Mi       1.6Gi       3.1Gi' },
+    { html: 'Swap:         <span class="term-number">2.0Gi</span>       <span class="term-yellow">512Mi</span>       <span class="term-green">1.5Gi</span>' },
+  ],
+  'uptime': [
+    { html: ' 09:16:42 up 14 days,  3:22,  2 users,  load average: <span class="term-green">0.42</span>, <span class="term-green">0.38</span>, <span class="term-green">0.35</span>' },
+  ],
+  'clear': [],
+  'help': [
+    { html: '<span class="term-bold">Available demo commands:</span>' },
+    { html: '  ls, pwd, whoami, date, uname -a, free -h, uptime' },
+    { html: '  git status, git log, docker ps, htop' },
+    { html: '  clear, help' },
+    { html: '' },
+    { html: '  <span class="term-dim">Any other command will echo a simulated response.</span>' },
+  ],
+  'git status': [
+    { html: 'On branch <span class="term-green">main</span>' },
+    { html: 'Your branch is up to date with \'<span class="term-red">origin/main</span>\'.' },
+    { html: '' },
+    { html: 'Changes not staged for commit:' },
+    { html: '  <span class="term-red">modified:   src/main.kt</span>' },
+    { html: '  <span class="term-red">modified:   src/viewmodel/AuthViewModel.kt</span>' },
+    { html: '' },
+    { html: 'Untracked files:' },
+    { html: '  <span class="term-green">src/util/NetworkMonitor.kt</span>' },
+  ],
+  'git log': [
+    { html: '<span class="term-yellow">commit a3f8d2e</span> <span class="term-dim">(HEAD -> main, origin/main)</span>' },
+    { html: 'Author: dev <dev@oridev.app>' },
+    { html: 'Date:   <span class="term-date">Thu Apr 10 08:47:00 2026</span>' },
+    { html: '' },
+    { html: '    <span class="term-fg">feat: add offline caching for API responses</span>' },
+    { html: '' },
+    { html: '<span class="term-yellow">commit 7b1c5f9</span>' },
+    { html: 'Author: dev <dev@oridev.app>' },
+    { html: 'Date:   <span class="term-date">Wed Apr  9 16:20:00 2026</span>' },
+    { html: '' },
+    { html: '    <span class="term-fg">refactor: extract auth logic into repository</span>' },
+  ],
+  'docker ps': [
+    { html: 'CONTAINER ID   IMAGE                   STATUS          PORTS                    NAMES' },
+    { html: '<span class="term-yellow">a3f8d2e1c</span>      <span class="term-blue">postgres:15</span>             <span class="term-green">Up 14 days</span>      0.0.0.0:5432->5432/tcp   db' },
+    { html: '<span class="term-yellow">7b1c5f9a2</span>      <span class="term-blue">redis:7-alpine</span>          <span class="term-green">Up 14 days</span>      0.0.0.0:6379->6379/tcp   cache' },
+    { html: '<span class="term-yellow">c4d9e8f3b</span>      <span class="term-blue">app:latest</span>              <span class="term-green">Up 2 hours</span>      0.0.0.0:8080->8080/tcp   app' },
+  ],
+  'htop': [
+    { html: '  <span class="term-bold">CPU</span>  [<span class="term-green">||||||||</span><span class="term-dim">                    </span>] <span class="term-number">28.3%</span>   <span class="term-bold">Tasks:</span> <span class="term-number">142</span>, <span class="term-green">3</span> running' },
+    { html: '  <span class="term-bold">Mem</span>  [<span class="term-blue">||||||||||||||||</span><span class="term-dim">            </span>] <span class="term-number">4.2G</span>/<span class="term-number">7.6G</span>' },
+    { html: '  <span class="term-bold">Swp</span>  [<span class="term-yellow">||||</span><span class="term-dim">                        </span>] <span class="term-number">512M</span>/<span class="term-number">2.0G</span>' },
+    { html: '' },
+    { html: '  PID  USER     PRI  NI  VIRT   RES  CPU%  MEM%  TIME+   Command' },
+    { html: '  <span class="term-green">1842</span> root      20   0  2.1G  412M  <span class="term-yellow">12.4</span>   5.3  4:22.15 java -jar app.jar' },
+    { html: '  <span class="term-green"> 923</span> postgres  20   0  1.8G  256M   <span class="term-green">3.1</span>   3.3  2:10.48 postgres: main' },
+    { html: '  <span class="term-green"> 847</span> root      20   0  128M   42M   <span class="term-green">0.8</span>   0.5  0:45.22 redis-server' },
+  ],
+};
+
+// ============================ RENDERING ============================
+const terminalEl = document.getElementById('terminalContent');
+
+function getPrompt() {
+  const tab = state.activeTab;
+  const hosts = { server01: 'server01', server02: 'server02', server03: 'server03' };
+  const dirs = { server01: '~/project', server02: '~/app', server03: '~' };
+  return `<span class="term-prompt">root@${hosts[tab]}</span>:<span class="term-dir">${dirs[tab]}</span>$ `;
+}
+
+function renderTerminal() {
+  const tab = state.activeTab;
+  const data = tabContents[tab];
+  let html = '';
+
+  for (const line of data.lines) {
+    html += `<div class="term-line">${line.html}</div>`;
+  }
+
+  // Current input line
+  html += `<div class="term-line">${getPrompt()}<span class="term-command">${escapeHtml(state.commandBuffer)}</span><span class="cursor-block"></span></div>`;
+
+  terminalEl.innerHTML = html;
+  terminalEl.scrollTop = terminalEl.scrollHeight;
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ============================ COMMAND EXECUTION ============================
+function executeCommand(cmd) {
+  const tab = state.activeTab;
+  const data = tabContents[tab];
+  const trimmed = cmd.trim();
+
+  // Add command line
+  data.lines.push({ html: `${getPrompt()}<span class="term-command">${escapeHtml(cmd)}</span>` });
+
+  if (trimmed === 'clear') {
+    data.lines = [];
+  } else if (commandResponses[trimmed]) {
+    for (const line of commandResponses[trimmed]) {
+      data.lines.push(line);
+    }
+    data.lines.push({ html: '' });
+  } else if (trimmed !== '') {
+    // Generic response
+    data.lines.push({ html: `<span class="term-dim">$ ${escapeHtml(trimmed)}: simulated output</span>` });
+    data.lines.push({ html: '' });
+  }
+
+  // Save to history
+  if (trimmed) {
+    state.history.unshift(trimmed);
+    state.historyIndex = -1;
+  }
+
+  state.commandBuffer = '';
+  renderTerminal();
+}
+
+// ============================ KEY HANDLING ============================
+function handleKey(key) {
+  // Animate key
+  const keyEl = document.querySelector(`.key[data-key="${CSS.escape(key)}"]`);
+  if (keyEl) {
+    keyEl.classList.add('pressed');
+    setTimeout(() => keyEl.classList.remove('pressed'), 120);
+  }
+
+  if (key === 'Enter') {
+    executeCommand(state.commandBuffer);
+    return;
+  }
+
+  if (key === 'Backspace') {
+    state.commandBuffer = state.commandBuffer.slice(0, -1);
+    renderTerminal();
+    return;
+  }
+
+  if (key === 'Tab') {
+    state.commandBuffer += '    ';
+    renderTerminal();
+    return;
+  }
+
+  if (key === 'Escape') {
+    state.commandBuffer = '';
+    renderTerminal();
+    return;
+  }
+
+  if (key === 'ArrowUp') {
+    if (state.historyIndex < state.history.length - 1) {
+      state.historyIndex++;
+      state.commandBuffer = state.history[state.historyIndex];
+      renderTerminal();
+    }
+    return;
+  }
+
+  if (key === 'ArrowDown') {
+    if (state.historyIndex > 0) {
+      state.historyIndex--;
+      state.commandBuffer = state.history[state.historyIndex];
+    } else {
+      state.historyIndex = -1;
+      state.commandBuffer = '';
+    }
+    renderTerminal();
+    return;
+  }
+
+  if (key === 'ArrowLeft' || key === 'ArrowRight') return;
+  if (key.startsWith('F') && key.length <= 3) return;
+  if (key === 'Ctrl' || key === 'Alt') return;
+
+  // Handle Ctrl+C
+  if (state.ctrlActive && key === 'c') {
+    tabContents[state.activeTab].lines.push({
+      html: `${getPrompt()}<span class="term-command">${escapeHtml(state.commandBuffer)}</span>^C`
+    });
+    state.commandBuffer = '';
+    state.ctrlActive = false;
+    document.getElementById('ctrlKey').classList.remove('active');
+    renderTerminal();
+    return;
+  }
+
+  // Handle Ctrl+L
+  if (state.ctrlActive && key === 'l') {
+    tabContents[state.activeTab].lines = [];
+    state.commandBuffer = '';
+    state.ctrlActive = false;
+    document.getElementById('ctrlKey').classList.remove('active');
+    renderTerminal();
+    return;
+  }
+
+  state.commandBuffer += key;
+
+  // Reset modifiers after use
+  if (state.ctrlActive) {
+    state.ctrlActive = false;
+    document.getElementById('ctrlKey').classList.remove('active');
+  }
+  if (state.altActive) {
+    state.altActive = false;
+    document.getElementById('altKey').classList.remove('active');
+  }
+
+  renderTerminal();
+}
+
+// ============================ KEYBOARD EVENTS ============================
+document.querySelectorAll('.key').forEach(el => {
+  const key = el.getAttribute('data-key');
+
+  el.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+
+    if (key === 'Ctrl') {
+      state.ctrlActive = !state.ctrlActive;
+      el.classList.toggle('active', state.ctrlActive);
+      return;
+    }
+    if (key === 'Alt') {
+      state.altActive = !state.altActive;
+      el.classList.toggle('active', state.altActive);
+      return;
+    }
+
+    handleKey(key);
+  });
+});
+
+// Physical keyboard support
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === 'c') {
+    e.preventDefault();
+    state.ctrlActive = true;
+    handleKey('c');
+    return;
+  }
+  if (e.ctrlKey && e.key === 'l') {
+    e.preventDefault();
+    state.ctrlActive = true;
+    handleKey('l');
+    return;
+  }
+
+  if (e.key === 'Enter') { e.preventDefault(); handleKey('Enter'); return; }
+  if (e.key === 'Backspace') { e.preventDefault(); handleKey('Backspace'); return; }
+  if (e.key === 'Tab') { e.preventDefault(); handleKey('Tab'); return; }
+  if (e.key === 'Escape') { e.preventDefault(); handleKey('Escape'); return; }
+  if (e.key === 'ArrowUp') { e.preventDefault(); handleKey('ArrowUp'); return; }
+  if (e.key === 'ArrowDown') { e.preventDefault(); handleKey('ArrowDown'); return; }
+
+  if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+    handleKey(e.key);
+  }
+});
+
+// ============================ TAB SWITCHING ============================
+document.getElementById('tabBar').addEventListener('click', (e) => {
+  const tabItem = e.target.closest('.tab-item');
+  if (!tabItem) return;
+
+  const tabId = tabItem.getAttribute('data-tab');
+  if (!tabId) return;
+
+  // Update active
+  document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+  tabItem.classList.add('active');
+
+  state.activeTab = tabId;
+  state.commandBuffer = '';
+  renderTerminal();
+
+  // Update connection badge
+  const hosts = { server01: 'root@192.168.1.42', server02: 'root@192.168.1.43', server03: 'root@10.0.0.15' };
+  document.querySelector('.connection-badge span').textContent = `ssh ${hosts[tabId]}`;
+});
+
+// ============================ SPLIT DIVIDER DRAGGING ============================
+const divider = document.getElementById('splitDivider');
+const mainContent = document.querySelector('.main-content');
+
+let startY = 0;
+let startTerminalFlex = 60;
+let startKeyboardFlex = 40;
+
+divider.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  state.isDragging = true;
+  divider.classList.add('dragging');
+  divider.setPointerCapture(e.pointerId);
+  startY = e.clientY;
+
+  const termWrapper = document.getElementById('terminalWrapper');
+  const keyPanel = document.getElementById('keyboardPanel');
+  const totalH = mainContent.clientHeight - divider.offsetHeight;
+  startTerminalFlex = (termWrapper.offsetHeight / totalH) * 100;
+  startKeyboardFlex = (keyPanel.offsetHeight / totalH) * 100;
+
+  // Disable transition during drag
+  termWrapper.style.transition = 'none';
+  keyPanel.style.transition = 'none';
+});
+
+divider.addEventListener('pointermove', (e) => {
+  if (!state.isDragging) return;
+  const totalH = mainContent.clientHeight - divider.offsetHeight;
+  const dy = e.clientY - startY;
+  const dp = (dy / totalH) * 100;
+
+  let newTerminal = Math.max(20, Math.min(80, startTerminalFlex + dp));
+  let newKeyboard = 100 - newTerminal;
+
+  document.getElementById('terminalWrapper').style.flex = `${newTerminal}`;
+  document.getElementById('keyboardPanel').style.flex = `${newKeyboard}`;
+});
+
+divider.addEventListener('pointerup', () => {
+  state.isDragging = false;
+  divider.classList.remove('dragging');
+  document.getElementById('terminalWrapper').style.transition = '';
+  document.getElementById('keyboardPanel').style.transition = '';
+});
+
+// ============================ ORIENTATION TOGGLE ============================
+document.getElementById('orientationToggle').addEventListener('click', () => {
+  state.isPortrait = !state.isPortrait;
+  document.getElementById('appContainer').classList.toggle('portrait', state.isPortrait);
+
+  if (state.isPortrait) {
+    document.getElementById('terminalWrapper').style.flex = '50';
+    document.getElementById('keyboardPanel').style.flex = '50';
+    document.getElementById('termSize').textContent = '80x24';
+  } else {
+    document.getElementById('terminalWrapper').style.flex = '60';
+    document.getElementById('keyboardPanel').style.flex = '40';
+    document.getElementById('termSize').textContent = '120x36';
+  }
+});
+
+// ============================ KEYBOARD TOGGLE ============================
+document.getElementById('toggleKeyboard').addEventListener('click', () => {
+  state.keyboardVisible = !state.keyboardVisible;
+  const panel = document.getElementById('keyboardPanel');
+  const chip = document.getElementById('toggleKeyboard');
+
+  if (state.keyboardVisible) {
+    panel.style.display = '';
+    divider.style.display = '';
+    chip.classList.add('active');
+  } else {
+    panel.style.display = 'none';
+    divider.style.display = 'none';
+    chip.classList.remove('active');
+  }
+});
+
+// ============================ FAB ============================
+document.getElementById('fabClaude').addEventListener('click', () => {
+  const cmd = state.commandBuffer.trim();
+  if (!cmd) {
+    state.commandBuffer = 'claude -p "';
+    renderTerminal();
+    return;
+  }
+  // Wrap in claude command
+  state.commandBuffer = `claude -p "${cmd}"`;
+  renderTerminal();
+});
+
+// ============================ CLIPBOARD ============================
+document.getElementById('btnCopy').addEventListener('click', () => {
+  const text = terminalEl.innerText;
+  navigator.clipboard?.writeText(text).catch(() => {});
+  const btn = document.getElementById('btnCopy');
+  btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied';
+  setTimeout(() => {
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copy';
+  }, 1500);
+});
+
+document.getElementById('btnPaste').addEventListener('click', () => {
+  navigator.clipboard?.readText().then(text => {
+    state.commandBuffer += text;
+    renderTerminal();
+  }).catch(() => {});
+});
+
+// ============================ INIT ============================
+renderTerminal();
+</script>
+</body>
+</html>

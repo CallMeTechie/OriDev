@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ori:Dev - Connections</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#FAFAFA;--card:#FFFFFF;--accent:#6366F1;--accent-light:#EEF2FF;--accent-hover:#4F46E5;
+    --success:#10B981;--success-bg:#ECFDF5;--error:#EF4444;--error-bg:#FEF2F2;
+    --text:#111827;--text-secondary:#374151;--text-muted:#6B7280;--text-faint:#9CA3AF;
+    --border:#E5E7EB;--border-light:#F3F4F6;
+    --radius:12px;--radius-sm:8px;--radius-xs:6px;
+    --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+    --shadow-md:0 4px 12px rgba(0,0,0,.07),0 1px 3px rgba(0,0,0,.04);
+    --shadow-lg:0 12px 40px rgba(0,0,0,.1),0 4px 12px rgba(0,0,0,.05);
+    --nav-h:60px;--bottom-h:80px;
+  }
+  html{font-family:Inter,system-ui,-apple-system,sans-serif;font-size:15px;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+  body{background:var(--bg);color:var(--text);min-height:100dvh;overflow-x:hidden;padding-bottom:calc(var(--bottom-h) + 40px)}
+
+  /* Top bar */
+  .topbar{position:sticky;top:0;z-index:50;background:var(--card);border-bottom:1px solid var(--border);padding:0 20px;height:var(--nav-h);display:flex;align-items:center;justify-content:space-between}
+  .topbar h1{font-size:1.2rem;font-weight:700;letter-spacing:-.02em;color:var(--text)}
+  .topbar-actions{display:flex;gap:8px;align-items:center}
+  .icon-btn{width:38px;height:38px;border-radius:var(--radius-sm);border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted);transition:all .15s}
+  .icon-btn:hover{background:var(--border-light);color:var(--text)}
+  .icon-btn svg{width:20px;height:20px}
+
+  /* Search bar */
+  .search-wrap{padding:16px 20px 0}
+  .search-bar{display:none;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 14px;width:100%;font-size:.9rem;color:var(--text);outline:none;transition:border-color .15s}
+  .search-bar.visible{display:block}
+  .search-bar:focus{border-color:var(--accent)}
+  .search-bar::placeholder{color:var(--text-faint)}
+
+  /* Quick Access */
+  .section-label{padding:20px 20px 10px;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint)}
+  .quick-scroll{display:flex;gap:10px;padding:0 20px 4px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+  .quick-scroll::-webkit-scrollbar{display:none}
+  .quick-chip{flex-shrink:0;display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:100px;padding:6px 14px 6px 6px;cursor:pointer;transition:all .15s;white-space:nowrap}
+  .quick-chip:hover{border-color:var(--accent);box-shadow:var(--shadow)}
+  .quick-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:#fff;flex-shrink:0}
+  .quick-chip-name{font-size:.8rem;font-weight:500;color:var(--text-secondary)}
+  .quick-chip-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .dot-connected{background:var(--success)}
+  .dot-disconnected{background:var(--text-faint)}
+
+  /* Server list */
+  .server-list{padding:0 16px}
+  .server-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:all .15s;position:relative}
+  .server-card:hover{border-color:#D1D5DB;box-shadow:var(--shadow)}
+  .server-card:active{transform:scale(.995)}
+  .card-top{display:flex;align-items:flex-start;gap:12px}
+  .card-status-dot{width:8px;height:8px;border-radius:50%;margin-top:6px;flex-shrink:0}
+  .card-info{flex:1;min-width:0}
+  .card-name{font-size:.92rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card-meta{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
+  .card-host{font-size:.78rem;color:var(--text-muted);font-family:'SF Mono',SFMono-Regular,ui-monospace,monospace;letter-spacing:-.01em}
+  .card-pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:100px;font-size:.68rem;font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+  .pill-sftp{background:#EEF2FF;color:#4F46E5}
+  .pill-ssh{background:#FEF3C7;color:#92400E}
+  .pill-ftp,.pill-ftps{background:#E0F2FE;color:#0369A1}
+  .pill-proxmox{background:#FDE8E8;color:#B91C1C}
+  .card-time{font-size:.75rem;color:var(--text-faint);white-space:nowrap}
+  .card-actions{display:flex;align-items:center;gap:2px;flex-shrink:0;margin-top:-2px}
+  .star-btn,.kebab-btn{width:32px;height:32px;border:none;background:none;border-radius:var(--radius-xs);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-faint);transition:all .15s}
+  .star-btn:hover,.kebab-btn:hover{background:var(--border-light);color:var(--text-muted)}
+  .star-btn.active{color:#F59E0B}
+  .star-btn svg,.kebab-btn svg{width:18px;height:18px}
+
+  /* Kebab dropdown */
+  .dropdown{position:absolute;right:16px;top:50px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-md);min-width:160px;z-index:40;display:none;overflow:hidden}
+  .dropdown.open{display:block}
+  .dropdown-item{padding:10px 14px;font-size:.85rem;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .1s}
+  .dropdown-item:hover{background:var(--border-light)}
+  .dropdown-item.danger{color:var(--error)}
+  .dropdown-item svg{width:16px;height:16px}
+
+  /* FAB */
+  .fab{position:fixed;bottom:calc(var(--bottom-h) + 46px);right:20px;width:52px;height:52px;border-radius:16px;background:var(--accent);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(99,102,241,.35);transition:all .2s;z-index:45}
+  .fab:hover{background:var(--accent-hover);transform:translateY(-2px);box-shadow:0 6px 24px rgba(99,102,241,.45)}
+  .fab:active{transform:scale(.95)}
+  .fab svg{width:24px;height:24px}
+
+  /* Bottom nav */
+  .bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:50;background:var(--card);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom)}
+  .tier-banner{display:flex;align-items:center;justify-content:center;gap:6px;padding:6px 16px;background:var(--border-light);font-size:.72rem;color:var(--text-muted)}
+  .tier-banner span{font-weight:600;color:var(--text-secondary)}
+  .tier-banner a{color:var(--accent);text-decoration:none;font-weight:500}
+  .tier-banner a:hover{text-decoration:underline}
+  .nav-items{display:flex;align-items:center;justify-content:space-around;padding:8px 0 6px}
+  .nav-item{display:flex;flex-direction:column;align-items:center;gap:3px;text-decoration:none;cursor:pointer;-webkit-tap-highlight-color:transparent;min-width:56px}
+  .nav-item svg{width:22px;height:22px;color:var(--text-faint);transition:color .15s}
+  .nav-item span{font-size:.65rem;font-weight:500;color:var(--text-faint);transition:color .15s}
+  .nav-item.active svg{color:var(--accent)}
+  .nav-item.active span{color:var(--accent);font-weight:600}
+
+  /* Bottom sheet overlay */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:60;display:none;opacity:0;transition:opacity .2s}
+  .overlay.open{display:block;opacity:1}
+
+  /* Bottom sheet */
+  .bottom-sheet{position:fixed;left:0;right:0;bottom:0;z-index:70;background:var(--card);border-radius:20px 20px 0 0;box-shadow:var(--shadow-lg);transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);max-height:85dvh;overflow-y:auto}
+  .bottom-sheet.open{transform:translateY(0)}
+  .sheet-handle{width:36px;height:4px;border-radius:2px;background:var(--border);margin:10px auto 0}
+  .sheet-content{padding:20px 24px 32px}
+  .sheet-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+  .sheet-title{font-size:1.15rem;font-weight:700;color:var(--text)}
+  .sheet-close{width:32px;height:32px;border:none;background:var(--border-light);border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-muted)}
+  .sheet-close:hover{background:var(--border)}
+
+  /* Detail sheet */
+  .detail-status{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:100px;font-size:.78rem;font-weight:600;margin-bottom:16px}
+  .detail-status.connected{background:var(--success-bg);color:#059669}
+  .detail-status.disconnected{background:var(--border-light);color:var(--text-muted)}
+  .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+  .detail-field label{display:block;font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);margin-bottom:3px}
+  .detail-field p{font-size:.88rem;color:var(--text-secondary);font-weight:500}
+  .detail-field.mono p{font-family:'SF Mono',SFMono-Regular,ui-monospace,monospace;font-size:.82rem}
+  .detail-actions{display:flex;gap:10px;margin-top:8px}
+  .btn{padding:10px 20px;border-radius:var(--radius-sm);font-size:.85rem;font-weight:600;border:none;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:8px}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:hover{background:var(--accent-hover)}
+  .btn-secondary{background:var(--border-light);color:var(--text-secondary)}
+  .btn-secondary:hover{background:var(--border)}
+  .btn-danger{background:var(--error-bg);color:var(--error)}
+  .btn-danger:hover{background:#FEE2E2}
+  .btn-full{flex:1}
+
+  /* Form sheet */
+  .form-group{margin-bottom:16px}
+  .form-group label{display:block;font-size:.8rem;font-weight:600;color:var(--text-secondary);margin-bottom:6px}
+  .form-input{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.88rem;color:var(--text);background:var(--bg);outline:none;transition:border-color .15s}
+  .form-input:focus{border-color:var(--accent)}
+  .form-input::placeholder{color:var(--text-faint)}
+  select.form-input{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6l3.5 4 3.5-4z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .toggle-group{display:flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden}
+  .toggle-opt{flex:1;padding:9px;text-align:center;font-size:.82rem;font-weight:500;cursor:pointer;color:var(--text-muted);background:var(--card);transition:all .15s;border:none}
+  .toggle-opt.active{background:var(--accent);color:#fff}
+  .form-actions{display:flex;gap:10px;margin-top:24px}
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <h1>Connections</h1>
+  <div class="topbar-actions">
+    <button class="icon-btn" id="searchToggle" aria-label="Search">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg>
+    </button>
+    <button class="icon-btn" aria-label="Sort">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5L7.5 3m0 0L12 7.5M7.5 3v13.5m13.5-3L16.5 18m0 0L12 13.5m4.5 4.5V4.5"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- Search -->
+<div class="search-wrap">
+  <input type="text" class="search-bar" id="searchInput" placeholder="Search connections...">
+</div>
+
+<!-- Quick Access -->
+<div class="section-label">Recent</div>
+<div class="quick-scroll">
+  <div class="quick-chip" data-idx="0">
+    <div class="quick-avatar" style="background:linear-gradient(135deg,#6366F1,#8B5CF6)">PS</div>
+    <span class="quick-chip-dot dot-connected"></span>
+    <span class="quick-chip-name">Production</span>
+  </div>
+  <div class="quick-chip" data-idx="2">
+    <div class="quick-avatar" style="background:linear-gradient(135deg,#10B981,#059669)">ST</div>
+    <span class="quick-chip-dot dot-connected"></span>
+    <span class="quick-chip-name">Staging</span>
+  </div>
+  <div class="quick-chip" data-idx="3">
+    <div class="quick-avatar" style="background:linear-gradient(135deg,#EF4444,#DC2626)">P1</div>
+    <span class="quick-chip-dot dot-connected"></span>
+    <span class="quick-chip-name">Proxmox</span>
+  </div>
+  <div class="quick-chip" data-idx="1">
+    <div class="quick-avatar" style="background:linear-gradient(135deg,#F59E0B,#D97706)">DC</div>
+    <span class="quick-chip-dot dot-disconnected"></span>
+    <span class="quick-chip-name">Dev Server</span>
+  </div>
+</div>
+
+<!-- Server List -->
+<div class="section-label">All Servers</div>
+<div class="server-list" id="serverList"></div>
+
+<!-- FAB -->
+<button class="fab" id="fabBtn" aria-label="New connection">
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+</button>
+
+<!-- Bottom Nav -->
+<nav class="bottom-nav">
+  <div class="tier-banner">
+    <span>2/2 Server Profiles</span> &middot; Free &nbsp;<a href="#">Upgrade</a>
+  </div>
+  <div class="nav-items">
+    <a class="nav-item active">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7"/></svg>
+      <span>Connections</span>
+    </a>
+    <a class="nav-item">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/></svg>
+      <span>Files</span>
+    </a>
+    <a class="nav-item">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z"/></svg>
+      <span>Terminal</span>
+    </a>
+    <a class="nav-item">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+      <span>Transfers</span>
+    </a>
+    <a class="nav-item">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      <span>Settings</span>
+    </a>
+  </div>
+</nav>
+
+<!-- Overlay -->
+<div class="overlay" id="overlay"></div>
+
+<!-- Detail Bottom Sheet -->
+<div class="bottom-sheet" id="detailSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-content">
+    <div class="sheet-header">
+      <h2 class="sheet-title" id="detailName"></h2>
+      <button class="sheet-close" id="detailClose">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="detailStatusBadge"></div>
+    <div class="detail-grid" id="detailGrid"></div>
+    <div class="detail-actions" id="detailActions"></div>
+  </div>
+</div>
+
+<!-- New Connection Bottom Sheet -->
+<div class="bottom-sheet" id="newSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-content">
+    <div class="sheet-header">
+      <h2 class="sheet-title">New Connection</h2>
+      <button class="sheet-close" id="newClose">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="form-group">
+      <label>Connection Name</label>
+      <input type="text" class="form-input" placeholder="e.g. Production Server">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Host</label>
+        <input type="text" class="form-input" placeholder="hostname or IP">
+      </div>
+      <div class="form-group">
+        <label>Port</label>
+        <input type="text" class="form-input" placeholder="22" value="22">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Protocol</label>
+      <select class="form-input">
+        <option>SSH</option>
+        <option>SFTP</option>
+        <option>FTP</option>
+        <option>FTPS</option>
+        <option>Proxmox</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Username</label>
+      <input type="text" class="form-input" placeholder="root">
+    </div>
+    <div class="form-group">
+      <label>Authentication</label>
+      <div class="toggle-group">
+        <button class="toggle-opt active" data-auth="password">Password</button>
+        <button class="toggle-opt" data-auth="key">SSH Key</button>
+        <button class="toggle-opt" data-auth="agent">Agent</button>
+      </div>
+    </div>
+    <div class="form-group" id="authField">
+      <label>Password</label>
+      <input type="password" class="form-input" placeholder="Enter password">
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-secondary btn-full" onclick="closeSheet('newSheet')">Cancel</button>
+      <button class="btn btn-primary btn-full" onclick="closeSheet('newSheet')">Save Connection</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const servers = [
+  { name:"Production Server", host:"192.168.1.100", protocol:"SFTP", connected:true, time:"2 min ago", starred:true, user:"root", port:"22", color:"#6366F1" },
+  { name:"Dev Server (Claude Code)", host:"dev.example.com", protocol:"SSH", connected:false, time:"1h ago", starred:false, user:"claude", port:"22", color:"#F59E0B" },
+  { name:"Staging", host:"10.0.0.50", protocol:"SFTP", connected:true, time:"Active", starred:true, user:"deploy", port:"22", color:"#10B981" },
+  { name:"Proxmox Node 1", host:"pve1.local:8006", protocol:"Proxmox", connected:true, time:"Active", starred:false, user:"root@pam", port:"8006", color:"#EF4444" },
+  { name:"FTP Backup", host:"backup.example.com", protocol:"FTPS", connected:false, time:"3 days ago", starred:false, user:"backup", port:"990", color:"#0EA5E9" },
+  { name:"Raspberry Pi", host:"192.168.1.42", protocol:"SSH", connected:false, time:"1 week ago", starred:false, user:"pi", port:"22", color:"#8B5CF6" }
+];
+
+const listEl = document.getElementById('serverList');
+let openDropdown = null;
+
+function pillClass(p) {
+  return 'pill-' + p.toLowerCase();
+}
+
+function starSvg(filled) {
+  return filled
+    ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.007 5.404.433c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.433 2.082-5.006z"/></svg>'
+    : '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"/></svg>';
+}
+
+function renderList(filter='') {
+  const f = filter.toLowerCase();
+  const filtered = servers.filter(s =>
+    s.name.toLowerCase().includes(f) || s.host.toLowerCase().includes(f) || s.protocol.toLowerCase().includes(f)
+  );
+  listEl.innerHTML = filtered.map((s, i) => {
+    const realIdx = servers.indexOf(s);
+    return `
+    <div class="server-card" data-idx="${realIdx}" onclick="openDetail(${realIdx})">
+      <div class="card-top">
+        <div class="card-status-dot" style="background:${s.connected ? 'var(--success)' : 'var(--text-faint)'}"></div>
+        <div class="card-info">
+          <div class="card-name">${s.name}</div>
+          <div class="card-meta">
+            <span class="card-host">${s.host}</span>
+            <span class="card-pill ${pillClass(s.protocol)}">${s.protocol}</span>
+            <span class="card-time">${s.time}</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="star-btn ${s.starred?'active':''}" onclick="event.stopPropagation();toggleStar(${realIdx})">${starSvg(s.starred)}</button>
+          <button class="kebab-btn" onclick="event.stopPropagation();toggleKebab(this,${realIdx})">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="dropdown" id="dd-${realIdx}">
+        <div class="dropdown-item" onclick="event.stopPropagation();closeDropdowns()">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"/></svg>
+          Edit
+        </div>
+        <div class="dropdown-item" onclick="event.stopPropagation();closeDropdowns()">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5"/></svg>
+          Clone
+        </div>
+        <div class="dropdown-item danger" onclick="event.stopPropagation();closeDropdowns()">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+          Delete
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleStar(idx) {
+  servers[idx].starred = !servers[idx].starred;
+  renderList(document.getElementById('searchInput').value);
+}
+
+function toggleKebab(btn, idx) {
+  closeDropdowns();
+  const dd = document.getElementById('dd-'+idx);
+  dd.classList.add('open');
+  openDropdown = dd;
+}
+
+function closeDropdowns() {
+  document.querySelectorAll('.dropdown.open').forEach(d=>d.classList.remove('open'));
+  openDropdown = null;
+}
+
+function openDetail(idx) {
+  if(openDropdown) { closeDropdowns(); return; }
+  const s = servers[idx];
+  document.getElementById('detailName').textContent = s.name;
+  document.getElementById('detailStatusBadge').innerHTML = `<div class="detail-status ${s.connected?'connected':'disconnected'}"><span style="width:7px;height:7px;border-radius:50%;background:${s.connected?'var(--success)':'var(--text-faint)'};display:inline-block"></span>${s.connected?'Connected':'Disconnected'}</div>`;
+  document.getElementById('detailGrid').innerHTML = `
+    <div class="detail-field mono"><label>Host</label><p>${s.host}</p></div>
+    <div class="detail-field"><label>Protocol</label><p>${s.protocol}</p></div>
+    <div class="detail-field"><label>Username</label><p>${s.user}</p></div>
+    <div class="detail-field"><label>Port</label><p>${s.port}</p></div>
+    <div class="detail-field"><label>Last Activity</label><p>${s.time}</p></div>
+    <div class="detail-field"><label>Auth</label><p>SSH Key</p></div>
+  `;
+  document.getElementById('detailActions').innerHTML = s.connected
+    ? `<button class="btn btn-primary btn-full" onclick="closeSheet('detailSheet')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z"/></svg>Terminal</button><button class="btn btn-secondary btn-full" onclick="closeSheet('detailSheet')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75"/></svg>Files</button><button class="btn btn-danger" onclick="closeSheet('detailSheet')">Disconnect</button>`
+    : `<button class="btn btn-primary btn-full" onclick="closeSheet('detailSheet')"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.02a4.5 4.5 0 00-1.242-7.244l-4.5-4.5a4.5 4.5 0 00-6.364 6.364L4.34 8.374" transform="translate(1,1) scale(0.9)"/></svg>Connect</button><button class="btn btn-secondary btn-full" onclick="closeSheet('detailSheet')">Edit</button>`;
+  openSheet('detailSheet');
+}
+
+function openSheet(id) {
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById(id).classList.add('open');
+  document.body.style.overflow='hidden';
+}
+
+function closeSheet(id) {
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById(id).classList.remove('open');
+  document.body.style.overflow='';
+}
+
+// Search
+document.getElementById('searchToggle').addEventListener('click', () => {
+  const bar = document.getElementById('searchInput');
+  bar.classList.toggle('visible');
+  if(bar.classList.contains('visible')) bar.focus();
+  else { bar.value=''; renderList(); }
+});
+document.getElementById('searchInput').addEventListener('input', e => renderList(e.target.value));
+
+// Sheets
+document.getElementById('overlay').addEventListener('click', () => { closeSheet('detailSheet'); closeSheet('newSheet'); });
+document.getElementById('detailClose').addEventListener('click', () => closeSheet('detailSheet'));
+document.getElementById('newClose').addEventListener('click', () => closeSheet('newSheet'));
+document.getElementById('fabBtn').addEventListener('click', () => openSheet('newSheet'));
+
+// Quick chips
+document.querySelectorAll('.quick-chip').forEach(c => {
+  c.addEventListener('click', () => openDetail(parseInt(c.dataset.idx)));
+});
+
+// Auth toggle
+document.querySelectorAll('.toggle-opt').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.toggle-opt').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const af = document.getElementById('authField');
+    const auth = btn.dataset.auth;
+    if(auth==='password') af.innerHTML='<label>Password</label><input type="password" class="form-input" placeholder="Enter password">';
+    else if(auth==='key') af.innerHTML='<label>Private Key Path</label><input type="text" class="form-input" placeholder="~/.ssh/id_rsa">';
+    else af.innerHTML='<label>Agent</label><p style="font-size:.85rem;color:var(--text-muted);padding:10px 0">Using system SSH agent for authentication</p>';
+  });
+});
+
+// Close dropdown on outside click
+document.addEventListener('click', e => { if(!e.target.closest('.kebab-btn')) closeDropdowns(); });
+
+// Init
+renderList();
+</script>
+</body>
+</html>

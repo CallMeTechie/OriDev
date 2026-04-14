@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ori:Dev — Dual-Pane File Manager</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --accent: #6366F1;
+  --accent-light: #EEF2FF;
+  --accent-hover: #4F46E5;
+  --success: #10B981;
+  --error: #EF4444;
+  --warning: #F59E0B;
+  --bg: #FAFAFA;
+  --surface: #FFFFFF;
+  --text-primary: #111827;
+  --text-body: #374151;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+  --border: #E5E7EB;
+  --border-light: #F3F4F6;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-xs: 6px;
+  --font: system-ui, -apple-system, 'Inter', 'Segoe UI', sans-serif;
+  --transition: 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html, body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text-body);
+  height: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ═══ SCROLLBAR ═══ */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+
+/* ═══ APP SHELL ═══ */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+}
+
+/* ═══ TOP BAR ═══ */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 56px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.logo-icon {
+  width: 28px;
+  height: 28px;
+  background: var(--accent);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-icon svg { width: 16px; height: 16px; }
+
+.topbar-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fold-toggle {
+  display: flex;
+  align-items: center;
+  background: var(--border-light);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.fold-btn {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: var(--font);
+}
+
+.fold-btn.active {
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.connection-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: var(--border-light);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-body);
+}
+
+.connection-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+/* ═══ MAIN CONTENT ═══ */
+.main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  padding: 12px;
+  gap: 0;
+  min-height: 0;
+}
+
+/* ═══ PANE ═══ */
+.pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  min-width: 0;
+  transition: flex var(--transition);
+}
+
+.pane-header {
+  padding: 16px 18px 0;
+  flex-shrink: 0;
+}
+
+.pane-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.pane-label-text {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.pane-label-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.badge-local {
+  background: #DBEAFE;
+  color: #2563EB;
+}
+
+.badge-remote {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.remote-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--success);
+  font-weight: 500;
+}
+
+.remote-status .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ═══ BREADCRUMB ═══ */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  margin-bottom: 12px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.breadcrumb::-webkit-scrollbar { display: none; }
+
+.crumb {
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color var(--transition);
+  font-weight: 400;
+}
+
+.crumb:hover { color: var(--accent); }
+.crumb.current { color: var(--text-primary); font-weight: 500; }
+
+.crumb-sep {
+  color: var(--text-muted);
+  font-size: 10px;
+  opacity: 0.6;
+  user-select: none;
+}
+
+/* ═══ TOOLBAR ═══ */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: var(--font);
+  font-weight: 500;
+}
+
+.toolbar-btn:hover {
+  background: var(--bg);
+  color: var(--text-primary);
+  border-color: #D1D5DB;
+}
+
+.toolbar-btn.active {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+.toolbar-btn svg { width: 14px; height: 14px; opacity: 0.7; }
+
+.toolbar-spacer { flex: 1; }
+
+.search-mini {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.search-mini:hover { border-color: var(--accent); }
+.search-mini svg { width: 13px; height: 13px; }
+
+.search-mini kbd {
+  font-size: 10px;
+  padding: 1px 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font);
+  color: var(--text-muted);
+}
+
+/* ═══ FILE LIST ═══ */
+.file-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: background var(--transition);
+  position: relative;
+  user-select: none;
+}
+
+.file-row:hover { background: var(--bg); }
+.file-row.selected { background: var(--accent-light); }
+
+.file-row.selected .file-name { color: var(--accent); font-weight: 500; }
+
+.file-checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #D1D5DB;
+  border-radius: 4px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  cursor: pointer;
+}
+
+.file-checkbox.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.file-checkbox.checked::after {
+  content: '';
+  width: 8px;
+  height: 5px;
+  border: 2px solid white;
+  border-top: none;
+  border-right: none;
+  transform: rotate(-45deg) translateY(-1px);
+}
+
+.file-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.file-icon svg { width: 18px; height: 18px; }
+
+.file-icon.folder { background: #FEF3C7; color: #D97706; }
+.file-icon.code { background: #EDE9FE; color: #7C3AED; }
+.file-icon.image { background: #FCE7F3; color: #EC4899; }
+.file-icon.text { background: #DBEAFE; color: #2563EB; }
+.file-icon.config { background: #E0E7FF; color: #4F46E5; }
+.file-icon.git { background: #FEE2E2; color: #EF4444; }
+.file-icon.generic { background: var(--border-light); color: var(--text-secondary); }
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-name {
+  font-size: 13px;
+  font-weight: 450;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.git-staged { background: var(--success); }
+.git-modified { background: var(--warning); }
+.git-untracked { background: #9CA3AF; }
+
+.file-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-size {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+  flex-shrink: 0;
+  min-width: 52px;
+  font-variant-numeric: tabular-nums;
+}
+
+.file-date {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: right;
+  flex-shrink: 0;
+  min-width: 70px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══ DIVIDER ═══ */
+.divider {
+  width: 12px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  position: relative;
+  z-index: 10;
+}
+
+.divider-line {
+  width: 3px;
+  height: 40px;
+  background: #D1D5DB;
+  border-radius: 2px;
+  transition: background var(--transition), height var(--transition);
+}
+
+.divider:hover .divider-line,
+.divider.dragging .divider-line {
+  background: var(--accent);
+  height: 56px;
+}
+
+/* ═══ BOTTOM BAR ═══ */
+.bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-body);
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: var(--font);
+}
+
+.action-btn svg { width: 14px; height: 14px; }
+
+.action-btn:hover {
+  background: var(--bg);
+  border-color: #D1D5DB;
+}
+
+.action-btn.primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.action-btn.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.action-btn.danger:hover {
+  background: #FEF2F2;
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.bottom-info {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.bottom-info-left {
+  margin-right: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* ═══ BOTTOM SHEET ═══ */
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 500;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 250ms ease;
+}
+
+.sheet-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.bottom-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  z-index: 501;
+  transform: translateY(100%);
+  transition: transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
+  max-height: 70vh;
+  overflow-y: auto;
+  box-shadow: 0 -8px 32px rgba(0,0,0,0.12);
+}
+
+.bottom-sheet.active { transform: translateY(0); }
+
+.sheet-handle {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 4px;
+}
+
+.sheet-handle-bar {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: #D1D5DB;
+}
+
+.sheet-content { padding: 8px 24px 32px; }
+
+.sheet-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.sheet-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+}
+
+.sheet-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.sheet-field-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.sheet-field-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 450;
+}
+
+.sheet-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
+}
+
+.sheet-actions .action-btn { flex: 1; justify-content: center; }
+
+/* ═══ CONTEXT MENU ═══ */
+.context-menu {
+  position: fixed;
+  z-index: 600;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  min-width: 180px;
+  padding: 6px;
+  display: none;
+}
+
+.context-menu.visible { display: block; }
+
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-xs);
+  font-size: 13px;
+  color: var(--text-body);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.ctx-item:hover { background: var(--bg); }
+
+.ctx-item svg { width: 15px; height: 15px; color: var(--text-secondary); }
+
+.ctx-item.danger { color: var(--error); }
+.ctx-item.danger svg { color: var(--error); }
+
+.ctx-sep {
+  height: 1px;
+  background: var(--border-light);
+  margin: 4px 8px;
+}
+
+/* ═══ GRID VIEW ═══ */
+.file-list.grid-view {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.file-list.grid-view .file-row {
+  flex-direction: column;
+  padding: 12px 8px;
+  border-radius: var(--radius-sm);
+  text-align: center;
+  gap: 6px;
+}
+
+.file-list.grid-view .file-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+
+.file-list.grid-view .file-icon svg { width: 22px; height: 22px; }
+
+.file-list.grid-view .file-info { align-items: center; }
+.file-list.grid-view .file-name { font-size: 11px; text-align: center; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.file-list.grid-view .file-meta,
+.file-list.grid-view .file-size,
+.file-list.grid-view .file-date,
+.file-list.grid-view .file-checkbox,
+.file-list.grid-view .git-dot,
+.file-list.grid-view .file-name-row { display: none; }
+.file-list.grid-view .file-name { display: block; }
+
+/* ═══ FOLDED MODE ═══ */
+.app.folded .main { padding: 8px; }
+.app.folded .pane.hidden-pane { display: none; }
+.app.folded .divider { display: none; }
+
+.tab-bar {
+  display: none;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.app.folded .tab-bar { display: flex; }
+
+.tab-bar-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: color var(--transition);
+}
+
+.tab-bar-btn.active { color: var(--accent); }
+.tab-bar-btn svg { width: 20px; height: 20px; }
+
+/* ═══ EMPTY STATE ═══ */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 8px;
+  color: var(--text-muted);
+}
+
+.empty-state svg { width: 40px; height: 40px; opacity: 0.3; }
+.empty-state span { font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <!-- ═══ TOP BAR ═══ -->
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      </div>
+      Ori:Dev
+    </div>
+    <div class="topbar-center">
+      <div class="fold-toggle">
+        <button class="fold-btn active" data-mode="unfolded" onclick="setFoldMode('unfolded')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:inline;vertical-align:-2px;margin-right:4px"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+          Unfolded
+        </button>
+        <button class="fold-btn" data-mode="folded" onclick="setFoldMode('folded')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:inline;vertical-align:-2px;margin-right:4px"><rect x="4" y="2" width="16" height="20" rx="2"/></svg>
+          Folded
+        </button>
+      </div>
+    </div>
+    <div class="connection-chip">
+      <span class="connection-dot"></span>
+      server01 · SFTP
+    </div>
+  </div>
+
+  <!-- ═══ DUAL PANE ═══ -->
+  <div class="main" id="main">
+    <!-- LEFT PANE: LOCAL -->
+    <div class="pane" id="pane-local" style="flex:1">
+      <div class="pane-header">
+        <div class="pane-label">
+          <span class="pane-label-text">Local</span>
+          <span class="pane-label-badge badge-local">Device</span>
+        </div>
+        <div class="breadcrumb" id="bc-local">
+          <span class="crumb" onclick="navigateLocal(['storage'])">storage</span>
+          <span class="crumb-sep">›</span>
+          <span class="crumb" onclick="navigateLocal(['storage','emulated'])">emulated</span>
+          <span class="crumb-sep">›</span>
+          <span class="crumb" onclick="navigateLocal(['storage','emulated','0'])">0</span>
+          <span class="crumb-sep">›</span>
+          <span class="crumb current">Projects</span>
+        </div>
+        <div class="toolbar">
+          <button class="toolbar-btn" onclick="sortPane('local')" title="Sort">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h7M3 12h5M3 18h3M16 6v14M16 20l-4-4M16 20l4-4"/></svg>
+            Sort
+          </button>
+          <button class="toolbar-btn" id="view-toggle-local" onclick="toggleView('local')" title="Toggle view">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          </button>
+          <button class="toolbar-btn" onclick="newFolder('local')" title="New folder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+          </button>
+          <div class="toolbar-spacer"></div>
+          <div class="search-mini" onclick="focusSearch('local')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Search
+            <kbd>⌘F</kbd>
+          </div>
+        </div>
+      </div>
+      <div class="file-list" id="fl-local"></div>
+    </div>
+
+    <!-- DIVIDER -->
+    <div class="divider" id="divider">
+      <div class="divider-line"></div>
+    </div>
+
+    <!-- RIGHT PANE: REMOTE -->
+    <div class="pane" id="pane-remote" style="flex:1">
+      <div class="pane-header">
+        <div class="pane-label">
+          <span class="pane-label-text">Remote</span>
+          <span class="pane-label-badge badge-remote">SFTP</span>
+          <div class="remote-status">
+            <span class="dot"></span>
+            server01
+          </div>
+        </div>
+        <div class="breadcrumb" id="bc-remote">
+          <span class="crumb" onclick="navigateRemote(['home'])">home</span>
+          <span class="crumb-sep">›</span>
+          <span class="crumb" onclick="navigateRemote(['home','deploy'])">deploy</span>
+          <span class="crumb-sep">›</span>
+          <span class="crumb current">webapp</span>
+        </div>
+        <div class="toolbar">
+          <button class="toolbar-btn" onclick="sortPane('remote')" title="Sort">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h7M3 12h5M3 18h3M16 6v14M16 20l-4-4M16 20l4-4"/></svg>
+            Sort
+          </button>
+          <button class="toolbar-btn" id="view-toggle-remote" onclick="toggleView('remote')" title="Toggle view">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          </button>
+          <button class="toolbar-btn" onclick="newFolder('remote')" title="New folder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+          </button>
+          <div class="toolbar-spacer"></div>
+          <div class="search-mini" onclick="focusSearch('remote')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Search
+            <kbd>⌘F</kbd>
+          </div>
+        </div>
+      </div>
+      <div class="file-list" id="fl-remote"></div>
+    </div>
+  </div>
+
+  <!-- ═══ BOTTOM ACTION BAR ═══ -->
+  <div class="bottom-bar" id="bottom-bar">
+    <span class="bottom-info-left" id="sel-count">0 selected</span>
+    <button class="action-btn primary" onclick="transferFiles()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      Transfer
+    </button>
+    <button class="action-btn" onclick="renameFile()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+      Rename
+    </button>
+    <button class="action-btn" onclick="chmodFile()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Chmod
+    </button>
+    <button class="action-btn danger" onclick="deleteFiles()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      Delete
+    </button>
+    <span class="bottom-info" id="item-count">—</span>
+  </div>
+
+  <!-- ═══ TAB BAR (FOLDED) ═══ -->
+  <div class="tab-bar" id="tab-bar">
+    <button class="tab-bar-btn active" data-tab="local" onclick="switchTab('local')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      Local
+    </button>
+    <button class="tab-bar-btn" data-tab="remote" onclick="switchTab('remote')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      Remote
+    </button>
+    <button class="tab-bar-btn" data-tab="transfer" onclick="switchTab('transfer')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+      Transfers
+    </button>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM SHEET ═══ -->
+<div class="sheet-overlay" id="sheet-overlay" onclick="closeSheet()"></div>
+<div class="bottom-sheet" id="bottom-sheet">
+  <div class="sheet-handle"><div class="sheet-handle-bar"></div></div>
+  <div class="sheet-content" id="sheet-content"></div>
+</div>
+
+<!-- ═══ CONTEXT MENU ═══ -->
+<div class="context-menu" id="ctx-menu">
+  <div class="ctx-item" onclick="ctxAction('open')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+    Open
+  </div>
+  <div class="ctx-item" onclick="ctxAction('edit')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+    Edit in Editor
+  </div>
+  <div class="ctx-item" onclick="ctxAction('copy')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    Copy
+  </div>
+  <div class="ctx-item" onclick="ctxAction('move')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    Move
+  </div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="ctxAction('transfer')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+    Transfer to Remote
+  </div>
+  <div class="ctx-item" onclick="ctxAction('info')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+    Get Info
+  </div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="ctxAction('chmod')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    Permissions
+  </div>
+  <div class="ctx-item danger" onclick="ctxAction('delete')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+    Delete
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════
+const ICONS = {
+  folder: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 6a2 2 0 0 1 2-2h5l2 2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6z"/></svg>`,
+  code: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
+  image: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>`,
+  text: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
+  config: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+  git: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg>`,
+  generic: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>`
+};
+
+function fileIcon(type) {
+  return `<div class="file-icon ${type}">${ICONS[type]}</div>`;
+}
+
+const localFiles = [
+  { name: '..', type: 'folder', isParent: true },
+  { name: 'src', type: 'folder', size: '—', date: 'Apr 10', items: 12 },
+  { name: 'components', type: 'folder', size: '—', date: 'Apr 09', items: 8 },
+  { name: 'assets', type: 'folder', size: '—', date: 'Apr 08', items: 24 },
+  { name: 'node_modules', type: 'folder', size: '—', date: 'Mar 28', items: 847 },
+  { name: '.git', type: 'folder', size: '—', date: 'Apr 10', items: 0, iconType: 'git' },
+  { name: 'App.tsx', type: 'code', size: '4.2 KB', date: 'Apr 10', git: 'modified' },
+  { name: 'index.tsx', type: 'code', size: '1.1 KB', date: 'Apr 09', git: 'staged' },
+  { name: 'styles.css', type: 'code', size: '8.7 KB', date: 'Apr 10', git: 'modified' },
+  { name: 'package.json', type: 'config', size: '2.3 KB', date: 'Apr 08', git: 'staged' },
+  { name: 'tsconfig.json', type: 'config', size: '0.8 KB', date: 'Mar 15' },
+  { name: 'vite.config.ts', type: 'config', size: '1.4 KB', date: 'Mar 20' },
+  { name: 'README.md', type: 'text', size: '3.1 KB', date: 'Apr 05', git: 'untracked' },
+  { name: '.env.local', type: 'config', size: '0.2 KB', date: 'Mar 10' },
+  { name: 'hero-banner.png', type: 'image', size: '245 KB', date: 'Apr 02' },
+];
+
+const remoteFiles = [
+  { name: '..', type: 'folder', isParent: true },
+  { name: 'dist', type: 'folder', size: '—', date: 'Apr 10', items: 6 },
+  { name: 'config', type: 'folder', size: '—', date: 'Apr 08', items: 3 },
+  { name: 'logs', type: 'folder', size: '—', date: 'Apr 10', items: 42 },
+  { name: 'public', type: 'folder', size: '—', date: 'Apr 07', items: 15 },
+  { name: 'backups', type: 'folder', size: '—', date: 'Apr 05', items: 7 },
+  { name: 'server.js', type: 'code', size: '6.8 KB', date: 'Apr 10' },
+  { name: 'routes.js', type: 'code', size: '3.2 KB', date: 'Apr 09' },
+  { name: 'middleware.js', type: 'code', size: '1.9 KB', date: 'Apr 09' },
+  { name: 'database.js', type: 'code', size: '2.4 KB', date: 'Apr 07' },
+  { name: 'docker-compose.yml', type: 'config', size: '1.1 KB', date: 'Apr 03' },
+  { name: 'nginx.conf', type: 'config', size: '2.8 KB', date: 'Mar 29' },
+  { name: '.env', type: 'config', size: '0.5 KB', date: 'Apr 01' },
+  { name: 'deploy.sh', type: 'text', size: '0.9 KB', date: 'Apr 06' },
+  { name: 'README.md', type: 'text', size: '1.7 KB', date: 'Mar 25' },
+];
+
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+let state = {
+  foldMode: 'unfolded',
+  activeTab: 'local',
+  selected: { local: new Set(), remote: new Set() },
+  viewMode: { local: 'list', remote: 'list' },
+  ctxTarget: null,
+  ctxPane: null,
+};
+
+// ═══════════════════════════════════════
+// RENDER FILE LIST
+// ═══════════════════════════════════════
+function renderFileList(pane, files) {
+  const container = document.getElementById(`fl-${pane}`);
+  container.innerHTML = '';
+
+  files.forEach((f, i) => {
+    if (f.isParent) {
+      const row = document.createElement('div');
+      row.className = 'file-row';
+      row.innerHTML = `
+        <div class="file-checkbox" style="visibility:hidden"></div>
+        ${fileIcon('folder')}
+        <div class="file-info">
+          <div class="file-name" style="color:var(--text-muted)">..</div>
+        </div>
+      `;
+      row.onclick = () => navigateUp(pane);
+      container.appendChild(row);
+      return;
+    }
+
+    const row = document.createElement('div');
+    const isSelected = state.selected[pane].has(i);
+    row.className = `file-row${isSelected ? ' selected' : ''}`;
+    row.dataset.index = i;
+    row.dataset.pane = pane;
+
+    const iconType = f.iconType || f.type;
+    const gitDot = f.git ? `<span class="git-dot git-${f.git}" title="${f.git}"></span>` : '';
+    const itemHint = f.type === 'folder' && f.items !== undefined ? `${f.items} items` : (f.date || '');
+
+    row.innerHTML = `
+      <div class="file-checkbox${isSelected ? ' checked' : ''}" data-i="${i}" data-p="${pane}"></div>
+      ${fileIcon(iconType)}
+      <div class="file-info">
+        <div class="file-name-row">
+          <span class="file-name">${f.name}</span>
+          ${gitDot}
+        </div>
+        <span class="file-meta">${itemHint}</span>
+      </div>
+      <span class="file-size">${f.size || ''}</span>
+      <span class="file-date">${f.date || ''}</span>
+    `;
+
+    // Checkbox click
+    row.querySelector('.file-checkbox').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleSelect(pane, i);
+    });
+
+    // Row click => file info or navigate folder
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.file-checkbox')) return;
+      if (f.type === 'folder') {
+        navigateInto(pane, f.name);
+      } else {
+        showFileInfo(f, pane);
+      }
+    });
+
+    // Long press / right click => context menu
+    let pressTimer;
+    row.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      showContextMenu(e.clientX, e.clientY, f, pane);
+    });
+    row.addEventListener('touchstart', (e) => {
+      pressTimer = setTimeout(() => {
+        const touch = e.touches[0];
+        showContextMenu(touch.clientX, touch.clientY, f, pane);
+      }, 500);
+    }, { passive: true });
+    row.addEventListener('touchend', () => clearTimeout(pressTimer));
+    row.addEventListener('touchmove', () => clearTimeout(pressTimer));
+
+    container.appendChild(row);
+  });
+
+  updateCounts();
+}
+
+// ═══════════════════════════════════════
+// SELECTION
+// ═══════════════════════════════════════
+function toggleSelect(pane, i) {
+  const s = state.selected[pane];
+  if (s.has(i)) s.delete(i); else s.add(i);
+  renderFileList(pane, pane === 'local' ? localFiles : remoteFiles);
+}
+
+function updateCounts() {
+  const totalSel = state.selected.local.size + state.selected.remote.size;
+  document.getElementById('sel-count').textContent = totalSel > 0 ? `${totalSel} selected` : '0 selected';
+  const totalItems = localFiles.length + remoteFiles.length - 2; // minus parent dirs
+  document.getElementById('item-count').textContent = `${totalItems} items`;
+}
+
+// ═══════════════════════════════════════
+// NAVIGATION (simulated)
+// ═══════════════════════════════════════
+function navigateInto(pane, folderName) {
+  const bc = document.getElementById(`bc-${pane}`);
+  // Simple simulation: add breadcrumb
+  const sep = document.createElement('span');
+  sep.className = 'crumb-sep';
+  sep.textContent = '›';
+  const crumb = document.createElement('span');
+  crumb.className = 'crumb current';
+  crumb.textContent = folderName;
+
+  // Remove 'current' from previous
+  bc.querySelectorAll('.crumb').forEach(c => c.classList.remove('current'));
+  bc.appendChild(sep);
+  bc.appendChild(crumb);
+  bc.scrollLeft = bc.scrollWidth;
+
+  // Flash effect
+  const fl = document.getElementById(`fl-${pane}`);
+  fl.style.opacity = '0.5';
+  setTimeout(() => fl.style.opacity = '1', 150);
+}
+
+function navigateUp(pane) {
+  const bc = document.getElementById(`bc-${pane}`);
+  const crumbs = bc.querySelectorAll('.crumb, .crumb-sep');
+  if (crumbs.length > 1) {
+    // Remove last crumb + sep
+    crumbs[crumbs.length - 1].remove();
+    if (crumbs.length > 1) crumbs[crumbs.length - 2].remove();
+    const remaining = bc.querySelectorAll('.crumb');
+    if (remaining.length) remaining[remaining.length - 1].classList.add('current');
+  }
+  const fl = document.getElementById(`fl-${pane}`);
+  fl.style.opacity = '0.5';
+  setTimeout(() => fl.style.opacity = '1', 150);
+}
+
+function navigateLocal(path) {
+  const bc = document.getElementById('bc-local');
+  bc.innerHTML = '';
+  path.forEach((seg, i) => {
+    if (i > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'crumb-sep';
+      sep.textContent = '›';
+      bc.appendChild(sep);
+    }
+    const c = document.createElement('span');
+    c.className = 'crumb' + (i === path.length - 1 ? ' current' : '');
+    c.textContent = seg;
+    bc.appendChild(c);
+  });
+}
+
+function navigateRemote(path) {
+  const bc = document.getElementById('bc-remote');
+  bc.innerHTML = '';
+  path.forEach((seg, i) => {
+    if (i > 0) {
+      const sep = document.createElement('span');
+      sep.className = 'crumb-sep';
+      sep.textContent = '›';
+      bc.appendChild(sep);
+    }
+    const c = document.createElement('span');
+    c.className = 'crumb' + (i === path.length - 1 ? ' current' : '');
+    c.textContent = seg;
+    bc.appendChild(c);
+  });
+}
+
+// ═══════════════════════════════════════
+// VIEW TOGGLE
+// ═══════════════════════════════════════
+function toggleView(pane) {
+  state.viewMode[pane] = state.viewMode[pane] === 'list' ? 'grid' : 'list';
+  const fl = document.getElementById(`fl-${pane}`);
+  fl.classList.toggle('grid-view', state.viewMode[pane] === 'grid');
+
+  const btn = document.getElementById(`view-toggle-${pane}`);
+  btn.classList.toggle('active', state.viewMode[pane] === 'grid');
+}
+
+// ═══════════════════════════════════════
+// FOLD MODE
+// ═══════════════════════════════════════
+function setFoldMode(mode) {
+  state.foldMode = mode;
+  const app = document.getElementById('app');
+  app.classList.toggle('folded', mode === 'folded');
+
+  document.querySelectorAll('.fold-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+
+  if (mode === 'folded') {
+    switchTab(state.activeTab);
+  } else {
+    document.getElementById('pane-local').classList.remove('hidden-pane');
+    document.getElementById('pane-remote').classList.remove('hidden-pane');
+  }
+}
+
+function switchTab(tab) {
+  state.activeTab = tab;
+  document.querySelectorAll('.tab-bar-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+  document.getElementById('pane-local').classList.toggle('hidden-pane', tab !== 'local');
+  document.getElementById('pane-remote').classList.toggle('hidden-pane', tab !== 'remote');
+}
+
+// ═══════════════════════════════════════
+// CONTEXT MENU
+// ═══════════════════════════════════════
+function showContextMenu(x, y, file, pane) {
+  state.ctxTarget = file;
+  state.ctxPane = pane;
+  const menu = document.getElementById('ctx-menu');
+  menu.classList.add('visible');
+
+  // Position
+  const mw = menu.offsetWidth;
+  const mh = menu.offsetHeight;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  menu.style.left = Math.min(x, vw - mw - 8) + 'px';
+  menu.style.top = Math.min(y, vh - mh - 8) + 'px';
+}
+
+function hideContextMenu() {
+  document.getElementById('ctx-menu').classList.remove('visible');
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.context-menu')) hideContextMenu();
+});
+
+function ctxAction(action) {
+  hideContextMenu();
+  if (action === 'info') showFileInfo(state.ctxTarget, state.ctxPane);
+  // Other actions are simulated
+}
+
+// ═══════════════════════════════════════
+// BOTTOM SHEET (file info)
+// ═══════════════════════════════════════
+function showFileInfo(file, pane) {
+  const overlay = document.getElementById('sheet-overlay');
+  const sheet = document.getElementById('bottom-sheet');
+  const content = document.getElementById('sheet-content');
+
+  const perms = file.type === 'folder' ? 'drwxr-xr-x' : '-rw-r--r--';
+  const fullPath = pane === 'local'
+    ? `/storage/emulated/0/Projects/${file.name}`
+    : `/home/deploy/webapp/${file.name}`;
+
+  content.innerHTML = `
+    <div class="sheet-title">${file.name}</div>
+    <div class="sheet-subtitle">${fullPath}</div>
+    <div class="sheet-grid">
+      <div>
+        <div class="sheet-field-label">Type</div>
+        <div class="sheet-field-value">${file.type === 'folder' ? 'Directory' : file.name.split('.').pop().toUpperCase() + ' File'}</div>
+      </div>
+      <div>
+        <div class="sheet-field-label">Size</div>
+        <div class="sheet-field-value">${file.size || '—'}</div>
+      </div>
+      <div>
+        <div class="sheet-field-label">Modified</div>
+        <div class="sheet-field-value">${file.date || '—'}</div>
+      </div>
+      <div>
+        <div class="sheet-field-label">Permissions</div>
+        <div class="sheet-field-value" style="font-family:monospace;font-size:12px">${perms}</div>
+      </div>
+      ${file.git ? `
+      <div>
+        <div class="sheet-field-label">Git Status</div>
+        <div class="sheet-field-value" style="display:flex;align-items:center;gap:6px">
+          <span class="git-dot git-${file.git}"></span>
+          ${file.git.charAt(0).toUpperCase() + file.git.slice(1)}
+        </div>
+      </div>` : ''}
+      <div>
+        <div class="sheet-field-label">Location</div>
+        <div class="sheet-field-value">${pane === 'local' ? 'Local Device' : 'Remote (SFTP)'}</div>
+      </div>
+    </div>
+    <div class="sheet-actions">
+      <button class="action-btn" onclick="closeSheet()">
+        Done
+      </button>
+      <button class="action-btn primary" onclick="closeSheet()">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        Open
+      </button>
+    </div>
+  `;
+
+  overlay.classList.add('active');
+  sheet.classList.add('active');
+}
+
+function closeSheet() {
+  document.getElementById('sheet-overlay').classList.remove('active');
+  document.getElementById('bottom-sheet').classList.remove('active');
+}
+
+// ═══════════════════════════════════════
+// DRAGGABLE DIVIDER
+// ═══════════════════════════════════════
+(function() {
+  const divider = document.getElementById('divider');
+  const main = document.getElementById('main');
+  const paneL = document.getElementById('pane-local');
+  const paneR = document.getElementById('pane-remote');
+  let isDragging = false;
+  let startX, startLeftFlex, startRightFlex;
+
+  function onStart(clientX) {
+    isDragging = true;
+    divider.classList.add('dragging');
+    startX = clientX;
+    const totalW = main.offsetWidth - divider.offsetWidth - 24; // minus padding
+    startLeftFlex = paneL.offsetWidth / totalW;
+    startRightFlex = paneR.offsetWidth / totalW;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }
+
+  function onMove(clientX) {
+    if (!isDragging) return;
+    const totalW = main.offsetWidth - divider.offsetWidth - 24;
+    const dx = clientX - startX;
+    const dFlex = dx / totalW;
+    let newL = startLeftFlex + dFlex;
+    let newR = startRightFlex - dFlex;
+
+    // Clamp
+    const min = 0.2;
+    if (newL < min) { newL = min; newR = 1 - min; }
+    if (newR < min) { newR = min; newL = 1 - min; }
+
+    paneL.style.flex = newL;
+    paneR.style.flex = newR;
+  }
+
+  function onEnd() {
+    if (!isDragging) return;
+    isDragging = false;
+    divider.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  }
+
+  divider.addEventListener('mousedown', (e) => onStart(e.clientX));
+  document.addEventListener('mousemove', (e) => onMove(e.clientX));
+  document.addEventListener('mouseup', onEnd);
+
+  divider.addEventListener('touchstart', (e) => onStart(e.touches[0].clientX), { passive: true });
+  document.addEventListener('touchmove', (e) => { if (isDragging) onMove(e.touches[0].clientX); }, { passive: true });
+  document.addEventListener('touchend', onEnd);
+})();
+
+// ═══════════════════════════════════════
+// ACTION STUBS
+// ═══════════════════════════════════════
+function transferFiles() { flashBtn('Transfer queued'); }
+function deleteFiles() { flashBtn('Delete requested'); }
+function renameFile() { flashBtn('Rename dialog'); }
+function chmodFile() { flashBtn('Chmod dialog'); }
+function sortPane(p) { flashBtn('Sort toggled'); }
+function newFolder(p) { flashBtn('New folder dialog'); }
+function focusSearch(p) { flashBtn('Search activated'); }
+
+function flashBtn(msg) {
+  // Simple toast-like feedback
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = `position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--text-primary);color:white;padding:8px 20px;border-radius:20px;font-size:13px;font-weight:500;z-index:999;opacity:0;transition:opacity 200ms;font-family:var(--font);`;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.style.opacity = '1');
+  setTimeout(() => {
+    t.style.opacity = '0';
+    setTimeout(() => t.remove(), 200);
+  }, 1200);
+}
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+renderFileList('local', localFiles);
+renderFileList('remote', remoteFiles);
+</script>
+</body>
+</html>

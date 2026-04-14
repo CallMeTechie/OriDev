@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ori:Dev — Proxmox Manager</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#FAFAFA;--card:#FFFFFF;--border:#E5E7EB;--track:#E5E7EB;
+    --text-primary:#111827;--text-secondary:#374151;--text-muted:#6B7280;
+    --accent:#6366F1;--accent-light:#EEF2FF;--accent-hover:#4F46E5;
+    --green:#10B981;--green-light:#ECFDF5;--red:#EF4444;--red-light:#FEF2F2;
+    --yellow:#F59E0B;--yellow-light:#FFFBEB;
+    --radius:12px;--radius-sm:8px;--radius-xs:6px;
+    --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+    --shadow-md:0 4px 12px rgba(0,0,0,.07),0 2px 4px rgba(0,0,0,.04);
+    --shadow-lg:0 10px 30px rgba(0,0,0,.08),0 4px 8px rgba(0,0,0,.04);
+    --transition:all .2s cubic-bezier(.4,0,.2,1);
+  }
+  html{font-family:Inter,system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.5;color:var(--text-primary);background:var(--bg)}
+  body{min-height:100vh;padding:0}
+
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#D1D5DB;border-radius:3px}
+
+  .app-shell{max-width:1200px;margin:0 auto;padding:24px 20px 100px}
+
+  .top-bar{display:flex;align-items:center;gap:16px;margin-bottom:32px;flex-wrap:wrap}
+  .top-bar h1{font-size:20px;font-weight:700;letter-spacing:-.3px;color:var(--text-primary);white-space:nowrap}
+  .top-bar h1 span{color:var(--accent);font-weight:800}
+  .top-bar-spacer{flex:1}
+  .node-select{
+    appearance:none;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);
+    padding:8px 36px 8px 12px;font-size:13px;color:var(--text-secondary);cursor:pointer;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%236B7280' viewBox='0 0 16 16'%3E%3Cpath d='M4.5 6l3.5 3.5L11.5 6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 10px center;
+    transition:var(--transition);font-weight:500
+  }
+  .node-select:hover{border-color:var(--accent)}
+  .node-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,.12)}
+  .btn-icon{
+    width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;
+    border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--card);
+    color:var(--text-muted);cursor:pointer;transition:var(--transition);flex-shrink:0
+  }
+  .btn-icon:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-light)}
+  .btn-icon svg{width:16px;height:16px}
+
+  .section-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);margin-bottom:12px}
+
+  .cluster-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:36px}
+  .node-card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:20px;transition:var(--transition);box-shadow:var(--shadow)
+  }
+  .node-card:hover{box-shadow:var(--shadow-md);border-color:#D1D5DB}
+  .node-header{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+  .node-status{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .node-status.online{background:var(--green);box-shadow:0 0 0 3px rgba(16,185,129,.18)}
+  .node-status.offline{background:var(--red);box-shadow:0 0 0 3px rgba(239,68,68,.18)}
+  .node-name{font-weight:600;font-size:14px;color:var(--text-primary)}
+  .node-tag{
+    margin-left:auto;font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;
+    background:var(--green-light);color:var(--green)
+  }
+  .node-tag.offline{background:var(--red-light);color:var(--red)}
+  .node-stats{display:flex;flex-direction:column;gap:12px}
+  .stat-row{display:flex;align-items:center;gap:10px}
+  .stat-label{font-size:12px;color:var(--text-muted);width:52px;flex-shrink:0;font-weight:500}
+  .stat-bar{flex:1;height:6px;background:var(--track);border-radius:3px;overflow:hidden;position:relative}
+  .stat-fill{height:100%;border-radius:3px;transition:width .8s cubic-bezier(.4,0,.2,1)}
+  .stat-fill.cpu{background:var(--accent)}
+  .stat-fill.ram{background:var(--green)}
+  .stat-fill.storage{background:var(--yellow)}
+  .stat-value{font-size:12px;color:var(--text-secondary);width:36px;text-align:right;font-weight:500;font-variant-numeric:tabular-nums}
+
+  .vm-list{display:flex;flex-direction:column;gap:12px}
+  .vm-card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:0;transition:var(--transition);box-shadow:var(--shadow);overflow:hidden;cursor:pointer
+  }
+  .vm-card:hover{box-shadow:var(--shadow-md);border-color:#D1D5DB}
+  .vm-card.expanded .vm-expand{display:block}
+  .vm-main{display:flex;align-items:center;gap:14px;padding:16px 20px;flex-wrap:wrap}
+  .vm-status-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .vm-status-dot.running{background:var(--green);box-shadow:0 0 0 3px rgba(16,185,129,.18)}
+  .vm-status-dot.stopped{background:#9CA3AF;box-shadow:0 0 0 3px rgba(156,163,175,.18)}
+  .vm-status-dot.paused{background:var(--yellow);box-shadow:0 0 0 3px rgba(245,158,11,.18)}
+  .vm-identity{display:flex;flex-direction:column;gap:2px;min-width:140px}
+  .vm-name{font-weight:600;font-size:14px;color:var(--text-primary)}
+  .vm-id{font-size:12px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+  .vm-badges{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .badge{
+    font-size:11px;font-weight:500;padding:3px 10px;border-radius:20px;white-space:nowrap;
+    display:inline-flex;align-items:center;gap:4px
+  }
+  .badge-running{background:var(--green-light);color:#059669}
+  .badge-stopped{background:var(--red-light);color:var(--red)}
+  .badge-paused{background:var(--yellow-light);color:#D97706}
+  .badge-os{background:#F3F4F6;color:var(--text-secondary)}
+  .badge-claude{background:var(--accent-light);color:var(--accent);font-weight:600}
+  .badge-claude-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+  .vm-specs{font-size:12px;color:var(--text-muted);white-space:nowrap;font-weight:500;font-variant-numeric:tabular-nums}
+  .vm-ip{font-size:12px;color:var(--text-secondary);font-family:'SF Mono',SFMono-Regular,Consolas,monospace;white-space:nowrap}
+
+  .vm-mini-bars{display:flex;gap:12px;align-items:center;margin-left:auto}
+  .mini-bar-group{display:flex;align-items:center;gap:6px}
+  .mini-bar-label{font-size:10px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+  .mini-bar{width:60px;height:4px;background:var(--track);border-radius:2px;overflow:hidden}
+  .mini-bar .fill{height:100%;border-radius:2px;transition:width .8s cubic-bezier(.4,0,.2,1)}
+  .mini-bar-val{font-size:11px;color:var(--text-secondary);font-variant-numeric:tabular-nums;font-weight:500;width:28px}
+
+  .vm-actions{display:flex;gap:6px;margin-left:auto;flex-shrink:0}
+  .action-pill{
+    display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:20px;
+    font-size:12px;font-weight:500;border:1px solid var(--border);background:var(--card);
+    color:var(--text-secondary);cursor:pointer;transition:var(--transition);white-space:nowrap
+  }
+  .action-pill:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-light)}
+  .action-pill.danger:hover{border-color:var(--red);color:var(--red);background:var(--red-light)}
+  .action-pill.start:hover{border-color:var(--green);color:var(--green);background:var(--green-light)}
+  .action-pill svg{width:14px;height:14px}
+
+  .vm-expand{display:none;border-top:1px solid var(--border);padding:20px;background:#FCFCFD}
+  .vm-expand-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .expand-section h4{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+  .expand-row{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
+  .expand-row .label{color:var(--text-muted)}
+  .expand-row .value{color:var(--text-primary);font-weight:500}
+
+  .fab{
+    position:fixed;bottom:28px;right:28px;width:52px;height:52px;
+    border-radius:16px;background:var(--accent);color:white;border:none;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    box-shadow:0 4px 16px rgba(99,102,241,.35);transition:var(--transition);z-index:100
+  }
+  .fab:hover{background:var(--accent-hover);transform:translateY(-2px);box-shadow:0 8px 24px rgba(99,102,241,.4)}
+  .fab svg{width:24px;height:24px}
+
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(17,24,39,.3);backdrop-filter:blur(4px);
+    display:none;align-items:center;justify-content:center;z-index:200;padding:20px
+  }
+  .modal-overlay.active{display:flex}
+  .modal{
+    background:var(--card);border-radius:16px;box-shadow:var(--shadow-lg);
+    width:100%;max-width:600px;max-height:90vh;overflow-y:auto;animation:modalIn .25s ease
+  }
+  @keyframes modalIn{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
+  .modal-header{display:flex;align-items:center;justify-content:space-between;padding:24px 24px 0;margin-bottom:4px}
+  .modal-header h2{font-size:18px;font-weight:700;letter-spacing:-.2px}
+  .modal-close{
+    width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+    border-radius:8px;border:none;background:transparent;color:var(--text-muted);
+    cursor:pointer;transition:var(--transition)
+  }
+  .modal-close:hover{background:#F3F4F6;color:var(--text-primary)}
+  .modal-body{padding:20px 24px 24px}
+
+  .wizard-steps{display:flex;align-items:center;gap:0;padding:16px 24px 0;margin-bottom:8px}
+  .wiz-step{display:flex;align-items:center;gap:8px;flex:1}
+  .wiz-step-num{
+    width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:12px;font-weight:600;border:2px solid var(--border);color:var(--text-muted);
+    transition:var(--transition);flex-shrink:0
+  }
+  .wiz-step.active .wiz-step-num{border-color:var(--accent);background:var(--accent);color:white}
+  .wiz-step.done .wiz-step-num{border-color:var(--green);background:var(--green);color:white}
+  .wiz-step-label{font-size:12px;font-weight:500;color:var(--text-muted);white-space:nowrap}
+  .wiz-step.active .wiz-step-label{color:var(--accent);font-weight:600}
+  .wiz-step.done .wiz-step-label{color:var(--green)}
+  .wiz-step-line{flex:1;height:2px;background:var(--border);margin:0 8px;border-radius:1px}
+
+  .wiz-panel{display:none}
+  .wiz-panel.active{display:block}
+
+  .template-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-top:8px}
+  .template-card{
+    border:2px solid var(--border);border-radius:var(--radius);padding:16px 12px;
+    text-align:center;cursor:pointer;transition:var(--transition);background:var(--card)
+  }
+  .template-card:hover{border-color:#A5B4FC;background:var(--accent-light)}
+  .template-card.selected{border-color:var(--accent);background:var(--accent-light)}
+  .template-card .os-icon{font-size:28px;margin-bottom:8px;display:block}
+  .template-card .os-name{font-size:12px;font-weight:600;color:var(--text-primary)}
+  .template-card .os-ver{font-size:11px;color:var(--text-muted);margin-top:2px}
+
+  .form-group{margin-bottom:16px}
+  .form-label{display:block;font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px}
+  .form-input{
+    width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius-sm);
+    font-size:13px;color:var(--text-primary);background:var(--card);transition:var(--transition);
+    font-family:inherit
+  }
+  .form-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .toggle-pills{display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden}
+  .toggle-pill{
+    flex:1;padding:8px 16px;font-size:12px;font-weight:500;text-align:center;
+    cursor:pointer;transition:var(--transition);background:var(--card);color:var(--text-muted);
+    border:none;font-family:inherit
+  }
+  .toggle-pill.active{background:var(--accent);color:white}
+  .toggle-pill+.toggle-pill{border-left:1px solid var(--border)}
+
+  .resource-slider{display:flex;align-items:center;gap:12px}
+  .resource-slider input[type=range]{
+    flex:1;-webkit-appearance:none;height:6px;border-radius:3px;background:var(--track);outline:none
+  }
+  .resource-slider input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--accent);
+    cursor:pointer;box-shadow:0 1px 4px rgba(99,102,241,.3)
+  }
+  .resource-val{font-size:13px;font-weight:600;color:var(--accent);width:40px;text-align:right;font-variant-numeric:tabular-nums}
+
+  .review-table{width:100%;border-collapse:collapse}
+  .review-table tr{border-bottom:1px solid var(--border)}
+  .review-table tr:last-child{border-bottom:none}
+  .review-table td{padding:10px 0;font-size:13px}
+  .review-table td:first-child{color:var(--text-muted);font-weight:500;width:40%}
+  .review-table td:last-child{color:var(--text-primary);font-weight:600}
+
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    padding:10px 20px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;
+    border:none;cursor:pointer;transition:var(--transition);font-family:inherit
+  }
+  .btn-primary{background:var(--accent);color:white}
+  .btn-primary:hover{background:var(--accent-hover)}
+  .btn-secondary{background:#F3F4F6;color:var(--text-secondary);border:1px solid var(--border)}
+  .btn-secondary:hover{background:#E5E7EB}
+  .btn-danger{background:var(--red);color:white}
+  .btn-danger:hover{background:#DC2626}
+  .modal-actions{display:flex;justify-content:space-between;margin-top:24px;gap:12px}
+
+  .confirm-body{text-align:center;padding:12px 0}
+  .confirm-body .icon{font-size:40px;margin-bottom:12px}
+  .confirm-body p{font-size:14px;color:var(--text-secondary);margin-bottom:4px}
+  .confirm-body .vm-target{font-weight:700;color:var(--text-primary)}
+  .confirm-actions{display:flex;gap:10px;justify-content:center;margin-top:20px}
+
+  .connect-steps{display:flex;flex-direction:column;gap:16px;padding:8px 0}
+  .connect-step{display:flex;align-items:center;gap:14px}
+  .step-icon{
+    width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;font-size:14px;border:2px solid var(--border);color:var(--text-muted);
+    transition:var(--transition)
+  }
+  .step-icon.done{border-color:var(--green);background:var(--green);color:white}
+  .step-icon.active{border-color:var(--accent);color:var(--accent);animation:spin 1s linear infinite}
+  @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+  .step-info{display:flex;flex-direction:column}
+  .step-title{font-size:13px;font-weight:600;color:var(--text-primary)}
+  .step-desc{font-size:12px;color:var(--text-muted)}
+
+  .ssh-anim{text-align:center;padding:20px 0}
+  .ssh-anim .terminal-box{
+    background:#111827;border-radius:var(--radius);padding:20px;margin:16px 0;
+    font-family:'SF Mono',SFMono-Regular,Consolas,monospace;font-size:13px;color:#10B981;
+    text-align:left;min-height:80px;line-height:1.8
+  }
+  .terminal-box .cmd-line{color:#818CF8}
+  .cursor-blink{animation:blink 1s step-end infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+  @media(max-width:640px){
+    .vm-main{gap:10px;padding:14px 16px}
+    .vm-mini-bars{display:none}
+    .vm-actions{margin-left:0;margin-top:4px;width:100%}
+    .vm-expand-grid{grid-template-columns:1fr}
+    .cluster-row{grid-template-columns:1fr}
+    .template-grid{grid-template-columns:repeat(2,1fr)}
+    .form-row{grid-template-columns:1fr}
+    .top-bar h1{font-size:17px}
+  }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <h1><span>Ori:Dev</span> / Proxmox Manager</h1>
+    <div class="top-bar-spacer"></div>
+    <select class="node-select" id="nodeSelect">
+      <option>All Nodes</option>
+      <option>pve-node-01 (Primary)</option>
+      <option>pve-node-02 (Secondary)</option>
+    </select>
+    <button class="btn-icon" onclick="refreshAll()" title="Refresh">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+    </button>
+  </div>
+
+  <!-- Cluster Nodes -->
+  <div class="section-label">Cluster Nodes</div>
+  <div class="cluster-row">
+    <div class="node-card">
+      <div class="node-header">
+        <div class="node-status online"></div>
+        <div class="node-name">pve-node-01</div>
+        <div class="node-tag">Online</div>
+      </div>
+      <div class="node-stats">
+        <div class="stat-row">
+          <span class="stat-label">CPU</span>
+          <div class="stat-bar"><div class="stat-fill cpu" style="width:0" data-target="34%"></div></div>
+          <span class="stat-value">34%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">RAM</span>
+          <div class="stat-bar"><div class="stat-fill ram" style="width:0" data-target="58%"></div></div>
+          <span class="stat-value">58%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Storage</span>
+          <div class="stat-bar"><div class="stat-fill storage" style="width:0" data-target="42%"></div></div>
+          <span class="stat-value">42%</span>
+        </div>
+      </div>
+    </div>
+    <div class="node-card">
+      <div class="node-header">
+        <div class="node-status online"></div>
+        <div class="node-name">pve-node-02</div>
+        <div class="node-tag">Online</div>
+      </div>
+      <div class="node-stats">
+        <div class="stat-row">
+          <span class="stat-label">CPU</span>
+          <div class="stat-bar"><div class="stat-fill cpu" style="width:0" data-target="18%"></div></div>
+          <span class="stat-value">18%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">RAM</span>
+          <div class="stat-bar"><div class="stat-fill ram" style="width:0" data-target="31%"></div></div>
+          <span class="stat-value">31%</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Storage</span>
+          <div class="stat-bar"><div class="stat-fill storage" style="width:0" data-target="67%"></div></div>
+          <span class="stat-value">67%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VM List -->
+  <div class="section-label">Virtual Machines</div>
+  <div class="vm-list">
+
+    <!-- VM 100 -->
+    <div class="vm-card" onclick="toggleExpand(this)">
+      <div class="vm-main">
+        <div class="vm-status-dot running"></div>
+        <div class="vm-identity">
+          <div class="vm-name">ubuntu-dev</div>
+          <div class="vm-id">VM 100 &middot; pve-node-01</div>
+        </div>
+        <div class="vm-badges">
+          <span class="badge badge-running">Running</span>
+          <span class="badge badge-os">Ubuntu 24.04</span>
+        </div>
+        <div class="vm-specs">4C / 8 GB</div>
+        <div class="vm-ip">192.168.1.101</div>
+        <div class="vm-mini-bars">
+          <div class="mini-bar-group">
+            <span class="mini-bar-label">CPU</span>
+            <div class="mini-bar"><div class="fill" style="width:0;background:var(--accent)" data-target="12%"></div></div>
+            <span class="mini-bar-val">12%</span>
+          </div>
+          <div class="mini-bar-group">
+            <span class="mini-bar-label">RAM</span>
+            <div class="mini-bar"><div class="fill" style="width:0;background:var(--green)" data-target="45%"></div></div>
+            <span class="mini-bar-val">45%</span>
+          </div>
+        </div>
+        <div class="vm-actions" onclick="event.stopPropagation()">
+          <button class="action-pill" onclick="showSSH('ubuntu-dev','192.168.1.101')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            SSH
+          </button>
+          <button class="action-pill danger" onclick="showConfirm('stop','ubuntu-dev',100)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            Stop
+          </button>
+        </div>
+      </div>
+      <div class="vm-expand">
+        <div class="vm-expand-grid">
+          <div class="expand-section">
+            <h4>Configuration</h4>
+            <div class="expand-row"><span class="label">OS</span><span class="value">Ubuntu 24.04 LTS</span></div>
+            <div class="expand-row"><span class="label">CPU</span><span class="value">4 Cores (host)</span></div>
+            <div class="expand-row"><span class="label">Memory</span><span class="value">8192 MB</span></div>
+            <div class="expand-row"><span class="label">Disk</span><span class="value">64 GB (local-lvm)</span></div>
+            <div class="expand-row"><span class="label">Network</span><span class="value">vmbr0 (virtio)</span></div>
+          </div>
+          <div class="expand-section">
+            <h4>Runtime</h4>
+            <div class="expand-row"><span class="label">Uptime</span><span class="value">14d 6h 32m</span></div>
+            <div class="expand-row"><span class="label">IP</span><span class="value">192.168.1.101</span></div>
+            <div class="expand-row"><span class="label">PID</span><span class="value">48291</span></div>
+            <div class="expand-row"><span class="label">Agent</span><span class="value" style="color:var(--green)">Connected</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VM 101 -->
+    <div class="vm-card" onclick="toggleExpand(this)">
+      <div class="vm-main">
+        <div class="vm-status-dot running"></div>
+        <div class="vm-identity">
+          <div class="vm-name">claude-workspace</div>
+          <div class="vm-id">VM 101 &middot; pve-node-01</div>
+        </div>
+        <div class="vm-badges">
+          <span class="badge badge-running">Running</span>
+          <span class="badge badge-os">Debian 12</span>
+          <span class="badge badge-claude"><span class="badge-claude-dot"></span> Claude Code Active</span>
+        </div>
+        <div class="vm-specs">8C / 16 GB</div>
+        <div class="vm-ip">192.168.1.102</div>
+        <div class="vm-mini-bars">
+          <div class="mini-bar-group">
+            <span class="mini-bar-label">CPU</span>
+            <div class="mini-bar"><div class="fill" style="width:0;background:var(--accent)" data-target="45%"></div></div>
+            <span class="mini-bar-val">45%</span>
+          </div>
+          <div class="mini-bar-group">
+            <span class="mini-bar-label">RAM</span>
+            <div class="mini-bar"><div class="fill" style="width:0;background:var(--green)" data-target="62%"></div></div>
+            <span class="mini-bar-val">62%</span>
+          </div>
+        </div>
+        <div class="vm-actions" onclick="event.stopPropagation()">
+          <button class="action-pill" onclick="showSSH('claude-workspace','192.168.1.102')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            SSH
+          </button>
+          <button class="action-pill danger" onclick="showConfirm('stop','claude-workspace',101)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            Stop
+          </button>
+        </div>
+      </div>
+      <div class="vm-expand">
+        <div class="vm-expand-grid">
+          <div class="expand-section">
+            <h4>Configuration</h4>
+            <div class="expand-row"><span class="label">OS</span><span class="value">Debian 12 (Bookworm)</span></div>
+            <div class="expand-row"><span class="label">CPU</span><span class="value">8 Cores (host)</span></div>
+            <div class="expand-row"><span class="label">Memory</span><span class="value">16384 MB</span></div>
+            <div class="expand-row"><span class="label">Disk</span><span class="value">128 GB (local-lvm)</span></div>
+            <div class="expand-row"><span class="label">Network</span><span class="value">vmbr0 (virtio)</span></div>
+          </div>
+          <div class="expand-section">
+            <h4>Runtime</h4>
+            <div class="expand-row"><span class="label">Uptime</span><span class="value">3d 18h 45m</span></div>
+            <div class="expand-row"><span class="label">IP</span><span class="value">192.168.1.102</span></div>
+            <div class="expand-row"><span class="label">Claude</span><span class="value" style="color:var(--accent)">Session Active</span></div>
+            <div class="expand-row"><span class="label">Agent</span><span class="value" style="color:var(--green)">Connected</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VM 102 -->
+    <div class="vm-card" onclick="toggleExpand(this)">
+      <div class="vm-main">
+        <div class="vm-status-dot running"></div>
+        <div class="vm-identity">
+          <div class="vm-name">nginx-proxy</div>
+          <div class="vm-id">VM 102 &middot; pve-node-02</div>
+        </div>
+        <div class="vm-badges">
+          <span class="badge badge-running">Running</span>
+          <span class="badge badge-os">Alpine 3.19</span>
+        </div>
+        <div class="vm-specs">2C / 2 GB</div>
+        <div class="vm-ip">192.168.1.103</div>
+        <div class="vm-mini-bars">
+          <div class="mini-bar-group">
+            <span class="mini-bar-label">CPU</span>
+            <div class="mini-bar"><div class="fill" style="width:0;background:var(--accent)" data-target="8%"></div></div>
+            <span class="mini-bar-val">8%</span>
+          </div>
+          <div class="mini-bar-group">
+            <span class="mini-bar-label">RAM</span>
+            <div class="mini-bar"><div class="fill" style="width:0;background:var(--green)" data-target="23%"></div></div>
+            <span class="mini-bar-val">23%</span>
+          </div>
+        </div>
+        <div class="vm-actions" onclick="event.stopPropagation()">
+          <button class="action-pill" onclick="showSSH('nginx-proxy','192.168.1.103')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            SSH
+          </button>
+          <button class="action-pill danger" onclick="showConfirm('stop','nginx-proxy',102)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            Stop
+          </button>
+        </div>
+      </div>
+      <div class="vm-expand">
+        <div class="vm-expand-grid">
+          <div class="expand-section">
+            <h4>Configuration</h4>
+            <div class="expand-row"><span class="label">OS</span><span class="value">Alpine Linux 3.19</span></div>
+            <div class="expand-row"><span class="label">CPU</span><span class="value">2 Cores</span></div>
+            <div class="expand-row"><span class="label">Memory</span><span class="value">2048 MB</span></div>
+            <div class="expand-row"><span class="label">Disk</span><span class="value">16 GB (local-lvm)</span></div>
+          </div>
+          <div class="expand-section">
+            <h4>Runtime</h4>
+            <div class="expand-row"><span class="label">Uptime</span><span class="value">28d 2h 11m</span></div>
+            <div class="expand-row"><span class="label">IP</span><span class="value">192.168.1.103</span></div>
+            <div class="expand-row"><span class="label">Agent</span><span class="value" style="color:var(--green)">Connected</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VM 103 - Stopped -->
+    <div class="vm-card" onclick="toggleExpand(this)">
+      <div class="vm-main">
+        <div class="vm-status-dot stopped"></div>
+        <div class="vm-identity">
+          <div class="vm-name">postgres-db</div>
+          <div class="vm-id">VM 103 &middot; pve-node-01</div>
+        </div>
+        <div class="vm-badges">
+          <span class="badge badge-stopped">Stopped</span>
+          <span class="badge badge-os">Debian 12</span>
+        </div>
+        <div class="vm-specs">4C / 8 GB</div>
+        <div class="vm-ip" style="color:var(--text-muted)">No IP</div>
+        <div class="vm-mini-bars"></div>
+        <div class="vm-actions" onclick="event.stopPropagation()">
+          <button class="action-pill start" onclick="showConfirm('start','postgres-db',103)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="6 4 20 12 6 20"/></svg>
+            Start
+          </button>
+          <button class="action-pill danger" onclick="showConfirm('delete','postgres-db',103)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Delete
+          </button>
+        </div>
+      </div>
+      <div class="vm-expand">
+        <div class="vm-expand-grid">
+          <div class="expand-section">
+            <h4>Configuration</h4>
+            <div class="expand-row"><span class="label">OS</span><span class="value">Debian 12</span></div>
+            <div class="expand-row"><span class="label">CPU</span><span class="value">4 Cores</span></div>
+            <div class="expand-row"><span class="label">Memory</span><span class="value">8192 MB</span></div>
+            <div class="expand-row"><span class="label">Disk</span><span class="value">256 GB (local-lvm)</span></div>
+          </div>
+          <div class="expand-section">
+            <h4>Status</h4>
+            <div class="expand-row"><span class="label">State</span><span class="value" style="color:var(--red)">Stopped</span></div>
+            <div class="expand-row"><span class="label">Last Run</span><span class="value">2 days ago</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VM 200 - Paused -->
+    <div class="vm-card" onclick="toggleExpand(this)">
+      <div class="vm-main">
+        <div class="vm-status-dot paused"></div>
+        <div class="vm-identity">
+          <div class="vm-name">test-env</div>
+          <div class="vm-id">VM 200 &middot; pve-node-02</div>
+        </div>
+        <div class="vm-badges">
+          <span class="badge badge-paused">Paused</span>
+          <span class="badge badge-os">Ubuntu 22.04</span>
+        </div>
+        <div class="vm-specs">4C / 4 GB</div>
+        <div class="vm-ip">192.168.1.200</div>
+        <div class="vm-mini-bars">
+          <div class="mini-bar-group">
+            <span class="mini-bar-label">CPU</span>
+            <div class="mini-bar"><div class="fill" style="width:0;background:var(--yellow)" data-target="0%"></div></div>
+            <span class="mini-bar-val">0%</span>
+          </div>
+          <div class="mini-bar-group">
+            <span class="mini-bar-label">RAM</span>
+            <div class="mini-bar"><div class="fill" style="width:0;background:var(--yellow)" data-target="51%"></div></div>
+            <span class="mini-bar-val">51%</span>
+          </div>
+        </div>
+        <div class="vm-actions" onclick="event.stopPropagation()">
+          <button class="action-pill start" onclick="showConfirm('resume','test-env',200)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="6 4 20 12 6 20"/></svg>
+            Resume
+          </button>
+          <button class="action-pill danger" onclick="showConfirm('stop','test-env',200)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            Stop
+          </button>
+        </div>
+      </div>
+      <div class="vm-expand">
+        <div class="vm-expand-grid">
+          <div class="expand-section">
+            <h4>Configuration</h4>
+            <div class="expand-row"><span class="label">OS</span><span class="value">Ubuntu 22.04 LTS</span></div>
+            <div class="expand-row"><span class="label">CPU</span><span class="value">4 Cores</span></div>
+            <div class="expand-row"><span class="label">Memory</span><span class="value">4096 MB</span></div>
+            <div class="expand-row"><span class="label">Disk</span><span class="value">32 GB (local-lvm)</span></div>
+          </div>
+          <div class="expand-section">
+            <h4>Status</h4>
+            <div class="expand-row"><span class="label">State</span><span class="value" style="color:var(--yellow)">Paused</span></div>
+            <div class="expand-row"><span class="label">Paused At</span><span class="value">18 min ago</span></div>
+            <div class="expand-row"><span class="label">IP</span><span class="value">192.168.1.200</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- FAB -->
+<button class="fab" onclick="openWizard()" title="Create VM">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+</button>
+
+<!-- Create VM Wizard Modal -->
+<div class="modal-overlay" id="wizardModal">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Create Virtual Machine</h2>
+      <button class="modal-close" onclick="closeModal('wizardModal')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="wizard-steps" id="wizSteps">
+      <div class="wiz-step active" data-step="1">
+        <div class="wiz-step-num">1</div>
+        <span class="wiz-step-label">Template</span>
+      </div>
+      <div class="wiz-step-line"></div>
+      <div class="wiz-step" data-step="2">
+        <div class="wiz-step-num">2</div>
+        <span class="wiz-step-label">Config</span>
+      </div>
+      <div class="wiz-step-line"></div>
+      <div class="wiz-step" data-step="3">
+        <div class="wiz-step-num">3</div>
+        <span class="wiz-step-label">Network</span>
+      </div>
+      <div class="wiz-step-line"></div>
+      <div class="wiz-step" data-step="4">
+        <div class="wiz-step-num">4</div>
+        <span class="wiz-step-label">Review</span>
+      </div>
+    </div>
+
+    <div class="modal-body">
+      <!-- Step 1: Template -->
+      <div class="wiz-panel active" id="wizPanel1">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">Select a base template to clone from</p>
+        <div class="template-grid">
+          <div class="template-card selected" onclick="selectTemplate(this,'Ubuntu 24.04')">
+            <span class="os-icon">&#x1F427;</span>
+            <div class="os-name">Ubuntu</div>
+            <div class="os-ver">24.04 LTS</div>
+          </div>
+          <div class="template-card" onclick="selectTemplate(this,'Debian 12')">
+            <span class="os-icon">&#x1F30A;</span>
+            <div class="os-name">Debian</div>
+            <div class="os-ver">12 Bookworm</div>
+          </div>
+          <div class="template-card" onclick="selectTemplate(this,'Alpine 3.19')">
+            <span class="os-icon">&#x26F0;&#xFE0F;</span>
+            <div class="os-name">Alpine</div>
+            <div class="os-ver">3.19</div>
+          </div>
+          <div class="template-card" onclick="selectTemplate(this,'Fedora 40')">
+            <span class="os-icon">&#x1F3A9;</span>
+            <div class="os-name">Fedora</div>
+            <div class="os-ver">40</div>
+          </div>
+          <div class="template-card" onclick="selectTemplate(this,'Rocky 9')">
+            <span class="os-icon">&#x1FAA8;</span>
+            <div class="os-name">Rocky Linux</div>
+            <div class="os-ver">9.3</div>
+          </div>
+          <div class="template-card" onclick="selectTemplate(this,'NixOS 24.05')">
+            <span class="os-icon">&#x2744;&#xFE0F;</span>
+            <div class="os-name">NixOS</div>
+            <div class="os-ver">24.05</div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <div></div>
+          <button class="btn btn-primary" onclick="wizNext()">Next</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Config -->
+      <div class="wiz-panel" id="wizPanel2">
+        <div class="form-row" style="margin-bottom:16px">
+          <div class="form-group">
+            <label class="form-label">VM ID</label>
+            <input class="form-input" id="wizVmId" type="number" value="104" min="100" max="999">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Name</label>
+            <input class="form-input" id="wizVmName" type="text" value="new-vm" placeholder="hostname">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Clone Mode</label>
+          <div class="toggle-pills">
+            <button class="toggle-pill active" onclick="togglePill(this)">Full Clone</button>
+            <button class="toggle-pill" onclick="togglePill(this)">Linked Clone</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Target Node</label>
+          <select class="form-input" style="cursor:pointer">
+            <option>pve-node-01</option>
+            <option>pve-node-02</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">CPU Cores</label>
+          <div class="resource-slider">
+            <input type="range" min="1" max="16" value="4" oninput="this.nextElementSibling.textContent=this.value">
+            <span class="resource-val">4</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Memory (GB)</label>
+          <div class="resource-slider">
+            <input type="range" min="1" max="64" value="8" oninput="this.nextElementSibling.textContent=this.value">
+            <span class="resource-val">8</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Disk (GB)</label>
+          <div class="resource-slider">
+            <input type="range" min="8" max="512" value="64" step="8" oninput="this.nextElementSibling.textContent=this.value">
+            <span class="resource-val">64</span>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="wizBack()">Back</button>
+          <button class="btn btn-primary" onclick="wizNext()">Next</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Network -->
+      <div class="wiz-panel" id="wizPanel3">
+        <div class="form-group">
+          <label class="form-label">IP Assignment</label>
+          <div class="toggle-pills">
+            <button class="toggle-pill active" onclick="togglePill(this)" id="ipDhcp">DHCP</button>
+            <button class="toggle-pill" onclick="togglePill(this)" id="ipStatic">Static IP</button>
+          </div>
+        </div>
+        <div class="form-group" id="staticIpGroup" style="display:none">
+          <label class="form-label">IP Address</label>
+          <input class="form-input" type="text" placeholder="192.168.1.x/24" value="192.168.1.104/24">
+        </div>
+        <div class="form-group" id="staticGwGroup" style="display:none">
+          <label class="form-label">Gateway</label>
+          <input class="form-input" type="text" placeholder="192.168.1.1" value="192.168.1.1">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Bridge</label>
+            <select class="form-input" style="cursor:pointer">
+              <option>vmbr0</option>
+              <option>vmbr1</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">VLAN Tag</label>
+            <input class="form-input" type="text" placeholder="None" value="">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">MAC Address</label>
+          <input class="form-input" type="text" placeholder="Auto-generate" value="" style="font-family:'SF Mono',SFMono-Regular,Consolas,monospace;font-size:12px">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Model</label>
+          <select class="form-input" style="cursor:pointer">
+            <option>VirtIO (paravirtualized)</option>
+            <option>E1000</option>
+            <option>RTL8139</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="wizBack()">Back</button>
+          <button class="btn btn-primary" onclick="wizNext()">Next</button>
+        </div>
+      </div>
+
+      <!-- Step 4: Review -->
+      <div class="wiz-panel" id="wizPanel4">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Review your configuration before cloning</p>
+        <table class="review-table" id="reviewTable">
+          <tr><td>Template</td><td id="revTemplate">Ubuntu 24.04</td></tr>
+          <tr><td>VM ID</td><td id="revId">104</td></tr>
+          <tr><td>Name</td><td id="revName">new-vm</td></tr>
+          <tr><td>Clone Mode</td><td>Full Clone</td></tr>
+          <tr><td>Node</td><td>pve-node-01</td></tr>
+          <tr><td>CPU</td><td id="revCpu">4 Cores</td></tr>
+          <tr><td>Memory</td><td id="revRam">8 GB</td></tr>
+          <tr><td>Disk</td><td id="revDisk">64 GB</td></tr>
+          <tr><td>Network</td><td>DHCP &middot; vmbr0</td></tr>
+        </table>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="wizBack()">Back</button>
+          <button class="btn btn-primary" onclick="startClone()" style="padding:10px 28px">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="6 4 20 12 6 20"/></svg>
+            Clone &amp; Start
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal" style="max-width:400px" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2 id="confirmTitle">Confirm Action</h2>
+      <button class="modal-close" onclick="closeModal('confirmModal')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="confirm-body">
+        <div class="icon" id="confirmIcon"></div>
+        <p id="confirmMsg"></p>
+        <p class="vm-target" id="confirmTarget"></p>
+      </div>
+      <div class="confirm-actions">
+        <button class="btn btn-secondary" onclick="closeModal('confirmModal')">Cancel</button>
+        <button class="btn" id="confirmBtn" onclick="executeAction()">Confirm</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SSH Connect Modal -->
+<div class="modal-overlay" id="sshModal">
+  <div class="modal" style="max-width:480px" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>SSH Connect</h2>
+      <button class="modal-close" onclick="closeModal('sshModal')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="ssh-anim">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:4px">Connecting to</p>
+        <p style="font-size:16px;font-weight:700;color:var(--text-primary)" id="sshTarget"></p>
+        <div class="terminal-box" id="sshTerminal"></div>
+        <div id="sshStatus" style="font-size:13px;font-weight:600;color:var(--green);display:none">
+          Connected successfully
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Auto-Connect Flow Modal -->
+<div class="modal-overlay" id="connectModal">
+  <div class="modal" style="max-width:460px" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Deploying VM</h2>
+      <button class="modal-close" onclick="closeModal('connectModal')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="connect-steps" id="connectSteps">
+        <div class="connect-step" id="cStep1">
+          <div class="step-icon" id="cIcon1">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
+          </div>
+          <div class="step-info">
+            <div class="step-title">Cloning template</div>
+            <div class="step-desc">Creating full clone from Ubuntu 24.04...</div>
+          </div>
+        </div>
+        <div class="connect-step" id="cStep2">
+          <div class="step-icon" id="cIcon2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="6 4 20 12 6 20"/></svg>
+          </div>
+          <div class="step-info">
+            <div class="step-title">Starting VM</div>
+            <div class="step-desc">Booting virtual machine...</div>
+          </div>
+        </div>
+        <div class="connect-step" id="cStep3">
+          <div class="step-icon" id="cIcon3">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42m12.72-12.72l1.42-1.42"/></svg>
+          </div>
+          <div class="step-info">
+            <div class="step-title">Waiting for SSH</div>
+            <div class="step-desc">Probing port 22...</div>
+          </div>
+        </div>
+        <div class="connect-step" id="cStep4">
+          <div class="step-icon" id="cIcon4">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div class="step-info">
+            <div class="step-title">Connected</div>
+            <div class="step-desc">SSH session ready</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Animate resource bars on load
+  function animateBars(){
+    document.querySelectorAll('[data-target]').forEach(function(el){
+      setTimeout(function(){el.style.width=el.dataset.target},150);
+    });
+  }
+  animateBars();
+
+  // Refresh
+  function refreshAll(){
+    var btn=document.querySelector('.btn-icon');
+    btn.style.transform='rotate(360deg)';
+    setTimeout(function(){btn.style.transform=''},500);
+    document.querySelectorAll('[data-target]').forEach(function(el){
+      el.style.width='0';
+    });
+    setTimeout(animateBars,200);
+  }
+
+  // Toggle VM expand
+  function toggleExpand(card){
+    card.classList.toggle('expanded');
+  }
+
+  // Wizard state
+  var wizStep=1;
+  var selectedTemplate='Ubuntu 24.04';
+
+  function openWizard(){
+    wizStep=1;
+    updateWizard();
+    openModal('wizardModal');
+  }
+
+  function wizNext(){
+    if(wizStep<4){
+      if(wizStep===3) populateReview();
+      wizStep++;
+      updateWizard();
+    }
+  }
+  function wizBack(){
+    if(wizStep>1){wizStep--;updateWizard()}
+  }
+
+  function updateWizard(){
+    document.querySelectorAll('.wiz-panel').forEach(function(p,i){
+      p.classList.toggle('active',i===wizStep-1);
+    });
+    document.querySelectorAll('.wiz-step').forEach(function(s){
+      var n=parseInt(s.dataset.step);
+      s.classList.remove('active','done');
+      if(n===wizStep) s.classList.add('active');
+      else if(n<wizStep) s.classList.add('done');
+    });
+  }
+
+  function selectTemplate(el,name){
+    document.querySelectorAll('.template-card').forEach(function(c){c.classList.remove('selected')});
+    el.classList.add('selected');
+    selectedTemplate=name;
+  }
+
+  function togglePill(el){
+    var pills=el.parentElement.querySelectorAll('.toggle-pill');
+    pills.forEach(function(p){p.classList.remove('active')});
+    el.classList.add('active');
+    if(el.id==='ipStatic'){
+      document.getElementById('staticIpGroup').style.display='block';
+      document.getElementById('staticGwGroup').style.display='block';
+    }else if(el.id==='ipDhcp'){
+      document.getElementById('staticIpGroup').style.display='none';
+      document.getElementById('staticGwGroup').style.display='none';
+    }
+  }
+
+  function populateReview(){
+    document.getElementById('revTemplate').textContent=selectedTemplate;
+    document.getElementById('revId').textContent=document.getElementById('wizVmId').value;
+    document.getElementById('revName').textContent=document.getElementById('wizVmName').value;
+    var sliders=document.querySelectorAll('#wizPanel2 input[type=range]');
+    document.getElementById('revCpu').textContent=sliders[0].value+' Cores';
+    document.getElementById('revRam').textContent=sliders[1].value+' GB';
+    document.getElementById('revDisk').textContent=sliders[2].value+' GB';
+  }
+
+  function startClone(){
+    closeModal('wizardModal');
+    openModal('connectModal');
+    runConnectFlow();
+  }
+
+  function runConnectFlow(){
+    var icons=['cIcon1','cIcon2','cIcon3','cIcon4'];
+    var step=0;
+
+    // Reset all icons
+    icons.forEach(function(id){
+      var el=document.getElementById(id);
+      el.classList.remove('active','done');
+    });
+
+    function advance(){
+      if(step>0){
+        var prev=document.getElementById(icons[step-1]);
+        prev.classList.remove('active');
+        prev.classList.add('done');
+        // Replace with checkmark using DOM methods
+        prev.textContent='';
+        var svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+        svg.setAttribute('width','14');
+        svg.setAttribute('height','14');
+        svg.setAttribute('viewBox','0 0 24 24');
+        svg.setAttribute('fill','none');
+        svg.setAttribute('stroke','white');
+        svg.setAttribute('stroke-width','3');
+        svg.setAttribute('stroke-linecap','round');
+        var polyline=document.createElementNS('http://www.w3.org/2000/svg','polyline');
+        polyline.setAttribute('points','20 6 9 17 4 12');
+        svg.appendChild(polyline);
+        prev.appendChild(svg);
+      }
+      if(step<4){
+        var cur=document.getElementById(icons[step]);
+        cur.classList.add('active');
+        step++;
+        setTimeout(advance,1200+Math.random()*800);
+      }
+    }
+    setTimeout(advance,400);
+  }
+
+  // Confirm modal
+  var pendingAction={};
+  function showConfirm(action,name,id){
+    pendingAction={action:action,name:name,id:id};
+    var t=document.getElementById('confirmTitle');
+    var icon=document.getElementById('confirmIcon');
+    var msg=document.getElementById('confirmMsg');
+    var target=document.getElementById('confirmTarget');
+    var btn=document.getElementById('confirmBtn');
+
+    target.textContent=name+' (VM '+id+')';
+
+    if(action==='stop'){
+      t.textContent='Stop VM';
+      icon.textContent='';
+      msg.textContent='Are you sure you want to stop';
+      btn.className='btn btn-danger';btn.textContent='Stop VM';
+    }else if(action==='start'){
+      t.textContent='Start VM';
+      icon.textContent='';
+      msg.textContent='Start virtual machine';
+      btn.className='btn btn-primary';btn.textContent='Start VM';
+    }else if(action==='resume'){
+      t.textContent='Resume VM';
+      icon.textContent='';
+      msg.textContent='Resume virtual machine';
+      btn.className='btn btn-primary';btn.textContent='Resume VM';
+    }else if(action==='delete'){
+      t.textContent='Delete VM';
+      icon.textContent='';
+      msg.textContent='This action cannot be undone. Delete';
+      btn.className='btn btn-danger';btn.textContent='Delete Permanently';
+    }
+    openModal('confirmModal');
+  }
+
+  function executeAction(){
+    closeModal('confirmModal');
+    setTimeout(refreshAll,300);
+  }
+
+  // SSH Modal
+  function showSSH(name,ip){
+    document.getElementById('sshTarget').textContent=name+' ('+ip+')';
+    var terminal=document.getElementById('sshTerminal');
+    // Clear terminal safely
+    while(terminal.firstChild) terminal.removeChild(terminal.firstChild);
+    document.getElementById('sshStatus').style.display='none';
+    openModal('sshModal');
+    animateSSH(name,ip);
+  }
+
+  function animateSSH(name,ip){
+    var lines=[
+      {text:'$ ssh root@'+ip, cls:'cmd-line'},
+      {text:'Connecting to '+ip+':22...'},
+      {text:'Host key verification passed.'},
+      {text:'Authenticating with key /root/.ssh/id_ed25519...'},
+      {text:'Authentication successful.'},
+      {text:''},
+      {text:'Welcome to '+name},
+      {text:'Last login: Thu Apr  9 14:22:31 2026'},
+      {text:''},
+      {text:'root@'+name+':~# _', cursor:true}
+    ];
+    var container=document.getElementById('sshTerminal');
+    var i=0;
+    function addLine(){
+      if(i<lines.length){
+        var div=document.createElement('div');
+        if(lines[i].cls) div.className=lines[i].cls;
+        if(lines[i].cursor){
+          var textPart=document.createTextNode(lines[i].text.replace(' _',''));
+          div.appendChild(textPart);
+          var cursorSpan=document.createElement('span');
+          cursorSpan.className='cursor-blink';
+          cursorSpan.textContent=' _';
+          div.appendChild(cursorSpan);
+        }else{
+          div.textContent=lines[i].text;
+        }
+        container.appendChild(div);
+        i++;
+        setTimeout(addLine,180+Math.random()*120);
+      }else{
+        document.getElementById('sshStatus').style.display='block';
+      }
+    }
+    setTimeout(addLine,400);
+  }
+
+  // Modal helpers
+  function openModal(id){
+    document.getElementById(id).classList.add('active');
+    document.body.style.overflow='hidden';
+  }
+  function closeModal(id){
+    document.getElementById(id).classList.remove('active');
+    document.body.style.overflow='';
+  }
+  // Close on overlay click
+  document.querySelectorAll('.modal-overlay').forEach(function(o){
+    o.addEventListener('click',function(){
+      o.classList.remove('active');
+      document.body.style.overflow='';
+    });
+  });
+  // ESC key
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape'){
+      document.querySelectorAll('.modal-overlay.active').forEach(function(o){
+        o.classList.remove('active');
+      });
+      document.body.style.overflow='';
+    }
+  });
+</script>
+</body>
+</html>

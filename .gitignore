@@ -30,3 +30,6 @@ Thumbs.db
 # Secrets
 .env
 secrets.properties
+
+# Git worktrees (Phase 11 mockup fidelity work happens in isolated worktrees)
+.worktrees/

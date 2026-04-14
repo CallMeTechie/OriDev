@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Ori:Dev – 折り Dev | Mockups</title>
+    <style>
+        /* ── Reset ────────────────────────────────────────── */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #FAFAFA;
+            --bg-white: #FFFFFF;
+            --accent: #6366F1;
+            --accent-hover: #4F46E5;
+            --accent-subtle: rgba(99, 102, 241, 0.06);
+            --accent-light: rgba(99, 102, 241, 0.1);
+            --text-primary: #111827;
+            --text-body: #374151;
+            --text-secondary: #6B7280;
+            --text-tertiary: #9CA3AF;
+            --border: #E5E7EB;
+            --border-hover: #D1D5DB;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
+            --radius: 14px;
+            --radius-sm: 10px;
+            --radius-pill: 9999px;
+            --ease: cubic-bezier(0.16, 1, 0.3, 1);
+            --font: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        html {
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        body {
+            font-family: var(--font);
+            background-color: var(--bg);
+            color: var(--text-body);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        /* ── Top Bar ──────────────────────────────────────── */
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            height: 56px;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .topbar-brand {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+        }
+
+        .topbar-brand span {
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        /* ── Pill Toggle ──────────────────────────────────── */
+        .pill-toggle {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .pill-label {
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .pill-track {
+            display: flex;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-pill);
+            padding: 3px;
+            position: relative;
+        }
+
+        .pill-btn {
+            position: relative;
+            z-index: 1;
+            padding: 6px 18px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            font-family: var(--font);
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: var(--radius-pill);
+            transition: color 250ms var(--ease);
+            white-space: nowrap;
+        }
+
+        .pill-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .pill-btn.active {
+            color: var(--bg-white);
+        }
+
+        .pill-slider {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            height: calc(100% - 6px);
+            background: var(--accent);
+            border-radius: var(--radius-pill);
+            transition: transform 350ms var(--ease), width 350ms var(--ease);
+            pointer-events: none;
+        }
+
+        .pill-dims {
+            font-size: 0.6875rem;
+            color: var(--text-tertiary);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* ── Hero ─────────────────────────────────────────── */
+        .hero {
+            text-align: center;
+            padding: 80px 24px 56px;
+            position: relative;
+        }
+
+        .hero-eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 14px 5px 10px;
+            background: var(--accent-subtle);
+            border: 1px solid var(--accent-light);
+            border-radius: var(--radius-pill);
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--accent);
+            margin-bottom: 24px;
+        }
+
+        .hero-eyebrow svg {
+            width: 14px;
+            height: 14px;
+        }
+
+        .hero-title {
+            font-size: 3rem;
+            font-weight: 700;
+            letter-spacing: -0.035em;
+            color: var(--text-primary);
+            line-height: 1.1;
+            margin-bottom: 6px;
+        }
+
+        .hero-title .kanji {
+            background: linear-gradient(135deg, var(--accent), #A78BFA);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 600;
+        }
+
+        .hero-tagline {
+            font-size: 1.25rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            letter-spacing: -0.01em;
+            margin-top: 12px;
+        }
+
+        .hero-desc {
+            margin-top: 16px;
+            font-size: 0.9375rem;
+            color: var(--text-tertiary);
+            max-width: 480px;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.6;
+        }
+
+        /* ── Card Grid ────────────────────────────────────── */
+        .grid-section {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 0 24px 80px;
+        }
+
+        .grid-label {
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-tertiary);
+            margin-bottom: 16px;
+            padding-left: 4px;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .card {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 20px 22px;
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            text-decoration: none;
+            color: inherit;
+            transition:
+                transform 300ms var(--ease),
+                box-shadow 300ms var(--ease),
+                border-color 300ms var(--ease);
+            cursor: pointer;
+            position: relative;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-hover);
+        }
+
+        .card:active {
+            transform: translateY(0);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .card-icon-wrap {
+            flex-shrink: 0;
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--accent-subtle);
+            border-radius: var(--radius-sm);
+            color: var(--accent);
+            transition: background 300ms var(--ease);
+        }
+
+        .card:hover .card-icon-wrap {
+            background: var(--accent-light);
+        }
+
+        .card-icon-wrap svg {
+            width: 20px;
+            height: 20px;
+            stroke-width: 1.75;
+        }
+
+        .card-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .card-title {
+            font-size: 0.9375rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            letter-spacing: -0.01em;
+            line-height: 1.3;
+        }
+
+        .card-desc {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+            line-height: 1.4;
+        }
+
+        .card-arrow {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            color: var(--text-tertiary);
+            transition: transform 300ms var(--ease), color 300ms var(--ease);
+        }
+
+        .card:hover .card-arrow {
+            transform: translateX(3px);
+            color: var(--accent);
+        }
+
+        /* ── Footer ───────────────────────────────────────── */
+        .footer {
+            text-align: center;
+            padding: 24px;
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+            border-top: 1px solid var(--border);
+        }
+
+        .footer a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        /* ── Folded Mode ──────────────────────────────────── */
+        body.folded .topbar {
+            padding: 0 16px;
+        }
+
+        body.folded .hero {
+            padding: 48px 20px 32px;
+        }
+
+        body.folded .hero-title {
+            font-size: 2rem;
+        }
+
+        body.folded .hero-tagline {
+            font-size: 1rem;
+        }
+
+        body.folded .hero-desc {
+            font-size: 0.8125rem;
+        }
+
+        body.folded .grid-section {
+            padding: 0 16px 48px;
+        }
+
+        body.folded .card-grid {
+            grid-template-columns: 1fr;
+            max-width: 420px;
+            margin: 0 auto;
+        }
+
+        body.folded .card {
+            padding: 16px 18px;
+            gap: 14px;
+        }
+
+        body.folded .card-icon-wrap {
+            width: 38px;
+            height: 38px;
+        }
+
+        body.folded .card-desc {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* ── Responsive ───────────────────────────────────── */
+        @media (max-width: 640px) {
+            .card-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-title {
+                font-size: 2rem;
+            }
+
+            .hero-tagline {
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Top Bar -->
+    <nav class="topbar">
+        <div class="topbar-brand">Ori:Dev <span>/ Mockups</span></div>
+        <div class="pill-toggle">
+            <span class="pill-label">Device</span>
+            <div class="pill-track" id="pillTrack">
+                <button class="pill-btn" data-mode="folded" onclick="setMode('folded')">Folded</button>
+                <button class="pill-btn active" data-mode="unfolded" onclick="setMode('unfolded')">Unfolded</button>
+                <div class="pill-slider" id="pillSlider"></div>
+            </div>
+            <span class="pill-dims" id="deviceDims">2208 x 1840</span>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <header class="hero">
+        <div class="hero-eyebrow">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
+            Android Foldable File Manager
+        </div>
+        <h1 class="hero-title">Ori:Dev &ndash; <span class="kanji">折り Dev</span></h1>
+        <p class="hero-tagline">Fold. Connect. Code.</p>
+        <p class="hero-desc">
+            SCP, FTP &amp; SSH file management built for foldable screens. Explore each feature mockup below.
+        </p>
+    </header>
+
+    <!-- Card Grid -->
+    <main class="grid-section">
+        <div class="grid-label">Feature Screens</div>
+        <div class="card-grid" id="cardGrid"></div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        Ori:Dev Mockups &middot; Pixel Fold Optimized &middot; Light Theme
+    </footer>
+
+    <script>
+        (function () {
+            /* ── SVG icons (Lucide-style, stroke-based) ────── */
+            var icons = {
+                files: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="8" height="18" rx="1"/><rect x="14" y="3" width="8" height="18" rx="1"/><path d="M6 7h0M6 11h0M18 7h0M18 11h0"/></svg>',
+                terminal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>',
+                connection: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+                transfer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
+                code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+                server: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>',
+                settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+                watch: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><polyline points="12 9 12 12 13.5 13.5"/><path d="M16.51 17.35l-.35 3.83a2 2 0 0 1-2 1.82H9.83a2 2 0 0 1-2-1.82l-.35-3.83m.01-10.7l.35-3.83A2 2 0 0 1 9.83 1h4.35a2 2 0 0 1 2 1.82l.35 3.83"/></svg>'
+            };
+
+            var arrow = '<svg class="card-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+
+            var mockups = [
+                { href: 'file-manager.html', icon: icons.files, title: 'Dual-Pane File Manager', desc: 'Side-by-side local and remote browsing with drag-and-drop transfers.' },
+                { href: 'terminal.html', icon: icons.terminal, title: 'SSH Terminal', desc: 'Full-featured terminal with tabs, split view, and custom key bindings.' },
+                { href: 'connection-manager.html', icon: icons.connection, title: 'Connection Manager', desc: 'Organize SCP, FTP, and SSH connections with folders and quick connect.' },
+                { href: 'transfer-queue.html', icon: icons.transfer, title: 'Transfer Queue', desc: 'Monitor transfers with pause, retry, and bandwidth controls.' },
+                { href: 'code-editor.html', icon: icons.code, title: 'Code Editor', desc: 'Syntax-highlighted editing with remote files, search, and replace.' },
+                { href: 'proxmox.html', icon: icons.server, title: 'Proxmox VM Manager', desc: 'Monitor and control VMs and containers with resource graphs.' },
+                { href: 'settings.html', icon: icons.settings, title: 'Settings & Premium', desc: 'App configuration, themes, and premium feature management.' },
+                { href: 'watch.html', icon: icons.watch, title: 'Wear OS Companion', desc: 'Server status, shortcuts, and transfer notifications on your wrist.' }
+            ];
+
+            var grid = document.getElementById('cardGrid');
+            mockups.forEach(function (m) {
+                var a = document.createElement('a');
+                a.className = 'card';
+                a.href = m.href;
+                a.innerHTML =
+                    '<div class="card-icon-wrap">' + m.icon + '</div>' +
+                    '<div class="card-body">' +
+                        '<div class="card-title">' + m.title + '</div>' +
+                        '<div class="card-desc">' + m.desc + '</div>' +
+                    '</div>' +
+                    arrow;
+                grid.appendChild(a);
+            });
+
+            /* ── Pill slider positioning ──────────────────── */
+            function positionSlider() {
+                var track = document.getElementById('pillTrack');
+                var slider = document.getElementById('pillSlider');
+                var active = track.querySelector('.pill-btn.active');
+                if (!active || !slider) return;
+                slider.style.width = active.offsetWidth + 'px';
+                slider.style.transform = 'translateX(' + (active.offsetLeft - 3) + 'px)';
+            }
+
+            window.setMode = function (mode) {
+                document.querySelectorAll('.pill-btn').forEach(function (btn) {
+                    btn.classList.toggle('active', btn.dataset.mode === mode);
+                });
+                positionSlider();
+
+                var dims = document.getElementById('deviceDims');
+                if (mode === 'folded') {
+                    document.body.classList.add('folded');
+                    dims.textContent = '1080 \u00d7 2092';
+                } else {
+                    document.body.classList.remove('folded');
+                    dims.textContent = '2208 \u00d7 1840';
+                }
+            };
+
+            /* Init slider position after layout */
+            requestAnimationFrame(positionSlider);
+            window.addEventListener('resize', positionSlider);
+        })();
+    </script>
+</body>
+</html>

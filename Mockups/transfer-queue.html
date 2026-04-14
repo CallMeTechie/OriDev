@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ori:Dev - Transfer Queue</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#FAFAFA;--card:#FFFFFF;--border:#E5E7EB;
+    --text-primary:#111827;--text-secondary:#374151;--text-muted:#6B7280;
+    --accent:#6366F1;--accent-light:#EEF2FF;--accent-hover:#4F46E5;
+    --success:#10B981;--success-light:#ECFDF5;
+    --error:#EF4444;--error-light:#FEF2F2;
+    --warning:#F59E0B;--warning-light:#FFFBEB;
+    --track:#E5E7EB;--radius:12px;--shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+    --shadow-lg:0 4px 12px rgba(0,0,0,.08);
+  }
+  html{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:var(--bg);color:var(--text-primary);line-height:1.5;-webkit-font-smoothing:antialiased}
+  body{min-height:100vh;padding:0}
+
+  /* ── Notification Bar ── */
+  .notification-bar{
+    background:var(--accent-light);border-bottom:1px solid rgba(99,102,241,.12);
+    padding:10px 24px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--accent);
+    transition:transform .3s,opacity .3s;
+  }
+  .notification-bar.hidden{transform:translateY(-100%);opacity:0;position:absolute;pointer-events:none}
+  .notification-bar svg{flex-shrink:0}
+  .notification-bar .dismiss{margin-left:auto;cursor:pointer;opacity:.6;transition:opacity .2s}
+  .notification-bar .dismiss:hover{opacity:1}
+
+  /* ── Shell ── */
+  .shell{max-width:880px;margin:0 auto;padding:24px 20px 60px}
+
+  /* ── Header ── */
+  .header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;margin-bottom:20px}
+  .header h1{font-size:22px;font-weight:700;letter-spacing:-.3px;color:var(--text-primary)}
+  .header h1 span{color:var(--accent);font-weight:800}
+  .clear-btn{
+    font-size:12.5px;font-weight:500;color:var(--text-muted);background:var(--card);
+    border:1px solid var(--border);border-radius:8px;padding:6px 14px;cursor:pointer;
+    transition:all .15s;
+  }
+  .clear-btn:hover{color:var(--text-secondary);border-color:#D1D5DB;box-shadow:var(--shadow)}
+
+  /* ── Filter Pills ── */
+  .filters{display:flex;gap:6px;margin-bottom:24px;flex-wrap:wrap}
+  .pill{
+    font-size:13px;font-weight:500;padding:6px 16px;border-radius:999px;
+    border:1px solid var(--border);background:var(--card);color:var(--text-muted);
+    cursor:pointer;transition:all .15s;user-select:none;white-space:nowrap;
+  }
+  .pill:hover{color:var(--text-secondary);border-color:#D1D5DB}
+  .pill.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .pill .count{
+    display:inline-block;margin-left:5px;font-size:11px;font-weight:600;
+    background:rgba(255,255,255,.22);border-radius:999px;padding:0 6px;min-width:18px;text-align:center;
+  }
+  .pill:not(.active) .count{background:var(--bg);color:var(--text-muted)}
+
+  /* ── Stats Bar ── */
+  .stats-bar{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:16px 20px;margin-bottom:28px;box-shadow:var(--shadow);
+  }
+  .stats-top{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+  .stats-label{font-size:14px;font-weight:600;color:var(--text-primary)}
+  .stats-meta{display:flex;gap:16px;font-size:12.5px;color:var(--text-muted)}
+  .stats-meta span{display:flex;align-items:center;gap:4px}
+  .progress-track{
+    width:100%;height:6px;background:var(--track);border-radius:999px;overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;border-radius:999px;background:var(--accent);
+    transition:width .6s cubic-bezier(.4,0,.2,1);position:relative;
+  }
+  .progress-fill.shimmer::after{
+    content:'';position:absolute;top:0;left:0;right:0;bottom:0;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);
+    animation:shimmer 1.8s infinite;
+  }
+  @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+
+  /* ── Section ── */
+  .section{margin-bottom:28px}
+  .section-header{
+    display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:8px;
+    border-bottom:1px solid var(--border);
+  }
+  .section-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .section-dot.active-dot{background:var(--accent)}
+  .section-dot.completed-dot{background:var(--success)}
+  .section-dot.failed-dot{background:var(--error)}
+  .section-title{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--text-muted)}
+
+  /* ── Transfer Card ── */
+  .card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:16px 18px;margin-bottom:8px;box-shadow:var(--shadow);
+    cursor:pointer;transition:box-shadow .15s,border-color .15s;
+  }
+  .card:hover{box-shadow:var(--shadow-lg);border-color:#D1D5DB}
+  .card.failed-card{border-left:3px solid var(--error)}
+  .card.queued-card{opacity:.55}
+  .card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+  .card-info{flex:1;min-width:0}
+  .card-name{font-size:14px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card-meta{font-size:12px;color:var(--text-muted);margin-top:2px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .card-meta .sep{opacity:.35}
+  .badge{
+    display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;
+    padding:2px 8px;border-radius:999px;
+  }
+  .badge-upload{background:var(--accent-light);color:var(--accent)}
+  .badge-download{background:#F0F9FF;color:#0284C7}
+  .badge-queued{background:var(--bg);color:var(--text-muted)}
+  .badge-complete{background:var(--success-light);color:var(--success)}
+  .badge-failed{background:var(--error-light);color:var(--error)}
+
+  .card-actions{display:flex;gap:6px;flex-shrink:0}
+  .action-pill{
+    font-size:11.5px;font-weight:500;padding:4px 12px;border-radius:8px;border:1px solid var(--border);
+    background:var(--card);color:var(--text-muted);cursor:pointer;transition:all .15s;
+    display:inline-flex;align-items:center;gap:4px;
+  }
+  .action-pill:hover{color:var(--text-secondary);border-color:#D1D5DB;box-shadow:var(--shadow)}
+  .action-pill.retry-pill{border-color:var(--error);color:var(--error)}
+  .action-pill.retry-pill:hover{background:var(--error-light)}
+
+  .card-progress{margin-top:6px}
+  .card-progress .progress-track{height:5px}
+  .progress-row{display:flex;align-items:center;gap:10px}
+  .progress-row .progress-track{flex:1}
+  .progress-pct{font-size:12px;font-weight:600;color:var(--accent);min-width:36px;text-align:right}
+  .progress-pct.complete{color:var(--success)}
+
+  .sub-progress{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}
+  .sub-label{font-size:11.5px;color:var(--text-muted);margin-bottom:4px}
+
+  /* ── Completed Row ── */
+  .completed-row{
+    display:flex;align-items:center;gap:12px;padding:12px 18px;
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    margin-bottom:6px;box-shadow:var(--shadow);cursor:pointer;transition:box-shadow .15s;
+  }
+  .completed-row:hover{box-shadow:var(--shadow-lg)}
+  .check-icon{color:var(--success);flex-shrink:0}
+  .completed-row .card-name{font-size:13.5px}
+  .completed-row .card-meta{margin-top:0}
+  .completed-right{margin-left:auto;font-size:12px;color:var(--text-muted);white-space:nowrap}
+
+  /* ── Detail Panel ── */
+  .detail-panel{
+    max-height:0;overflow:hidden;transition:max-height .3s ease,padding .3s ease;
+    border-top:0 solid var(--border);
+  }
+  .detail-panel.open{max-height:300px;padding-top:12px;border-top-width:1px;margin-top:10px}
+  .detail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+  .detail-item label{display:block;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted);margin-bottom:2px}
+  .detail-item span{font-size:13px;font-weight:500;color:var(--text-primary)}
+
+  /* ── Modal ── */
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.25);backdrop-filter:blur(4px);
+    display:flex;align-items:center;justify-content:center;z-index:1000;
+    opacity:0;pointer-events:none;transition:opacity .2s;
+  }
+  .modal-overlay.show{opacity:1;pointer-events:auto}
+  .modal{
+    background:var(--card);border-radius:var(--radius);padding:28px;width:380px;max-width:90vw;
+    box-shadow:0 20px 60px rgba(0,0,0,.15);transform:scale(.96);transition:transform .2s;
+  }
+  .modal-overlay.show .modal{transform:scale(1)}
+  .modal h3{font-size:16px;font-weight:700;margin-bottom:6px}
+  .modal p{font-size:13.5px;color:var(--text-muted);margin-bottom:20px;line-height:1.6}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end}
+  .modal-btn{
+    font-size:13px;font-weight:600;padding:8px 20px;border-radius:8px;border:none;cursor:pointer;transition:all .15s;
+  }
+  .modal-btn.cancel{background:var(--bg);color:var(--text-secondary);border:1px solid var(--border)}
+  .modal-btn.cancel:hover{background:#F3F4F6}
+  .modal-btn.danger{background:var(--error);color:#fff}
+  .modal-btn.danger:hover{background:#DC2626}
+
+  /* ── Empty State ── */
+  .empty-state{text-align:center;padding:40px 20px;color:var(--text-muted);font-size:14px}
+
+  /* ── Responsive ── */
+  @media(max-width:600px){
+    .shell{padding:16px 14px 40px}
+    .header h1{font-size:19px}
+    .stats-meta{flex-direction:column;gap:4px}
+    .card-top{flex-direction:column;gap:8px}
+    .card-actions{align-self:flex-start}
+  }
+
+  /* ── Pulse for active ── */
+  @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.4}}
+  .section-dot.active-dot{animation:pulse-dot 2s infinite}
+
+  /* ── Slide-in ── */
+  @keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .card,.completed-row{animation:slideIn .3s ease both}
+</style>
+</head>
+<body>
+
+<!-- Notification Bar -->
+<div class="notification-bar" id="notifBar">
+  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z"/></svg>
+  <span><strong>project-backup.tar.gz</strong> upload is 67% complete &mdash; estimated 2:34 remaining</span>
+  <span class="dismiss" onclick="dismissNotif()" title="Dismiss">
+    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+  </span>
+</div>
+
+<div class="shell">
+
+  <!-- Header -->
+  <div class="header">
+    <h1><span>Ori:Dev</span> &middot; Transfers</h1>
+    <button class="clear-btn" onclick="clearCompleted()">Clear Completed</button>
+  </div>
+
+  <!-- Filter Pills -->
+  <div class="filters" id="filters">
+    <div class="pill active" data-filter="all" onclick="setFilter('all')">All <span class="count">8</span></div>
+    <div class="pill" data-filter="active" onclick="setFilter('active')">Active <span class="count">4</span></div>
+    <div class="pill" data-filter="completed" onclick="setFilter('completed')">Completed <span class="count">3</span></div>
+    <div class="pill" data-filter="failed" onclick="setFilter('failed')">Failed <span class="count">1</span></div>
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar">
+    <div class="stats-top">
+      <span class="stats-label">3 of 7 complete</span>
+      <div class="stats-meta">
+        <span>
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+          4.2 MB/s up
+        </span>
+        <span>
+          <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+          8.1 MB/s down
+        </span>
+      </div>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill shimmer" id="overallProgress" style="width:43%"></div>
+    </div>
+  </div>
+
+  <!-- ═══ ACTIVE SECTION ═══ -->
+  <div class="section" data-section="active" id="sectionActive">
+    <div class="section-header">
+      <div class="section-dot active-dot"></div>
+      <div class="section-title">Active Transfers</div>
+    </div>
+
+    <!-- Card 1: project-backup.tar.gz -->
+    <div class="card" id="card1" onclick="toggleDetail('detail1',event)">
+      <div class="card-top">
+        <div class="card-info">
+          <div class="card-name">project-backup.tar.gz</div>
+          <div class="card-meta">
+            <span class="badge badge-upload">
+              <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M5 10l7-7 7 7M12 3v18"/></svg>
+              Upload
+            </span>
+            <span class="sep">&middot;</span>
+            <span>1.8 GB of 2.7 GB</span>
+            <span class="sep">&middot;</span>
+            <span>4.2 MB/s</span>
+            <span class="sep">&middot;</span>
+            <span>ETA 2:34</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="action-pill" onclick="togglePause(this,'card1',event)" title="Pause">
+            <svg class="icon-pause" width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+            <svg class="icon-play" width="12" height="12" fill="currentColor" viewBox="0 0 24 24" style="display:none"><path d="M6 4l14 8-14 8z"/></svg>
+            <span class="pause-label">Pause</span>
+          </button>
+          <button class="action-pill" onclick="confirmCancel('card1','project-backup.tar.gz',event)">Cancel</button>
+        </div>
+      </div>
+      <div class="card-progress">
+        <div class="progress-row">
+          <div class="progress-track"><div class="progress-fill shimmer" style="width:67%"></div></div>
+          <div class="progress-pct">67%</div>
+        </div>
+      </div>
+      <div class="detail-panel" id="detail1">
+        <div class="detail-grid">
+          <div class="detail-item"><label>Type</label><span>tar.gz archive</span></div>
+          <div class="detail-item"><label>Total Size</label><span>2.7 GB</span></div>
+          <div class="detail-item"><label>Transferred</label><span>1.8 GB</span></div>
+          <div class="detail-item"><label>Speed</label><span>4.2 MB/s</span></div>
+          <div class="detail-item"><label>Started</label><span>12:04 PM</span></div>
+          <div class="detail-item"><label>Destination</label><span>/backups/daily/</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 2: database-dump.sql -->
+    <div class="card" id="card2" onclick="toggleDetail('detail2',event)">
+      <div class="card-top">
+        <div class="card-info">
+          <div class="card-name">database-dump.sql</div>
+          <div class="card-meta">
+            <span class="badge badge-download">
+              <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M19 14l-7 7-7-7M12 21V3"/></svg>
+              Download
+            </span>
+            <span class="sep">&middot;</span>
+            <span>380 MB of 1.65 GB</span>
+            <span class="sep">&middot;</span>
+            <span>8.1 MB/s</span>
+            <span class="sep">&middot;</span>
+            <span>ETA 1:12</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="action-pill" onclick="togglePause(this,'card2',event)" title="Pause">
+            <svg class="icon-pause" width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+            <svg class="icon-play" width="12" height="12" fill="currentColor" viewBox="0 0 24 24" style="display:none"><path d="M6 4l14 8-14 8z"/></svg>
+            <span class="pause-label">Pause</span>
+          </button>
+          <button class="action-pill" onclick="confirmCancel('card2','database-dump.sql',event)">Cancel</button>
+        </div>
+      </div>
+      <div class="card-progress">
+        <div class="progress-row">
+          <div class="progress-track"><div class="progress-fill shimmer" style="width:23%"></div></div>
+          <div class="progress-pct">23%</div>
+        </div>
+      </div>
+      <div class="detail-panel" id="detail2">
+        <div class="detail-grid">
+          <div class="detail-item"><label>Type</label><span>SQL dump</span></div>
+          <div class="detail-item"><label>Total Size</label><span>1.65 GB</span></div>
+          <div class="detail-item"><label>Transferred</label><span>380 MB</span></div>
+          <div class="detail-item"><label>Speed</label><span>8.1 MB/s</span></div>
+          <div class="detail-item"><label>Started</label><span>12:11 PM</span></div>
+          <div class="detail-item"><label>Source</label><span>db-prod-01</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 3: src/ multi-file -->
+    <div class="card" id="card3" onclick="toggleDetail('detail3',event)">
+      <div class="card-top">
+        <div class="card-info">
+          <div class="card-name">src/ (142 files)</div>
+          <div class="card-meta">
+            <span class="badge badge-upload">
+              <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M5 10l7-7 7 7M12 3v18"/></svg>
+              Upload
+            </span>
+            <span class="sep">&middot;</span>
+            <span>45 of 142 files</span>
+            <span class="sep">&middot;</span>
+            <span>2.8 MB/s</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="action-pill" onclick="togglePause(this,'card3',event)" title="Pause">
+            <svg class="icon-pause" width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+            <svg class="icon-play" width="12" height="12" fill="currentColor" viewBox="0 0 24 24" style="display:none"><path d="M6 4l14 8-14 8z"/></svg>
+            <span class="pause-label">Pause</span>
+          </button>
+          <button class="action-pill" onclick="confirmCancel('card3','src/ (142 files)',event)">Cancel</button>
+        </div>
+      </div>
+      <div class="card-progress">
+        <div class="progress-row">
+          <div class="progress-track"><div class="progress-fill shimmer" style="width:31%"></div></div>
+          <div class="progress-pct">31%</div>
+        </div>
+        <div class="sub-progress">
+          <div class="sub-label">Current: components/Header.tsx &mdash; 78%</div>
+          <div class="progress-track"><div class="progress-fill shimmer" style="width:78%"></div></div>
+        </div>
+      </div>
+      <div class="detail-panel" id="detail3">
+        <div class="detail-grid">
+          <div class="detail-item"><label>Type</label><span>Multi-file upload</span></div>
+          <div class="detail-item"><label>Files</label><span>45 / 142</span></div>
+          <div class="detail-item"><label>Total Size</label><span>86 MB</span></div>
+          <div class="detail-item"><label>Speed</label><span>2.8 MB/s</span></div>
+          <div class="detail-item"><label>Started</label><span>12:08 PM</span></div>
+          <div class="detail-item"><label>Destination</label><span>/deploy/staging/</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 4: Queued -->
+    <div class="card queued-card" id="card4" onclick="toggleDetail('detail4',event)">
+      <div class="card-top">
+        <div class="card-info">
+          <div class="card-name">logs-april.zip</div>
+          <div class="card-meta">
+            <span class="badge badge-queued">Queued</span>
+            <span class="sep">&middot;</span>
+            <span>420 MB</span>
+            <span class="sep">&middot;</span>
+            <span>Waiting for slot</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="action-pill" onclick="confirmCancel('card4','logs-april.zip',event)">Cancel</button>
+        </div>
+      </div>
+      <div class="detail-panel" id="detail4">
+        <div class="detail-grid">
+          <div class="detail-item"><label>Type</label><span>zip archive</span></div>
+          <div class="detail-item"><label>Size</label><span>420 MB</span></div>
+          <div class="detail-item"><label>Position</label><span>#4 in queue</span></div>
+          <div class="detail-item"><label>Added</label><span>12:15 PM</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ COMPLETED SECTION ═══ -->
+  <div class="section" data-section="completed" id="sectionCompleted">
+    <div class="section-header">
+      <div class="section-dot completed-dot"></div>
+      <div class="section-title">Completed</div>
+    </div>
+
+    <div class="completed-row" onclick="toggleDetail('detailC1',event)">
+      <svg class="check-icon" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+      <div class="card-info">
+        <div class="card-name">readme-v2.md</div>
+        <div class="card-meta"><span>4.2 KB</span><span class="sep">&middot;</span><span class="badge badge-complete">Complete</span></div>
+      </div>
+      <div class="completed-right">5 min ago</div>
+      <div class="detail-panel" id="detailC1" style="position:absolute;left:0;right:0;bottom:auto"><!-- kept simple --></div>
+    </div>
+    <div class="completed-row" onclick="toggleDetail('detailC2',event)">
+      <svg class="check-icon" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+      <div class="card-info">
+        <div class="card-name">docker-compose.yml</div>
+        <div class="card-meta"><span>1.8 KB</span><span class="sep">&middot;</span><span class="badge badge-complete">Complete</span></div>
+      </div>
+      <div class="completed-right">12 min ago</div>
+    </div>
+    <div class="completed-row" onclick="toggleDetail('detailC3',event)">
+      <svg class="check-icon" width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+      <div class="card-info">
+        <div class="card-name">assets.tar.gz</div>
+        <div class="card-meta"><span>340 MB</span><span class="sep">&middot;</span><span class="badge badge-complete">Complete</span></div>
+      </div>
+      <div class="completed-right">28 min ago</div>
+    </div>
+  </div>
+
+  <!-- ═══ FAILED SECTION ═══ -->
+  <div class="section" data-section="failed" id="sectionFailed">
+    <div class="section-header">
+      <div class="section-dot failed-dot"></div>
+      <div class="section-title">Failed</div>
+    </div>
+
+    <div class="card failed-card" id="cardFailed1" onclick="toggleDetail('detailF1',event)">
+      <div class="card-top">
+        <div class="card-info">
+          <div class="card-name">env-production.tar</div>
+          <div class="card-meta">
+            <span class="badge badge-failed">
+              <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              Failed
+            </span>
+            <span class="sep">&middot;</span>
+            <span>Connection timeout after 3 retries</span>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="action-pill retry-pill" onclick="retryTransfer('cardFailed1',event)">
+            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
+            Retry
+          </button>
+        </div>
+      </div>
+      <div class="detail-panel" id="detailF1">
+        <div class="detail-grid">
+          <div class="detail-item"><label>Error</label><span style="color:var(--error)">ETIMEDOUT</span></div>
+          <div class="detail-item"><label>Size</label><span>1.2 GB</span></div>
+          <div class="detail-item"><label>Attempts</label><span>3 of 3</span></div>
+          <div class="detail-item"><label>Last Attempt</label><span>12:02 PM</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Cancel Confirmation Modal -->
+<div class="modal-overlay" id="cancelModal">
+  <div class="modal">
+    <h3>Cancel Transfer</h3>
+    <p id="cancelModalText">Are you sure you want to cancel the transfer of <strong id="cancelFileName"></strong>? This action cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="modal-btn cancel" onclick="closeModal()">Keep Transfer</button>
+      <button class="modal-btn danger" onclick="executeCancel()">Cancel Transfer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ── State ──
+  let activeFilter = 'all';
+  let cancelTarget = null;
+
+  // ── Notification ──
+  function dismissNotif() {
+    document.getElementById('notifBar').classList.add('hidden');
+  }
+
+  // ── Filters ──
+  function setFilter(filter) {
+    activeFilter = filter;
+    document.querySelectorAll('.pill').forEach(p => {
+      p.classList.toggle('active', p.dataset.filter === filter);
+    });
+    const sections = {
+      active: document.getElementById('sectionActive'),
+      completed: document.getElementById('sectionCompleted'),
+      failed: document.getElementById('sectionFailed')
+    };
+    Object.entries(sections).forEach(([key, el]) => {
+      if (!el) return;
+      el.style.display = (filter === 'all' || filter === key) ? '' : 'none';
+    });
+  }
+
+  // ── Detail Panel Toggle ──
+  function toggleDetail(id, e) {
+    if (e && (e.target.closest('.action-pill') || e.target.closest('.card-actions'))) return;
+    const panel = document.getElementById(id);
+    if (panel) panel.classList.toggle('open');
+  }
+
+  // ── Pause / Resume ──
+  function togglePause(btn, cardId, e) {
+    e.stopPropagation();
+    const pauseIcon = btn.querySelector('.icon-pause');
+    const playIcon = btn.querySelector('.icon-play');
+    const label = btn.querySelector('.pause-label');
+    const card = document.getElementById(cardId);
+    const fills = card.querySelectorAll('.progress-fill');
+    const isPaused = label.textContent === 'Resume';
+    if (isPaused) {
+      label.textContent = 'Pause';
+      pauseIcon.style.display = '';
+      playIcon.style.display = 'none';
+      fills.forEach(f => f.classList.add('shimmer'));
+    } else {
+      label.textContent = 'Resume';
+      pauseIcon.style.display = 'none';
+      playIcon.style.display = '';
+      fills.forEach(f => f.classList.remove('shimmer'));
+    }
+  }
+
+  // ── Cancel ──
+  function confirmCancel(cardId, fileName, e) {
+    e.stopPropagation();
+    cancelTarget = cardId;
+    document.getElementById('cancelFileName').textContent = fileName;
+    document.getElementById('cancelModal').classList.add('show');
+  }
+  function closeModal() {
+    document.getElementById('cancelModal').classList.remove('show');
+    cancelTarget = null;
+  }
+  function executeCancel() {
+    if (cancelTarget) {
+      const card = document.getElementById(cancelTarget);
+      if (card) {
+        card.style.transition = 'opacity .3s, transform .3s';
+        card.style.opacity = '0';
+        card.style.transform = 'translateX(20px)';
+        setTimeout(() => card.remove(), 300);
+        updateCounts();
+      }
+    }
+    closeModal();
+  }
+
+  // ── Retry ──
+  function retryTransfer(cardId, e) {
+    e.stopPropagation();
+    const card = document.getElementById(cardId);
+    if (!card) return;
+    // Animate: flash, then move to active
+    card.style.transition = 'border-color .3s, opacity .3s';
+    card.classList.remove('failed-card');
+    card.style.borderLeft = '3px solid var(--accent)';
+    const badge = card.querySelector('.badge-failed');
+    if (badge) {
+      badge.className = 'badge badge-upload';
+      badge.innerHTML = '<svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path d="M5 10l7-7 7 7M12 3v18"/></svg> Retrying...';
+    }
+    const meta = card.querySelector('.card-meta');
+    if (meta) {
+      const spans = meta.querySelectorAll('span:not(.badge):not(.sep)');
+      spans.forEach(s => { if (s.textContent.includes('Connection')) s.textContent = '0%'; });
+    }
+    // Add progress bar
+    const existingProgress = card.querySelector('.card-progress');
+    if (!existingProgress) {
+      const progDiv = document.createElement('div');
+      progDiv.className = 'card-progress';
+      progDiv.innerHTML = '<div class="progress-row"><div class="progress-track"><div class="progress-fill shimmer" style="width:0%;transition:width 2s"></div></div><div class="progress-pct">0%</div></div>';
+      card.querySelector('.card-top').after(progDiv);
+      setTimeout(() => {
+        progDiv.querySelector('.progress-fill').style.width = '12%';
+        progDiv.querySelector('.progress-pct').textContent = '12%';
+      }, 100);
+    }
+    // Move card to active section
+    const activeSection = document.getElementById('sectionActive');
+    const failedSection = document.getElementById('sectionFailed');
+    if (activeSection && card.parentElement !== activeSection) {
+      setTimeout(() => {
+        activeSection.appendChild(card);
+        card.style.borderLeft = '';
+        if (failedSection && failedSection.querySelectorAll('.card').length === 0) {
+          failedSection.style.display = 'none';
+        }
+        updateCounts();
+      }, 600);
+    }
+    // Swap actions
+    const actions = card.querySelector('.card-actions');
+    if (actions) {
+      actions.innerHTML = `
+        <button class="action-pill" onclick="togglePause(this,'${cardId}',event)" title="Pause">
+          <svg class="icon-pause" width="12" height="12" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+          <svg class="icon-play" width="12" height="12" fill="currentColor" viewBox="0 0 24 24" style="display:none"><path d="M6 4l14 8-14 8z"/></svg>
+          <span class="pause-label">Pause</span>
+        </button>
+        <button class="action-pill" onclick="confirmCancel('${cardId}','env-production.tar',event)">Cancel</button>
+      `;
+    }
+  }
+
+  // ── Clear Completed ──
+  function clearCompleted() {
+    const section = document.getElementById('sectionCompleted');
+    if (!section) return;
+    const rows = section.querySelectorAll('.completed-row');
+    rows.forEach((row, i) => {
+      setTimeout(() => {
+        row.style.transition = 'opacity .25s, transform .25s';
+        row.style.opacity = '0';
+        row.style.transform = 'translateX(20px)';
+        setTimeout(() => row.remove(), 250);
+      }, i * 80);
+    });
+    setTimeout(() => {
+      if (section.querySelectorAll('.completed-row').length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'No completed transfers';
+        section.appendChild(empty);
+      }
+      updateCounts();
+    }, rows.length * 80 + 300);
+  }
+
+  // ── Update Pill Counts ──
+  function updateCounts() {
+    setTimeout(() => {
+      const active = document.querySelectorAll('#sectionActive .card').length;
+      const completed = document.querySelectorAll('#sectionCompleted .completed-row').length;
+      const failed = document.querySelectorAll('#sectionFailed .card').length;
+      const all = active + completed + failed;
+      document.querySelectorAll('.pill').forEach(p => {
+        const f = p.dataset.filter;
+        const count = p.querySelector('.count');
+        if (f === 'all') count.textContent = all;
+        if (f === 'active') count.textContent = active;
+        if (f === 'completed') count.textContent = completed;
+        if (f === 'failed') count.textContent = failed;
+      });
+    }, 50);
+  }
+
+  // ── Simulated Progress Animation ──
+  (function simulateProgress() {
+    const fills = document.querySelectorAll('#sectionActive .card:not(.queued-card) .progress-fill');
+    setInterval(() => {
+      fills.forEach(fill => {
+        if (!fill.classList.contains('shimmer')) return; // paused
+        let w = parseFloat(fill.style.width) || 0;
+        if (w < 98) {
+          w += Math.random() * 0.4;
+          fill.style.width = w.toFixed(1) + '%';
+          const pct = fill.closest('.progress-row')?.querySelector('.progress-pct');
+          if (pct) pct.textContent = Math.round(w) + '%';
+        }
+      });
+    }, 1200);
+  })();
+
+  // Close modal on overlay click
+  document.getElementById('cancelModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  // Close modal on Escape
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeModal();
+  });
+</script>
+
+</body>
+</html>

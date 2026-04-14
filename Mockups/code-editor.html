@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+<title>Ori:Dev - Code Editor</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #FFFFFF;
+  --surface: #FAFAFA;
+  --border: #E5E7EB;
+  --border-light: #F0F0F0;
+  --text: #1F2937;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+  --accent: #6366F1;
+  --accent-hover: #4F46E5;
+  --accent-light: #EEF2FF;
+  --selected-line: #F3F4F6;
+  --gutter-bg: #FAFAFA;
+  --line-num: #C0C0C0;
+  --diff-add: #2DA44E;
+  --diff-del: #CF222E;
+  --kw: #CF222E;
+  --str: #0A3069;
+  --cmt: #6E7781;
+  --fn: #8250DF;
+  --type: #0550AE;
+  --num: #0550AE;
+  --op: #24292F;
+  --text-code: #24292F;
+  --search-hl: #FFF3BF;
+  --search-active: #FDDF68;
+  --minimap-bg: #FAFAFA;
+  --panel-bg: #F6F8FA;
+  --tree-bg: #F6F8FA;
+  --tree-hover: #EAEDF0;
+  --tree-active: #DDE3E8;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+html, body {
+  height: 100%;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  font-size: 13px;
+}
+
+/* ---- TOP BAR ---- */
+.topbar {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+  gap: 10px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.topbar-brand {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--accent);
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+}
+.topbar-brand span { color: var(--text-secondary); font-weight: 500; }
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.topbar-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.topbar-btn:hover { background: var(--surface); color: var(--text); }
+.topbar-btn svg { width: 15px; height: 15px; }
+
+/* ---- TAB BAR ---- */
+.tabbar {
+  display: flex;
+  align-items: flex-end;
+  height: 36px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+  gap: 0;
+  overflow-x: auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.tabbar::-webkit-scrollbar { display: none; }
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-top: 2px solid transparent;
+  border-bottom: none;
+  background: transparent;
+  border-left: none;
+  border-right: none;
+  white-space: nowrap;
+  position: relative;
+  transition: color 0.12s, background 0.12s;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+.tab:hover { color: var(--text); background: rgba(0,0,0,0.02); }
+.tab.active {
+  color: var(--text);
+  background: var(--bg);
+  border-top-color: var(--accent);
+  font-weight: 500;
+}
+.tab .modified-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: none;
+  flex-shrink: 0;
+}
+.tab.modified .modified-dot { display: block; }
+.tab .close-tab {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.1s;
+  cursor: pointer;
+}
+.tab:hover .close-tab { opacity: 1; }
+.tab .close-tab:hover { background: var(--border); color: var(--text); }
+.tab-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.tab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 34px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  border-radius: 4px;
+}
+.tab-add:hover { color: var(--text); background: rgba(0,0,0,0.03); }
+
+/* ---- FIND AND REPLACE PANEL ---- */
+.find-panel {
+  display: none;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 12px;
+  gap: 8px;
+  align-items: flex-start;
+  flex-direction: column;
+}
+.find-panel.open { display: flex; }
+.find-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.find-input-wrap {
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0 8px;
+  height: 28px;
+  flex: 1;
+  max-width: 320px;
+  transition: border-color 0.15s;
+}
+.find-input-wrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(99,102,241,0.12); }
+.find-input-wrap input {
+  border: none;
+  background: none;
+  outline: none;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+}
+.find-input-wrap input::placeholder { color: var(--text-muted); }
+.find-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-left: 4px;
+}
+.find-pill {
+  height: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s;
+}
+.find-pill:hover { background: var(--surface); }
+.find-pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.find-nav-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.find-nav-btn:hover { background: var(--surface); color: var(--text); }
+.find-close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+}
+.find-close:hover { background: var(--surface); color: var(--text); }
+.find-replace-actions {
+  display: flex;
+  gap: 4px;
+}
+.find-replace-btn {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+.find-replace-btn:hover { background: var(--surface); }
+
+/* ---- MAIN LAYOUT ---- */
+.main-wrapper {
+  display: flex;
+  height: calc(100vh - 40px - 36px - 24px);
+  overflow: hidden;
+}
+.main-wrapper.find-open { height: calc(100vh - 40px - 36px - 24px - 68px); }
+
+/* ---- FILE TREE ---- */
+.file-tree {
+  width: 220px;
+  min-width: 220px;
+  background: var(--tree-bg);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  font-size: 12px;
+  padding: 8px 0;
+  transition: width 0.2s, min-width 0.2s, opacity 0.2s;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.file-tree.collapsed { width: 0; min-width: 0; overflow: hidden; opacity: 0; padding: 0; border: none; }
+.tree-section {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 16px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  border-radius: 0;
+  transition: background 0.08s;
+}
+.tree-item:hover { background: var(--tree-hover); }
+.tree-item.active { background: var(--tree-active); color: var(--text); font-weight: 500; }
+.tree-item.folder { font-weight: 500; color: var(--text); padding-left: 10px; }
+.tree-item .indent { width: 12px; flex-shrink: 0; }
+.tree-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+.tree-icon.kt { color: #A97BFF; }
+.tree-icon.gradle { color: #02303A; }
+.tree-icon.md { color: #083FA1; }
+.tree-icon.folder-icon { color: #54AEF0; }
+
+/* ---- EDITOR ---- */
+.editor-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+.editor-scroll {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+.editor-content {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 20px;
+  padding: 0;
+  min-height: 100%;
+  position: relative;
+  cursor: text;
+}
+.line {
+  display: flex;
+  height: 20px;
+  position: relative;
+}
+.line.selected { background: var(--selected-line); }
+.line-gutter {
+  width: 60px;
+  min-width: 60px;
+  background: var(--gutter-bg);
+  text-align: right;
+  padding-right: 16px;
+  color: var(--line-num);
+  font-size: 12px;
+  line-height: 20px;
+  user-select: none;
+  -webkit-user-select: none;
+  position: relative;
+}
+.line.selected .line-gutter { color: #8B8FA3; }
+.diff-mark {
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 1px;
+}
+.diff-mark.add { background: var(--diff-add); }
+.diff-mark.del { background: var(--diff-del); }
+.line-code {
+  flex: 1;
+  padding-left: 12px;
+  white-space: pre;
+  color: var(--text-code);
+  line-height: 20px;
+  overflow: hidden;
+}
+
+/* Syntax tokens */
+.kw { color: var(--kw); font-weight: 500; }
+.str { color: var(--str); }
+.cmt { color: var(--cmt); font-style: italic; }
+.fn { color: var(--fn); }
+.tp { color: var(--type); }
+.num { color: var(--num); }
+.op { color: var(--op); }
+.ann { color: #8250DF; }
+.punct { color: #24292F; }
+
+/* ---- CURSOR ---- */
+.cursor-blink {
+  position: absolute;
+  width: 2px;
+  height: 18px;
+  background: var(--accent);
+  animation: blink 1s step-start infinite;
+  pointer-events: none;
+  z-index: 5;
+  border-radius: 1px;
+}
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* ---- MINIMAP ---- */
+.minimap {
+  width: 60px;
+  background: var(--minimap-bg);
+  border-left: 1px solid var(--border-light);
+  overflow: hidden;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+}
+.minimap-viewport {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: rgba(99,102,241,0.06);
+  border: 1px solid rgba(99,102,241,0.15);
+  border-radius: 2px;
+  pointer-events: none;
+  transition: top 0.1s;
+}
+.minimap-lines {
+  padding: 4px 6px;
+}
+.minimap-line {
+  height: 3px;
+  margin-bottom: 1px;
+  display: flex;
+  gap: 1px;
+}
+.minimap-seg {
+  height: 100%;
+  border-radius: 0.5px;
+  opacity: 0.5;
+}
+
+/* ---- BOTTOM BAR ---- */
+.bottombar {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 0 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  gap: 16px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.bottombar-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: default;
+  white-space: nowrap;
+}
+.bottombar-item.clickable { cursor: pointer; }
+.bottombar-item.clickable:hover { color: var(--text); }
+.bottombar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.bottombar-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--diff-add);
+}
+.bottombar-branch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---- SCROLLBAR ---- */
+.editor-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.editor-scroll::-webkit-scrollbar-track { background: transparent; }
+.editor-scroll::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 5px; border: 2px solid var(--bg); }
+.editor-scroll::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+
+/* ---- NOTIFICATION TOAST ---- */
+.toast {
+  position: fixed;
+  bottom: 40px;
+  right: 16px;
+  background: var(--text);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  z-index: 100;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
+/* Command palette overlay */
+.cmd-palette-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.25);
+  z-index: 50;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+}
+.cmd-palette-overlay.open { display: flex; }
+.cmd-palette {
+  width: 480px;
+  max-width: 90vw;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.12);
+  overflow: hidden;
+}
+.cmd-input {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+  font-family: system-ui, sans-serif;
+  color: var(--text);
+  outline: none;
+  background: var(--bg);
+}
+.cmd-input::placeholder { color: var(--text-muted); }
+.cmd-results { max-height: 300px; overflow-y: auto; padding: 4px; }
+.cmd-item {
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.cmd-item:hover, .cmd-item.selected { background: var(--accent-light); color: var(--text); }
+.cmd-item .shortcut { font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-brand">Ori<span>:Dev</span></div>
+  <div class="topbar-actions">
+    <button class="topbar-btn" id="toggleTree" title="Toggle File Tree (Ctrl+B)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h12M2 8h8M2 13h10"/></svg>
+    </button>
+    <button class="topbar-btn" id="toggleFind" title="Find and Replace (Ctrl+H)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+    </button>
+    <button class="topbar-btn" id="cmdPaletteBtn" title="Command Palette (Ctrl+Shift+P)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 5l4 4 4-4"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- TAB BAR -->
+<div class="tabbar" id="tabbar">
+  <div class="tab active modified" data-tab="main.kt" title="main.kt">
+    <svg class="tab-icon" viewBox="0 0 16 16"><rect width="16" height="16" rx="3" fill="#7F52FF" opacity="0.15"/><text x="4" y="12" font-size="10" font-weight="700" fill="#7F52FF">K</text></svg>
+    <span>main.kt</span>
+    <span class="modified-dot"></span>
+    <span class="close-tab">&times;</span>
+  </div>
+  <div class="tab" data-tab="build.gradle.kts" title="build.gradle.kts">
+    <svg class="tab-icon" viewBox="0 0 16 16"><rect width="16" height="16" rx="3" fill="#02303A" opacity="0.15"/><text x="3" y="12" font-size="9" font-weight="700" fill="#02303A">G</text></svg>
+    <span>build.gradle.kts</span>
+    <span class="modified-dot"></span>
+    <span class="close-tab">&times;</span>
+  </div>
+  <div class="tab" data-tab="CLAUDE.md" title="CLAUDE.md">
+    <svg class="tab-icon" viewBox="0 0 16 16"><rect width="16" height="16" rx="3" fill="#083FA1" opacity="0.15"/><text x="2" y="12" font-size="8" font-weight="700" fill="#083FA1">MD</text></svg>
+    <span>CLAUDE.md</span>
+    <span class="modified-dot"></span>
+    <span class="close-tab">&times;</span>
+  </div>
+  <div class="tab-add" title="New Tab">+</div>
+</div>
+
+<!-- FIND AND REPLACE -->
+<div class="find-panel" id="findPanel">
+  <div class="find-row">
+    <div class="find-input-wrap">
+      <input type="text" id="findInput" placeholder="Find" spellcheck="false">
+      <span class="find-count" id="findCount">0 results</span>
+    </div>
+    <button class="find-pill" id="findCasePill" title="Match Case">Aa</button>
+    <button class="find-pill" id="findWordPill" title="Whole Word">W</button>
+    <button class="find-pill" id="findRegexPill" title="Regex">.*</button>
+    <button class="find-nav-btn" id="findPrev" title="Previous Match">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 8L6 5 3 8"/></svg>
+    </button>
+    <button class="find-nav-btn" id="findNext" title="Next Match">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4l3 3 3-3"/></svg>
+    </button>
+    <button class="find-close" id="findClose" title="Close">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 3l6 6M9 3l-6 6"/></svg>
+    </button>
+  </div>
+  <div class="find-row">
+    <div class="find-input-wrap">
+      <input type="text" id="replaceInput" placeholder="Replace" spellcheck="false">
+    </div>
+    <div class="find-replace-actions">
+      <button class="find-replace-btn" id="replaceOne">Replace</button>
+      <button class="find-replace-btn" id="replaceAll">All</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main-wrapper" id="mainWrapper">
+  <!-- FILE TREE -->
+  <div class="file-tree" id="fileTree">
+    <div class="tree-section">Explorer</div>
+    <div class="tree-item folder">
+      <span class="tree-icon folder-icon">&#9662;</span>
+      <span>src/main/kotlin</span>
+    </div>
+    <div class="tree-item active" data-file="main.kt">
+      <span class="indent"></span>
+      <span class="tree-icon kt">K</span>
+      <span>ConnectionRepositoryImpl.kt</span>
+    </div>
+    <div class="tree-item" data-file="build.gradle.kts">
+      <span class="indent"></span>
+      <span class="tree-icon gradle">G</span>
+      <span>ServerManager.kt</span>
+    </div>
+    <div class="tree-item folder">
+      <span class="tree-icon folder-icon">&#9662;</span>
+      <span>data/model</span>
+    </div>
+    <div class="tree-item">
+      <span class="indent"></span>
+      <span class="tree-icon kt">K</span>
+      <span>Connection.kt</span>
+    </div>
+    <div class="tree-item">
+      <span class="indent"></span>
+      <span class="tree-icon kt">K</span>
+      <span>ServerConfig.kt</span>
+    </div>
+    <div class="tree-item folder">
+      <span class="tree-icon folder-icon">&#9656;</span>
+      <span>domain</span>
+    </div>
+    <div class="tree-item folder">
+      <span class="tree-icon folder-icon">&#9656;</span>
+      <span>ui</span>
+    </div>
+    <div style="height:8px"></div>
+    <div class="tree-item" data-file="build.gradle.kts">
+      <span class="tree-icon gradle">G</span>
+      <span>build.gradle.kts</span>
+    </div>
+    <div class="tree-item" data-file="CLAUDE.md">
+      <span class="tree-icon md">M</span>
+      <span>CLAUDE.md</span>
+    </div>
+    <div class="tree-item">
+      <span class="tree-icon" style="color:#6E7781">.</span>
+      <span>.gitignore</span>
+    </div>
+  </div>
+
+  <!-- EDITOR -->
+  <div class="editor-area">
+    <div class="editor-scroll" id="editorScroll">
+      <div class="editor-content" id="editorContent">
+      </div>
+      <div class="cursor-blink" id="cursor"></div>
+    </div>
+    <!-- MINIMAP -->
+    <div class="minimap" id="minimap">
+      <div class="minimap-viewport" id="minimapViewport"></div>
+      <div class="minimap-lines" id="minimapLines"></div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM BAR -->
+<div class="bottombar">
+  <div class="bottombar-item" id="cursorPos">Ln 14, Col 27</div>
+  <div class="bottombar-item clickable" id="langLabel">Kotlin</div>
+  <div class="bottombar-item">UTF-8</div>
+  <div class="bottombar-item">LF</div>
+  <div class="bottombar-right">
+    <div class="bottombar-branch">
+      <div class="bottombar-dot"></div>
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M11.75 5a2.25 2.25 0 1 0-1 4.44v.81c0 .57-.46 1-1 1H6.25a2.5 2.5 0 0 1-.63-.08v-2.7a2.25 2.25 0 1 0-1.5 0v4.56a2.25 2.25 0 1 0 1.5.06v-.49c.2.03.41.05.63.05h3.5a2.5 2.5 0 0 0 2.5-2.5v-.81A2.25 2.25 0 0 0 11.75 5z"/></svg>
+      <span>feature/connection-repo</span>
+    </div>
+    <div class="bottombar-item">
+      <span style="color:var(--diff-add)">+42</span>
+      <span style="color:var(--diff-del)">-8</span>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- COMMAND PALETTE -->
+<div class="cmd-palette-overlay" id="cmdOverlay">
+  <div class="cmd-palette">
+    <input class="cmd-input" id="cmdInput" placeholder="Type a command..." spellcheck="false">
+    <div class="cmd-results" id="cmdResults"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // ========== FILE CONTENTS ==========
+  var FILES = {
+    'main.kt': {
+      lang: 'Kotlin',
+      cursorLine: 14,
+      cursorCol: 27,
+      lines: [
+        { n:1, code: '<span class="cmt">// ConnectionRepositoryImpl.kt</span>', diff:null },
+        { n:2, code: '<span class="cmt">// Repository implementation for managing server connections</span>', diff:null },
+        { n:3, code: '', diff:null },
+        { n:4, code: '<span class="kw">package</span> dev.ori.data.repository', diff:null },
+        { n:5, code: '', diff:null },
+        { n:6, code: '<span class="kw">import</span> dev.ori.data.model.<span class="tp">Connection</span>', diff:'add' },
+        { n:7, code: '<span class="kw">import</span> dev.ori.data.model.<span class="tp">ConnectionState</span>', diff:'add' },
+        { n:8, code: '<span class="kw">import</span> dev.ori.data.model.<span class="tp">ServerConfig</span>', diff:null },
+        { n:9, code: '<span class="kw">import</span> dev.ori.domain.<span class="tp">ConnectionRepository</span>', diff:null },
+        { n:10, code: '<span class="kw">import</span> kotlinx.coroutines.flow.<span class="tp">MutableStateFlow</span>', diff:'add' },
+        { n:11, code: '<span class="kw">import</span> kotlinx.coroutines.flow.<span class="tp">StateFlow</span>', diff:'add' },
+        { n:12, code: '<span class="kw">import</span> kotlinx.coroutines.flow.<span class="fn">asStateFlow</span>', diff:'add' },
+        { n:13, code: '', diff:null },
+        { n:14, code: '<span class="ann">@Singleton</span>', diff:null },
+        { n:15, code: '<span class="kw">class</span> <span class="tp">ConnectionRepositoryImpl</span> <span class="ann">@Inject</span> <span class="kw">constructor</span>(', diff:null },
+        { n:16, code: '    <span class="kw">private val</span> sshClient: <span class="tp">SshClient</span>,', diff:null },
+        { n:17, code: '    <span class="kw">private val</span> configStore: <span class="tp">ConfigStore</span>,', diff:null },
+        { n:18, code: '    <span class="kw">private val</span> dispatcher: <span class="tp">CoroutineDispatcher</span>', diff:'add' },
+        { n:19, code: ') : <span class="tp">ConnectionRepository</span> {', diff:null },
+        { n:20, code: '', diff:null },
+        { n:21, code: '    <span class="kw">private val</span> _connections = <span class="fn">MutableStateFlow</span>&lt;<span class="tp">List</span>&lt;<span class="tp">Connection</span>&gt;&gt;(<span class="fn">emptyList</span>())', diff:'add' },
+        { n:22, code: '    <span class="kw">override val</span> connections: <span class="tp">StateFlow</span>&lt;<span class="tp">List</span>&lt;<span class="tp">Connection</span>&gt;&gt; = _connections.<span class="fn">asStateFlow</span>()', diff:'add' },
+        { n:23, code: '', diff:null },
+        { n:24, code: '    <span class="kw">override suspend fun</span> <span class="fn">connect</span>(config: <span class="tp">ServerConfig</span>): <span class="tp">Result</span>&lt;<span class="tp">Connection</span>&gt; {', diff:null },
+        { n:25, code: '        <span class="kw">return</span> <span class="fn">withContext</span>(dispatcher) {', diff:'add' },
+        { n:26, code: '            <span class="kw">try</span> {', diff:null },
+        { n:27, code: '                <span class="kw">val</span> session = sshClient.<span class="fn">connect</span>(', diff:null },
+        { n:28, code: '                    host = config.host,', diff:null },
+        { n:29, code: '                    port = config.port,', diff:null },
+        { n:30, code: '                    credentials = config.credentials', diff:null },
+        { n:31, code: '                )', diff:null },
+        { n:32, code: '                <span class="kw">val</span> connection = <span class="tp">Connection</span>(', diff:'add' },
+        { n:33, code: '                    id = <span class="fn">generateId</span>(),', diff:'add' },
+        { n:34, code: '                    config = config,', diff:'add' },
+        { n:35, code: '                    session = session,', diff:'add' },
+        { n:36, code: '                    state = <span class="tp">ConnectionState</span>.<span class="fn">CONNECTED</span>', diff:'add' },
+        { n:37, code: '                )', diff:'add' },
+        { n:38, code: '                _connections.<span class="fn">update</span> { it + connection }', diff:'add' },
+        { n:39, code: '                <span class="tp">Result</span>.<span class="fn">success</span>(connection)', diff:null },
+        { n:40, code: '            } <span class="kw">catch</span> (e: <span class="tp">Exception</span>) {', diff:null },
+        { n:41, code: '                <span class="tp">Result</span>.<span class="fn">failure</span>(e)', diff:null },
+        { n:42, code: '            }', diff:null },
+        { n:43, code: '        }', diff:null },
+        { n:44, code: '    }', diff:null },
+        { n:45, code: '', diff:null },
+        { n:46, code: '    <span class="kw">override suspend fun</span> <span class="fn">disconnect</span>(connectionId: <span class="tp">String</span>) {', diff:null },
+        { n:47, code: '        <span class="kw">val</span> conn = _connections.value.<span class="fn">find</span> { it.id == connectionId }', diff:'add' },
+        { n:48, code: '        conn?.<span class="kw">let</span> { c -&gt;', diff:'add' },
+        { n:49, code: '            c.session.<span class="fn">disconnect</span>()', diff:null },
+        { n:50, code: '            _connections.<span class="fn">update</span> { list -&gt;', diff:'add' },
+        { n:51, code: '                list.<span class="fn">map</span> {', diff:'add' },
+        { n:52, code: '                    <span class="kw">if</span> (it.id == connectionId)', diff:null },
+        { n:53, code: '                        it.<span class="fn">copy</span>(state = <span class="tp">ConnectionState</span>.<span class="fn">DISCONNECTED</span>)', diff:'add' },
+        { n:54, code: '                    <span class="kw">else</span> it', diff:null },
+        { n:55, code: '                }', diff:null },
+        { n:56, code: '            }', diff:null },
+        { n:57, code: '        }', diff:null },
+        { n:58, code: '    }', diff:null },
+        { n:59, code: '', diff:null },
+        { n:60, code: '    <span class="kw">private fun</span> <span class="fn">generateId</span>(): <span class="tp">String</span> = <span class="tp">UUID</span>.<span class="fn">randomUUID</span>().<span class="fn">toString</span>()', diff:'add' },
+        { n:61, code: '}', diff:null },
+      ]
+    },
+    'build.gradle.kts': {
+      lang: 'Kotlin',
+      cursorLine: 1,
+      cursorCol: 1,
+      lines: [
+        { n:1, code: '<span class="cmt">// build.gradle.kts</span>', diff:null },
+        { n:2, code: '<span class="cmt">// Project build configuration</span>', diff:null },
+        { n:3, code: '', diff:null },
+        { n:4, code: '<span class="fn">plugins</span> {', diff:null },
+        { n:5, code: '    <span class="fn">alias</span>(libs.plugins.kotlin.jvm)', diff:null },
+        { n:6, code: '    <span class="fn">alias</span>(libs.plugins.kotlin.serialization)', diff:null },
+        { n:7, code: '    <span class="fn">alias</span>(libs.plugins.hilt)', diff:null },
+        { n:8, code: '    <span class="fn">alias</span>(libs.plugins.ksp)', diff:null },
+        { n:9, code: '}', diff:null },
+        { n:10, code: '', diff:null },
+        { n:11, code: '<span class="fn">dependencies</span> {', diff:null },
+        { n:12, code: '    <span class="fn">implementation</span>(libs.kotlinx.coroutines.core)', diff:null },
+        { n:13, code: '    <span class="fn">implementation</span>(libs.kotlinx.serialization.json)', diff:null },
+        { n:14, code: '    <span class="fn">implementation</span>(libs.hilt.core)', diff:null },
+        { n:15, code: '    <span class="fn">ksp</span>(libs.hilt.compiler)', diff:null },
+        { n:16, code: '', diff:null },
+        { n:17, code: '    <span class="cmt">// SSH client</span>', diff:null },
+        { n:18, code: '    <span class="fn">implementation</span>(<span class="str">"com.hierynomus:sshj:0.38.0"</span>)', diff:null },
+        { n:19, code: '', diff:null },
+        { n:20, code: '    <span class="cmt">// Testing</span>', diff:null },
+        { n:21, code: '    <span class="fn">testImplementation</span>(libs.kotlin.test)', diff:null },
+        { n:22, code: '    <span class="fn">testImplementation</span>(libs.kotlinx.coroutines.test)', diff:null },
+        { n:23, code: '    <span class="fn">testImplementation</span>(libs.mockk)', diff:null },
+        { n:24, code: '}', diff:null },
+        { n:25, code: '', diff:null },
+        { n:26, code: 'kotlin {', diff:null },
+        { n:27, code: '    jvmToolchain(<span class="num">17</span>)', diff:null },
+        { n:28, code: '}', diff:null },
+      ]
+    },
+    'CLAUDE.md': {
+      lang: 'Markdown',
+      cursorLine: 1,
+      cursorCol: 1,
+      lines: [
+        { n:1, code: '<span class="cmt"># CLAUDE.md - Project context for AI assistants</span>', diff:null },
+        { n:2, code: '', diff:null },
+        { n:3, code: '<span class="cmt">## Project: Ori:Dev</span>', diff:null },
+        { n:4, code: '', diff:null },
+        { n:5, code: 'An integrated development environment for managing remote', diff:null },
+        { n:6, code: 'servers, containers, and development workflows.', diff:null },
+        { n:7, code: '', diff:null },
+        { n:8, code: '<span class="cmt">## Architecture</span>', diff:null },
+        { n:9, code: '', diff:null },
+        { n:10, code: '- <span class="kw">Language:</span> Kotlin (JVM)', diff:null },
+        { n:11, code: '- <span class="kw">DI:</span> Hilt / Dagger', diff:null },
+        { n:12, code: '- <span class="kw">Async:</span> Kotlin Coroutines + Flow', diff:null },
+        { n:13, code: '- <span class="kw">SSH:</span> SSHJ library', diff:null },
+        { n:14, code: '- <span class="kw">UI:</span> Compose Multiplatform', diff:null },
+        { n:15, code: '', diff:null },
+        { n:16, code: '<span class="cmt">## Conventions</span>', diff:null },
+        { n:17, code: '', diff:null },
+        { n:18, code: '- Repository pattern for data access', diff:null },
+        { n:19, code: '- <span class="tp">StateFlow</span> for reactive state management', diff:null },
+        { n:20, code: '- Suspend functions for async operations', diff:null },
+        { n:21, code: '- <span class="tp">Result</span> type for error handling', diff:null },
+        { n:22, code: '', diff:null },
+        { n:23, code: '<span class="cmt">## Commands</span>', diff:null },
+        { n:24, code: '', diff:null },
+        { n:25, code: '  ./gradlew build     <span class="cmt"># Build project</span>', diff:null },
+        { n:26, code: '  ./gradlew test      <span class="cmt"># Run tests</span>', diff:null },
+        { n:27, code: '  ./gradlew run       <span class="cmt"># Run application</span>', diff:null },
+      ]
+    }
+  };
+
+  // ========== STATE ==========
+  var activeTab = 'main.kt';
+  var selectedLine = 14;
+  var cursorLine = 14;
+  var cursorCol = 27;
+  var treeOpen = true;
+  var findOpen = false;
+  var searchTerm = '';
+  var matchCase = false;
+  var wholeWord = false;
+  var useRegex = false;
+  var currentMatchIndex = -1;
+  var matches = [];
+  var modifiedTabs = { 'main.kt': true };
+
+  var commands = [
+    { label: 'Save File', shortcut: 'Ctrl+S' },
+    { label: 'Find and Replace', shortcut: 'Ctrl+H' },
+    { label: 'Toggle File Tree', shortcut: 'Ctrl+B' },
+    { label: 'Go to Line', shortcut: 'Ctrl+G' },
+    { label: 'Format Document', shortcut: 'Shift+Alt+F' },
+    { label: 'Toggle Minimap', shortcut: '' },
+    { label: 'Close Tab', shortcut: 'Ctrl+W' },
+    { label: 'New File', shortcut: 'Ctrl+N' },
+  ];
+
+  // ========== DOM ==========
+  var editorContent = document.getElementById('editorContent');
+  var editorScroll = document.getElementById('editorScroll');
+  var cursorEl = document.getElementById('cursor');
+  var tabbar = document.getElementById('tabbar');
+  var findPanel = document.getElementById('findPanel');
+  var findInput = document.getElementById('findInput');
+  var findCount = document.getElementById('findCount');
+  var mainWrapper = document.getElementById('mainWrapper');
+  var fileTree = document.getElementById('fileTree');
+  var minimapEl = document.getElementById('minimap');
+  var minimapLines = document.getElementById('minimapLines');
+  var minimapViewport = document.getElementById('minimapViewport');
+  var toastEl = document.getElementById('toast');
+  var cursorPosEl = document.getElementById('cursorPos');
+  var langLabel = document.getElementById('langLabel');
+  var cmdOverlay = document.getElementById('cmdOverlay');
+  var cmdInput = document.getElementById('cmdInput');
+  var cmdResults = document.getElementById('cmdResults');
+
+  // ========== RENDER ==========
+  function renderEditor() {
+    var file = FILES[activeTab];
+    var lines = file.lines;
+    var html = '';
+    for (var i = 0; i < lines.length; i++) {
+      var l = lines[i];
+      var sel = l.n === selectedLine ? ' selected' : '';
+      var diffMark = l.diff ? '<span class="diff-mark ' + l.diff + '"></span>' : '';
+      html += '<div class="line' + sel + '" data-line="' + l.n + '">';
+      html += '<div class="line-gutter">' + diffMark + l.n + '</div>';
+      html += '<div class="line-code">' + (l.code || ' ') + '</div>';
+      html += '</div>';
+    }
+    editorContent.innerHTML = html;
+    updateCursor();
+    updateMinimap();
+    updateBottomBar();
+    if (searchTerm) highlightSearch();
+  }
+
+  function updateCursor() {
+    var lineEl = editorContent.querySelector('[data-line="' + cursorLine + '"]');
+    if (!lineEl) { cursorEl.style.display = 'none'; return; }
+    cursorEl.style.display = 'block';
+    var rect = lineEl.getBoundingClientRect();
+    var scrollRect = editorScroll.getBoundingClientRect();
+    var charW = 7.8;
+    cursorEl.style.top = (rect.top - scrollRect.top + editorScroll.scrollTop + 1) + 'px';
+    cursorEl.style.left = (60 + 12 + (cursorCol - 1) * charW) + 'px';
+  }
+
+  function updateBottomBar() {
+    var file = FILES[activeTab];
+    cursorPosEl.textContent = 'Ln ' + cursorLine + ', Col ' + cursorCol;
+    langLabel.textContent = file.lang;
+  }
+
+  function updateMinimap() {
+    var file = FILES[activeTab];
+    var lines = file.lines;
+    var html = '';
+    var colors = { kw: '#CF222E', str: '#0A3069', cmt: '#6E7781', fn: '#8250DF', tp: '#0550AE', num: '#0550AE' };
+    for (var i = 0; i < lines.length; i++) {
+      var l = lines[i];
+      var text = l.code.replace(/<[^>]+>/g, '');
+      var len = Math.min(text.length, 50);
+      if (len === 0) {
+        html += '<div class="minimap-line"></div>';
+        continue;
+      }
+      var color = '#C0C0C0';
+      if (l.code.indexOf('class="kw"') >= 0) color = colors.kw;
+      else if (l.code.indexOf('class="cmt"') >= 0) color = colors.cmt;
+      else if (l.code.indexOf('class="fn"') >= 0) color = colors.fn;
+      else if (l.code.indexOf('class="tp"') >= 0) color = colors.tp;
+      else if (l.code.indexOf('class="str"') >= 0) color = colors.str;
+      var w = Math.max(4, len * 0.8);
+      var indentMatch = text.match(/^(\s*)/);
+      var indent = indentMatch ? indentMatch[1].length * 0.6 : 0;
+      html += '<div class="minimap-line"><div class="minimap-seg" style="width:' + w + 'px;margin-left:' + indent + 'px;background:' + color + '"></div></div>';
+    }
+    minimapLines.innerHTML = html;
+    updateMinimapViewport();
+  }
+
+  function updateMinimapViewport() {
+    var file = FILES[activeTab];
+    var totalLines = file.lines.length;
+    var visibleLines = Math.floor(editorScroll.clientHeight / 20);
+    var scrollMax = editorScroll.scrollHeight - editorScroll.clientHeight;
+    var scrollFraction = scrollMax > 0 ? editorScroll.scrollTop / scrollMax : 0;
+    var vpHeight = Math.max(20, (visibleLines / totalLines) * (totalLines * 4));
+    var vpTop = scrollFraction * (totalLines * 4 - vpHeight);
+    minimapViewport.style.height = vpHeight + 'px';
+    minimapViewport.style.top = Math.max(0, vpTop) + 'px';
+  }
+
+  // ========== TABS ==========
+  function switchTab(name) {
+    if (!FILES[name]) return;
+    activeTab = name;
+    var file = FILES[name];
+    selectedLine = file.cursorLine;
+    cursorLine = file.cursorLine;
+    cursorCol = file.cursorCol;
+
+    var tabs = document.querySelectorAll('.tab');
+    for (var i = 0; i < tabs.length; i++) {
+      var t = tabs[i];
+      if (t.dataset.tab === name) { t.classList.add('active'); } else { t.classList.remove('active'); }
+      if (modifiedTabs[t.dataset.tab]) { t.classList.add('modified'); } else { t.classList.remove('modified'); }
+    }
+    var treeItems = document.querySelectorAll('.tree-item[data-file]');
+    for (var j = 0; j < treeItems.length; j++) {
+      if (treeItems[j].dataset.file === name) { treeItems[j].classList.add('active'); } else { treeItems[j].classList.remove('active'); }
+    }
+    renderEditor();
+  }
+
+  tabbar.addEventListener('click', function(e) {
+    var closeBtn = e.target.closest('.close-tab');
+    var tab = e.target.closest('.tab');
+    if (closeBtn && tab) { e.stopPropagation(); return; }
+    if (tab && tab.dataset.tab) switchTab(tab.dataset.tab);
+  });
+
+  fileTree.addEventListener('click', function(e) {
+    var item = e.target.closest('.tree-item[data-file]');
+    if (item) switchTab(item.dataset.file);
+  });
+
+  // ========== CLICK TO POSITION CURSOR ==========
+  editorContent.addEventListener('click', function(e) {
+    var lineEl = e.target.closest('.line');
+    if (!lineEl) return;
+    var ln = parseInt(lineEl.dataset.line);
+    selectedLine = ln;
+    cursorLine = ln;
+    var codeEl = lineEl.querySelector('.line-code');
+    if (codeEl) {
+      var rect = codeEl.getBoundingClientRect();
+      var charW = 7.8;
+      cursorCol = Math.max(1, Math.round((e.clientX - rect.left) / charW) + 1);
+    }
+    renderEditor();
+  });
+
+  // ========== FIND ==========
+  function toggleFind() {
+    findOpen = !findOpen;
+    if (findOpen) { findPanel.classList.add('open'); mainWrapper.classList.add('find-open'); }
+    else { findPanel.classList.remove('open'); mainWrapper.classList.remove('find-open'); }
+    if (findOpen) { findInput.focus(); findInput.select(); }
+  }
+
+  function highlightSearch() {
+    if (!searchTerm) { findCount.textContent = '0 results'; matches = []; return; }
+    matches = [];
+    var flags = 'g';
+    if (!matchCase) flags += 'i';
+    var pattern;
+    try {
+      if (useRegex) {
+        pattern = new RegExp(searchTerm, flags);
+      } else {
+        var escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (wholeWord) escaped = '\\b' + escaped + '\\b';
+        pattern = new RegExp(escaped, flags);
+      }
+    } catch(err) { findCount.textContent = 'Invalid regex'; return; }
+
+    var codeEls = document.querySelectorAll('.line-code');
+    for (var i = 0; i < codeEls.length; i++) {
+      var plainText = codeEls[i].textContent;
+      var regex = new RegExp(pattern.source, pattern.flags);
+      var match;
+      while ((match = regex.exec(plainText)) !== null) {
+        if (match[0].length === 0) { regex.lastIndex++; continue; }
+        matches.push({ lineIndex: i, start: match.index, text: match[0] });
+      }
+    }
+
+    if (matches.length > 0 && currentMatchIndex < 0) currentMatchIndex = 0;
+    if (currentMatchIndex >= matches.length) currentMatchIndex = matches.length - 1;
+
+    findCount.textContent = matches.length > 0
+      ? (currentMatchIndex + 1) + ' of ' + matches.length
+      : 'No results';
+  }
+
+  findInput.addEventListener('input', function() {
+    searchTerm = findInput.value;
+    currentMatchIndex = 0;
+    renderEditor();
+  });
+
+  document.getElementById('findCasePill').addEventListener('click', function() {
+    matchCase = !matchCase; this.classList.toggle('active', matchCase);
+    renderEditor();
+  });
+  document.getElementById('findWordPill').addEventListener('click', function() {
+    wholeWord = !wholeWord; this.classList.toggle('active', wholeWord);
+    renderEditor();
+  });
+  document.getElementById('findRegexPill').addEventListener('click', function() {
+    useRegex = !useRegex; this.classList.toggle('active', useRegex);
+    renderEditor();
+  });
+  document.getElementById('findNext').addEventListener('click', function() {
+    if (matches.length) { currentMatchIndex = (currentMatchIndex + 1) % matches.length; highlightSearch(); }
+  });
+  document.getElementById('findPrev').addEventListener('click', function() {
+    if (matches.length) { currentMatchIndex = (currentMatchIndex - 1 + matches.length) % matches.length; highlightSearch(); }
+  });
+  document.getElementById('findClose').addEventListener('click', function() {
+    findOpen = false; findPanel.classList.remove('open'); mainWrapper.classList.remove('find-open');
+    searchTerm = ''; findInput.value = ''; matches = []; renderEditor();
+  });
+
+  // ========== TOGGLE TREE ==========
+  document.getElementById('toggleTree').addEventListener('click', function() {
+    treeOpen = !treeOpen;
+    if (treeOpen) { fileTree.classList.remove('collapsed'); } else { fileTree.classList.add('collapsed'); }
+  });
+  document.getElementById('toggleFind').addEventListener('click', toggleFind);
+
+  // ========== SAVE ==========
+  function saveFile() {
+    delete modifiedTabs[activeTab];
+    var tabs = document.querySelectorAll('.tab');
+    for (var i = 0; i < tabs.length; i++) {
+      if (modifiedTabs[tabs[i].dataset.tab]) { tabs[i].classList.add('modified'); } else { tabs[i].classList.remove('modified'); }
+    }
+    showToast('File saved');
+  }
+
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    setTimeout(function() { toastEl.classList.remove('show'); }, 1800);
+  }
+
+  // ========== COMMAND PALETTE ==========
+  function openCmdPalette() {
+    cmdOverlay.classList.add('open');
+    cmdInput.value = '';
+    renderCommands('');
+    setTimeout(function() { cmdInput.focus(); }, 50);
+  }
+  function closeCmdPalette() { cmdOverlay.classList.remove('open'); }
+
+  function renderCommands(filter) {
+    var f = filter.toLowerCase();
+    var filtered = [];
+    for (var i = 0; i < commands.length; i++) {
+      if (commands[i].label.toLowerCase().indexOf(f) >= 0) filtered.push(commands[i]);
+    }
+    var html = '';
+    for (var j = 0; j < filtered.length; j++) {
+      var sel = j === 0 ? ' selected' : '';
+      html += '<div class="cmd-item' + sel + '" data-cmd="' + filtered[j].label + '">';
+      html += '<span>' + filtered[j].label + '</span>';
+      html += '<span class="shortcut">' + filtered[j].shortcut + '</span>';
+      html += '</div>';
+    }
+    cmdResults.innerHTML = html;
+  }
+
+  cmdInput.addEventListener('input', function() { renderCommands(cmdInput.value); });
+  cmdOverlay.addEventListener('click', function(e) { if (e.target === cmdOverlay) closeCmdPalette(); });
+  cmdResults.addEventListener('click', function(e) {
+    var item = e.target.closest('.cmd-item');
+    if (!item) return;
+    closeCmdPalette();
+    runCommand(item.dataset.cmd);
+  });
+  document.getElementById('cmdPaletteBtn').addEventListener('click', openCmdPalette);
+
+  function runCommand(label) {
+    if (label === 'Save File') { saveFile(); }
+    else if (label === 'Find and Replace') { toggleFind(); }
+    else if (label === 'Toggle File Tree') {
+      treeOpen = !treeOpen;
+      if (treeOpen) { fileTree.classList.remove('collapsed'); } else { fileTree.classList.add('collapsed'); }
+    }
+    else if (label === 'Toggle Minimap') {
+      minimapEl.style.display = minimapEl.style.display === 'none' ? '' : 'none';
+    }
+    else { showToast(label); }
+  }
+
+  // ========== KEYBOARD SHORTCUTS ==========
+  document.addEventListener('keydown', function(e) {
+    var ctrl = e.ctrlKey || e.metaKey;
+
+    // Ctrl+S - Save
+    if (ctrl && e.key === 's') { e.preventDefault(); saveFile(); }
+    // Ctrl+B - Toggle tree
+    if (ctrl && e.key === 'b') {
+      e.preventDefault(); treeOpen = !treeOpen;
+      if (treeOpen) { fileTree.classList.remove('collapsed'); } else { fileTree.classList.add('collapsed'); }
+    }
+    // Ctrl+F or Ctrl+H - Find
+    if (ctrl && (e.key === 'f' || e.key === 'h')) { e.preventDefault(); if (!findOpen) toggleFind(); else findInput.focus(); }
+    // Ctrl+Shift+P - Command palette
+    if (ctrl && e.shiftKey && e.key === 'P') { e.preventDefault(); openCmdPalette(); }
+    // Escape
+    if (e.key === 'Escape') {
+      if (cmdOverlay.classList.contains('open')) closeCmdPalette();
+      else if (findOpen) { findOpen = false; findPanel.classList.remove('open'); mainWrapper.classList.remove('find-open'); }
+    }
+    // Ctrl+W - Close tab
+    if (ctrl && e.key === 'w') { e.preventDefault(); showToast('Tab closed'); }
+    // Ctrl+G - Go to line
+    if (ctrl && e.key === 'g') {
+      e.preventDefault();
+      var ln = prompt('Go to line:');
+      if (ln && !isNaN(ln)) {
+        var n = parseInt(ln);
+        var file = FILES[activeTab];
+        if (n >= 1 && n <= file.lines.length) {
+          selectedLine = n; cursorLine = n; cursorCol = 1; renderEditor();
+          var lineEl = editorContent.querySelector('[data-line="' + n + '"]');
+          if (lineEl) lineEl.scrollIntoView({ block: 'center' });
+        }
+      }
+    }
+    // Arrow keys
+    if (e.key === 'ArrowDown' && !cmdOverlay.classList.contains('open')) {
+      e.preventDefault();
+      var fileDown = FILES[activeTab];
+      if (cursorLine < fileDown.lines.length) { cursorLine++; selectedLine = cursorLine; renderEditor(); }
+    }
+    if (e.key === 'ArrowUp' && !cmdOverlay.classList.contains('open')) {
+      e.preventDefault();
+      if (cursorLine > 1) { cursorLine--; selectedLine = cursorLine; renderEditor(); }
+    }
+    if (e.key === 'ArrowRight' && !cmdOverlay.classList.contains('open')) { cursorCol++; updateCursor(); updateBottomBar(); }
+    if (e.key === 'ArrowLeft' && cursorCol > 1 && !cmdOverlay.classList.contains('open')) { cursorCol--; updateCursor(); updateBottomBar(); }
+
+    // Tab switching: Ctrl+1/2/3
+    var tabKeys = ['1','2','3'];
+    if (ctrl && tabKeys.indexOf(e.key) >= 0) {
+      e.preventDefault();
+      var tabNames = Object.keys(FILES);
+      var idx = parseInt(e.key) - 1;
+      if (tabNames[idx]) switchTab(tabNames[idx]);
+    }
+
+    // Enter in command palette
+    if (e.key === 'Enter' && cmdOverlay.classList.contains('open')) {
+      var selItem = cmdResults.querySelector('.cmd-item.selected');
+      if (selItem) { closeCmdPalette(); runCommand(selItem.dataset.cmd); }
+    }
+    // Arrow nav in command palette
+    if (cmdOverlay.classList.contains('open') && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault();
+      var items = cmdResults.querySelectorAll('.cmd-item');
+      var cur = -1;
+      for (var k = 0; k < items.length; k++) { if (items[k].classList.contains('selected')) { cur = k; break; } }
+      for (var m = 0; m < items.length; m++) { items[m].classList.remove('selected'); }
+      var next = e.key === 'ArrowDown' ? cur + 1 : cur - 1;
+      if (next < 0) next = items.length - 1;
+      if (next >= items.length) next = 0;
+      if (items[next]) items[next].classList.add('selected');
+    }
+  });
+
+  // ========== SCROLL SYNC ==========
+  editorScroll.addEventListener('scroll', updateMinimapViewport);
+
+  minimapEl.addEventListener('click', function(e) {
+    var rect = minimapEl.getBoundingClientRect();
+    var y = e.clientY - rect.top;
+    var file = FILES[activeTab];
+    var totalH = file.lines.length * 4;
+    var fraction = y / totalH;
+    editorScroll.scrollTop = fraction * (editorScroll.scrollHeight - editorScroll.clientHeight);
+  });
+
+  // ========== INIT ==========
+  renderEditor();
+})();
+</script>
+</body>
+</html>

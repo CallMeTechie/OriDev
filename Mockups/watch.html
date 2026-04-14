@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ori:Dev - Wear OS Companion</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:#FAFAFA;
+  color:#1a1a2e;
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* --- PAGE HEADER --- */
+.page-header{
+  text-align:center;
+  padding:48px 24px 16px;
+}
+.page-header h1{
+  font-size:14px;
+  font-weight:600;
+  letter-spacing:6px;
+  text-transform:uppercase;
+  color:#6366F1;
+  margin-bottom:6px;
+}
+.page-header h2{
+  font-size:32px;
+  font-weight:700;
+  color:#111;
+  letter-spacing:-0.5px;
+}
+.page-header p{
+  font-size:15px;
+  color:#888;
+  margin-top:8px;
+  font-weight:400;
+}
+
+/* --- WATCH CONTAINER --- */
+.watch-section{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:24px 16px 40px;
+  position:relative;
+}
+
+.watch-assembly{
+  position:relative;
+  width:330px;
+  height:330px;
+}
+
+/* Outer bezel */
+.watch-bezel{
+  position:absolute;
+  inset:0;
+  border-radius:50%;
+  background:linear-gradient(145deg,#e8e8ec,#c8c8cc,#d8d8dc,#b8b8bc);
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.15),
+    0 8px 24px rgba(0,0,0,0.1),
+    inset 0 1px 0 rgba(255,255,255,0.6),
+    inset 0 -1px 0 rgba(0,0,0,0.1);
+}
+
+/* Inner bezel ring */
+.watch-bezel::before{
+  content:'';
+  position:absolute;
+  inset:6px;
+  border-radius:50%;
+  background:linear-gradient(160deg,#d0d0d4,#a8a8ac);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,0.2);
+}
+
+/* Screen mask */
+.watch-screen-mask{
+  position:absolute;
+  inset:14px;
+  border-radius:50%;
+  background:#000;
+  overflow:hidden;
+  z-index:2;
+}
+
+.watch-display{
+  width:100%;
+  height:100%;
+  position:relative;
+  background:#0F0F0F;
+  border-radius:50%;
+}
+
+/* Crown button */
+.watch-crown{
+  position:absolute;
+  right:-18px;
+  top:50%;
+  transform:translateY(-50%);
+  width:12px;
+  height:40px;
+  background:linear-gradient(to right,#c0c0c4,#d8d8dc,#b0b0b4);
+  border-radius:3px;
+  z-index:5;
+  cursor:pointer;
+  box-shadow:1px 2px 4px rgba(0,0,0,0.2);
+  transition:background 0.15s;
+}
+.watch-crown:hover{
+  background:linear-gradient(to right,#b0b0b4,#c8c8cc,#a0a0a4);
+}
+.watch-crown::before{
+  content:'';
+  position:absolute;
+  top:8px;bottom:8px;left:3px;right:3px;
+  border-top:1px solid rgba(0,0,0,0.15);
+  border-bottom:1px solid rgba(0,0,0,0.15);
+}
+
+/* --- SCREEN SLIDES --- */
+.screen-container{
+  position:absolute;
+  inset:0;
+  border-radius:50%;
+  overflow:hidden;
+}
+
+.screen{
+  position:absolute;
+  inset:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:40px 30px 50px;
+  opacity:0;
+  transform:translateX(30px);
+  transition:opacity 0.4s ease, transform 0.4s ease;
+  pointer-events:none;
+  border-radius:50%;
+}
+.screen.active{
+  opacity:1;
+  transform:translateX(0);
+  pointer-events:auto;
+}
+.screen.exit-left{
+  opacity:0;
+  transform:translateX(-30px);
+}
+
+/* --- SCREEN 1: MAIN TILE --- */
+.s1-logo{
+  font-family:'Courier New',monospace;
+  font-size:38px;
+  font-weight:900;
+  color:#fff;
+  letter-spacing:2px;
+  margin-bottom:4px;
+  text-shadow:0 0 20px rgba(99,102,241,0.5);
+}
+.s1-logo span{ color:#6366F1; }
+.s1-status{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:11px;
+  color:#10B981;
+  font-weight:600;
+  margin-bottom:14px;
+}
+.s1-status .dot{
+  width:6px;height:6px;border-radius:50%;
+  background:#10B981;
+  box-shadow:0 0 6px #10B981;
+  animation:pulse-dot 2s infinite;
+}
+@keyframes pulse-dot{
+  0%,100%{opacity:1;} 50%{opacity:0.4;}
+}
+
+.s1-ring-wrap{
+  position:relative;
+  width:100px;height:100px;
+  margin-bottom:10px;
+}
+.s1-ring-wrap svg{
+  width:100%;height:100%;
+  transform:rotate(-90deg);
+}
+.s1-ring-bg{
+  fill:none;stroke:#1a1a2e;stroke-width:6;
+}
+.s1-ring-fg{
+  fill:none;stroke:#6366F1;stroke-width:6;
+  stroke-linecap:round;
+  stroke-dasharray:251;
+  stroke-dashoffset:251;
+  transition:stroke-dashoffset 1.2s ease;
+}
+.s1-ring-label{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  color:#fff;
+}
+.s1-ring-pct{font-size:22px;font-weight:700;line-height:1;}
+.s1-ring-sub{font-size:8px;color:#888;margin-top:2px;text-transform:uppercase;letter-spacing:1px;}
+
+.s1-cmd{
+  font-family:'Courier New',monospace;
+  font-size:9px;
+  color:#555;
+  background:rgba(255,255,255,0.05);
+  padding:4px 12px;
+  border-radius:10px;
+  white-space:nowrap;
+}
+
+/* --- SCREEN 2: CONNECTIONS --- */
+.s2-title{
+  font-size:11px;
+  font-weight:700;
+  color:#888;
+  text-transform:uppercase;
+  letter-spacing:2px;
+  margin-bottom:12px;
+}
+.s2-list{
+  width:100%;
+  display:flex;flex-direction:column;gap:6px;
+  max-height:140px;
+  overflow-y:auto;
+  padding:0 8px;
+}
+.s2-list::-webkit-scrollbar{width:2px;}
+.s2-list::-webkit-scrollbar-thumb{background:#333;border-radius:2px;}
+.s2-item{
+  display:flex;align-items:center;
+  gap:8px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.06);
+  border-radius:12px;
+  padding:8px 12px;
+  transition:background 0.2s;
+}
+.s2-item:hover{background:rgba(255,255,255,0.08);}
+.s2-dot{
+  width:8px;height:8px;border-radius:50%;flex-shrink:0;
+}
+.s2-dot.on{background:#10B981;box-shadow:0 0 6px #10B981;}
+.s2-dot.off{background:#EF4444;box-shadow:0 0 6px rgba(239,68,68,0.4);}
+.s2-dot.warn{background:#F59E0B;box-shadow:0 0 6px rgba(245,158,11,0.4);}
+.s2-name{flex:1;font-size:12px;color:#eee;font-weight:500;}
+.s2-ping{font-size:9px;color:#666;font-family:monospace;}
+
+.s2-disconnect{
+  margin-top:10px;
+  font-size:10px;
+  color:#EF4444;
+  background:rgba(239,68,68,0.1);
+  border:1px solid rgba(239,68,68,0.2);
+  border-radius:20px;
+  padding:6px 16px;
+  cursor:pointer;
+  transition:all 0.2s;
+  font-weight:600;
+}
+.s2-disconnect:hover{background:rgba(239,68,68,0.2);}
+
+/* --- SCREEN 3: QUICK COMMANDS --- */
+.s3-title{
+  font-size:11px;font-weight:700;color:#888;
+  text-transform:uppercase;letter-spacing:2px;
+  margin-bottom:8px;
+}
+.s3-chips{
+  display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;justify-content:center;
+}
+.s3-chip{
+  font-size:9px;padding:4px 10px;border-radius:12px;
+  background:rgba(99,102,241,0.15);
+  color:#6366F1;
+  border:1px solid rgba(99,102,241,0.25);
+  cursor:pointer;
+  transition:all 0.2s;
+  font-weight:600;
+}
+.s3-chip.active{
+  background:#6366F1;color:#fff;
+}
+.s3-chip:hover{background:rgba(99,102,241,0.3);}
+.s3-cmds{
+  display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%;
+  padding:0 4px;
+}
+.s3-btn{
+  font-size:10px;padding:10px 6px;border-radius:14px;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.08);
+  color:#ddd;
+  cursor:pointer;
+  transition:all 0.15s;
+  text-align:center;
+  font-weight:500;
+}
+.s3-btn:hover{background:rgba(255,255,255,0.12);transform:scale(0.97);}
+.s3-btn:active{transform:scale(0.93);background:rgba(99,102,241,0.2);}
+.s3-btn .icon{font-size:16px;display:block;margin-bottom:2px;}
+
+/* --- SCREEN 4: COMMAND OUTPUT --- */
+.s4-header{
+  font-size:10px;color:#6366F1;font-weight:700;
+  text-transform:uppercase;letter-spacing:1px;
+  margin-bottom:6px;
+  display:flex;align-items:center;gap:6px;
+}
+.s4-header .blink{
+  width:6px;height:6px;border-radius:50%;
+  background:#10B981;
+  animation:pulse-dot 1s infinite;
+}
+.s4-terminal{
+  width:100%;
+  flex:1;
+  overflow-y:auto;
+  font-family:'Courier New',monospace;
+  font-size:9px;
+  line-height:1.5;
+  color:#aaa;
+  text-align:left;
+  padding:6px 8px;
+  background:rgba(0,0,0,0.3);
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,0.04);
+  max-height:160px;
+}
+.s4-terminal::-webkit-scrollbar{width:2px;}
+.s4-terminal::-webkit-scrollbar-thumb{background:#333;border-radius:2px;}
+.s4-terminal .prompt{color:#6366F1;}
+.s4-terminal .success{color:#10B981;}
+.s4-terminal .error{color:#EF4444;}
+.s4-terminal .dim{color:#555;}
+
+/* --- SCREEN 5: SERVER HEALTH --- */
+.s5-title{
+  font-size:11px;font-weight:700;color:#888;
+  text-transform:uppercase;letter-spacing:2px;
+  margin-bottom:10px;
+}
+.s5-gauges{
+  display:flex;gap:8px;justify-content:center;
+}
+.s5-gauge{
+  display:flex;flex-direction:column;align-items:center;
+  gap:4px;
+}
+.s5-gauge svg{width:72px;height:72px;transform:rotate(-90deg);}
+.s5-gauge-bg{fill:none;stroke:#1a1a2e;stroke-width:7;}
+.s5-gauge-fg{
+  fill:none;stroke-width:7;stroke-linecap:round;
+  stroke-dasharray:188;stroke-dashoffset:188;
+  transition:stroke-dashoffset 1.5s ease;
+}
+.s5-gauge-label{
+  position:relative;
+  margin-top:-58px;
+  text-align:center;
+  height:48px;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+}
+.s5-gauge-pct{font-size:16px;font-weight:700;color:#fff;}
+.s5-gauge-name{font-size:8px;color:#666;text-transform:uppercase;letter-spacing:1px;margin-top:1px;}
+.s5-server-name{
+  font-size:9px;color:#555;margin-top:8px;font-family:monospace;
+}
+
+/* --- SCREEN 6: TRANSFER MONITOR --- */
+.s6-ring-wrap{
+  position:relative;width:120px;height:120px;margin-bottom:8px;
+}
+.s6-ring-wrap svg{width:100%;height:100%;transform:rotate(-90deg);}
+.s6-ring-bg{fill:none;stroke:#1a1a2e;stroke-width:8;}
+.s6-ring-fg{
+  fill:none;stroke:#6366F1;stroke-width:8;stroke-linecap:round;
+  stroke-dasharray:314;stroke-dashoffset:314;
+  transition:stroke-dashoffset 1.5s ease;
+}
+.s6-ring-label{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+.s6-pct{font-size:28px;font-weight:700;color:#fff;}
+.s6-sub{font-size:8px;color:#666;text-transform:uppercase;letter-spacing:1px;}
+.s6-info{
+  font-size:10px;color:#888;margin-bottom:8px;font-family:monospace;
+}
+.s6-info span{color:#6366F1;font-weight:600;}
+.s6-actions{display:flex;gap:8px;}
+.s6-act{
+  font-size:10px;padding:6px 16px;border-radius:20px;
+  cursor:pointer;transition:all 0.15s;font-weight:600;
+  border:none;
+}
+.s6-pause{
+  background:rgba(99,102,241,0.15);color:#6366F1;
+  border:1px solid rgba(99,102,241,0.3);
+}
+.s6-pause:hover{background:rgba(99,102,241,0.25);}
+.s6-cancel{
+  background:rgba(239,68,68,0.1);color:#EF4444;
+  border:1px solid rgba(239,68,68,0.2);
+}
+.s6-cancel:hover{background:rgba(239,68,68,0.2);}
+
+/* --- SCREEN 7: CLAUDE CODE --- */
+.s7-card{
+  width:100%;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:14px;
+  padding:12px;
+  margin-bottom:12px;
+}
+.s7-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:8px;font-weight:700;
+  color:#6366F1;
+  text-transform:uppercase;
+  letter-spacing:1px;
+  margin-bottom:6px;
+  background:rgba(99,102,241,0.12);
+  padding:3px 8px;
+  border-radius:6px;
+}
+.s7-badge .pulse{
+  width:5px;height:5px;border-radius:50%;background:#6366F1;
+  animation:pulse-dot 1.5s infinite;
+}
+.s7-msg{
+  font-size:11px;color:#ddd;line-height:1.4;font-weight:500;margin-bottom:4px;
+}
+.s7-detail{
+  font-size:9px;color:#666;font-family:monospace;
+}
+.s7-actions{display:flex;gap:8px;width:100%;}
+.s7-approve,.s7-reject{
+  flex:1;padding:10px;border-radius:14px;
+  font-size:12px;font-weight:700;
+  cursor:pointer;transition:all 0.15s;
+  border:none;text-align:center;
+}
+.s7-approve{
+  background:#10B981;color:#fff;
+  box-shadow:0 4px 12px rgba(16,185,129,0.3);
+}
+.s7-approve:hover{background:#0ea572;transform:scale(0.97);}
+.s7-approve:active{transform:scale(0.93);}
+.s7-reject{
+  background:rgba(239,68,68,0.15);color:#EF4444;
+  border:1px solid rgba(239,68,68,0.25);
+}
+.s7-reject:hover{background:rgba(239,68,68,0.25);transform:scale(0.97);}
+.s7-reject:active{transform:scale(0.93);}
+
+/* --- SCREEN 8: PANIC BUTTON --- */
+.s8-label{
+  font-size:10px;color:#888;font-weight:600;
+  text-transform:uppercase;letter-spacing:2px;
+  margin-bottom:14px;
+}
+.s8-btn{
+  width:120px;height:120px;border-radius:50%;
+  background:radial-gradient(circle at 40% 35%,#ff6b6b,#EF4444,#dc2626);
+  box-shadow:0 0 30px rgba(239,68,68,0.3),inset 0 -4px 8px rgba(0,0,0,0.3),inset 0 2px 4px rgba(255,255,255,0.2);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  cursor:pointer;
+  transition:all 0.15s;
+  border:3px solid rgba(239,68,68,0.4);
+  position:relative;
+}
+.s8-btn:hover{
+  transform:scale(0.97);
+  box-shadow:0 0 40px rgba(239,68,68,0.5),inset 0 -4px 8px rgba(0,0,0,0.3),inset 0 2px 4px rgba(255,255,255,0.2);
+}
+.s8-btn:active{transform:scale(0.9);}
+.s8-btn .icon{font-size:32px;filter:brightness(10);}
+.s8-btn .text{font-size:10px;color:#fff;font-weight:800;text-transform:uppercase;letter-spacing:2px;margin-top:2px;}
+
+.s8-hint{
+  font-size:9px;color:#555;margin-top:12px;
+}
+.s8-confirm{
+  display:none;
+  font-size:12px;
+  color:#EF4444;
+  font-weight:700;
+  animation:flash 0.5s infinite;
+  margin-top:8px;
+}
+@keyframes flash{0%,100%{opacity:1;}50%{opacity:0.3;}}
+
+/* --- NAV DOTS --- */
+.nav-area{
+  display:flex;align-items:center;justify-content:center;
+  gap:12px;
+  margin-top:20px;
+}
+.nav-arrow{
+  width:32px;height:32px;border-radius:50%;
+  background:rgba(0,0,0,0.04);
+  border:1px solid rgba(0,0,0,0.08);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  transition:all 0.15s;
+  font-size:14px;color:#888;
+  user-select:none;
+}
+.nav-arrow:hover{background:rgba(99,102,241,0.08);color:#6366F1;border-color:rgba(99,102,241,0.2);}
+.nav-dots{display:flex;gap:6px;align-items:center;}
+.nav-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:#ccc;
+  transition:all 0.3s;
+  cursor:pointer;
+}
+.nav-dot.active{
+  background:#6366F1;
+  width:20px;
+  border-radius:4px;
+}
+
+/* Screen label */
+.screen-label{
+  text-align:center;
+  margin-top:12px;
+  font-size:13px;
+  font-weight:600;
+  color:#444;
+  transition:opacity 0.3s;
+}
+.screen-sublabel{
+  text-align:center;
+  font-size:11px;
+  color:#999;
+  margin-top:2px;
+}
+
+/* --- COMPLICATIONS SECTION --- */
+.complications-section{
+  max-width:720px;
+  margin:0 auto;
+  padding:24px 24px 60px;
+}
+.complications-title{
+  text-align:center;
+  font-size:12px;
+  font-weight:700;
+  color:#aaa;
+  text-transform:uppercase;
+  letter-spacing:4px;
+  margin-bottom:24px;
+}
+.complications-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px;
+}
+.complication-card{
+  background:#fff;
+  border-radius:16px;
+  padding:20px;
+  text-align:center;
+  box-shadow:0 1px 3px rgba(0,0,0,0.06);
+  border:1px solid rgba(0,0,0,0.04);
+  transition:all 0.2s;
+}
+.complication-card:hover{
+  box-shadow:0 4px 12px rgba(0,0,0,0.08);
+  transform:translateY(-2px);
+}
+.comp-preview{
+  width:80px;height:80px;
+  margin:0 auto 12px;
+  border-radius:50%;
+  background:#111;
+  display:flex;align-items:center;justify-content:center;
+  position:relative;
+  overflow:hidden;
+}
+.comp-preview svg{width:60px;height:60px;}
+.comp-name{font-size:13px;font-weight:600;color:#222;margin-bottom:4px;}
+.comp-desc{font-size:11px;color:#999;line-height:1.4;}
+
+/* Swipe hint */
+.swipe-hint{
+  position:absolute;
+  bottom:40px;
+  left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:4px;
+  font-size:8px;color:rgba(255,255,255,0.2);
+  z-index:3;
+  pointer-events:none;
+  animation:swipe-fade 3s ease infinite;
+}
+@keyframes swipe-fade{
+  0%,100%{opacity:0;transform:translateX(-50%);}
+  20%,80%{opacity:1;transform:translateX(-50%);}
+}
+
+/* Responsive */
+@media(max-width:500px){
+  .watch-assembly{width:280px;height:280px;}
+  .screen{padding:34px 24px 44px;}
+  .complications-grid{grid-template-columns:1fr;max-width:260px;margin:0 auto;}
+  .s5-gauge svg{width:56px;height:56px;}
+  .s5-gauge-label{margin-top:-46px;height:38px;}
+  .s5-gauge-pct{font-size:13px;}
+  .s1-ring-wrap{width:80px;height:80px;}
+  .s6-ring-wrap{width:100px;height:100px;}
+}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Ori:Dev</h1>
+  <h2>Wear OS Companion</h2>
+  <p>Server management from your wrist</p>
+</div>
+
+<div class="watch-section">
+  <div class="watch-assembly" id="watchAssembly">
+    <div class="watch-bezel"></div>
+    <div class="watch-crown" id="crownBtn" title="Press crown to return home"></div>
+    <div class="watch-screen-mask">
+      <div class="watch-display" id="watchDisplay">
+        <div class="screen-container" id="screenContainer">
+
+          <!-- Screen 1: Main Tile -->
+          <div class="screen active" data-screen="0">
+            <div class="s1-logo">O<span>D</span></div>
+            <div class="s1-status"><span class="dot"></span> 3 Connected</div>
+            <div class="s1-ring-wrap">
+              <svg viewBox="0 0 90 90">
+                <circle class="s1-ring-bg" cx="45" cy="45" r="40"/>
+                <circle class="s1-ring-fg" id="mainRing" cx="45" cy="45" r="40"/>
+              </svg>
+              <div class="s1-ring-label">
+                <div class="s1-ring-pct" id="mainPct">0%</div>
+                <div class="s1-ring-sub">Transfer</div>
+              </div>
+            </div>
+            <div class="s1-cmd">$ deploy --prod v2.4.1</div>
+          </div>
+
+          <!-- Screen 2: Connections -->
+          <div class="screen" data-screen="1">
+            <div class="s2-title">Connections</div>
+            <div class="s2-list">
+              <div class="s2-item">
+                <div class="s2-dot on"></div>
+                <div class="s2-name">prod-web-01</div>
+                <div class="s2-ping">12ms</div>
+              </div>
+              <div class="s2-item">
+                <div class="s2-dot on"></div>
+                <div class="s2-name">prod-api-02</div>
+                <div class="s2-ping">18ms</div>
+              </div>
+              <div class="s2-item">
+                <div class="s2-dot warn"></div>
+                <div class="s2-name">staging-db</div>
+                <div class="s2-ping">142ms</div>
+              </div>
+              <div class="s2-item">
+                <div class="s2-dot off"></div>
+                <div class="s2-name">dev-local</div>
+                <div class="s2-ping">--</div>
+              </div>
+            </div>
+            <button class="s2-disconnect" onclick="this.textContent='Disconnecting...';setTimeout(()=>this.textContent='Disconnect All',1200)">Disconnect All</button>
+          </div>
+
+          <!-- Screen 3: Quick Commands -->
+          <div class="screen" data-screen="2">
+            <div class="s3-title">Commands</div>
+            <div class="s3-chips">
+              <span class="s3-chip active">prod-web</span>
+              <span class="s3-chip">prod-api</span>
+              <span class="s3-chip">staging</span>
+            </div>
+            <div class="s3-cmds">
+              <button class="s3-btn"><span class="icon">&#9654;</span>Deploy</button>
+              <button class="s3-btn"><span class="icon">&#8635;</span>Restart</button>
+              <button class="s3-btn"><span class="icon">&#9724;</span>Stop</button>
+              <button class="s3-btn"><span class="icon">&#9881;</span>Status</button>
+            </div>
+          </div>
+
+          <!-- Screen 4: Command Output -->
+          <div class="screen" data-screen="3">
+            <div class="s4-header"><span class="blink"></span> Live Output</div>
+            <div class="s4-terminal" id="termOutput">
+              <div><span class="prompt">$</span> deploy --prod v2.4.1</div>
+              <div class="dim">[14:32:01] Building assets...</div>
+              <div class="dim">[14:32:04] Compiling 847 modules</div>
+              <div class="success">[14:32:12] Build complete (11.2s)</div>
+              <div class="dim">[14:32:13] Uploading to prod-web-01</div>
+              <div class="dim">[14:32:18] Running migrations...</div>
+              <div class="success">[14:32:22] 3 migrations applied</div>
+              <div class="dim">[14:32:23] Restarting services...</div>
+              <div class="success">[14:32:26] Deploy successful</div>
+              <div><span class="prompt">$</span> <span style="animation:blink-cursor 1s step-end infinite;border-right:1px solid #6366F1">&nbsp;</span></div>
+            </div>
+          </div>
+
+          <!-- Screen 5: Server Health -->
+          <div class="screen" data-screen="4">
+            <div class="s5-title">Health</div>
+            <div class="s5-gauges">
+              <div class="s5-gauge">
+                <svg viewBox="0 0 72 72">
+                  <circle class="s5-gauge-bg" cx="36" cy="36" r="30"/>
+                  <circle class="s5-gauge-fg" id="cpuGauge" cx="36" cy="36" r="30" style="stroke:#10B981"/>
+                </svg>
+                <div class="s5-gauge-label">
+                  <div class="s5-gauge-pct" id="cpuPct">0%</div>
+                  <div class="s5-gauge-name">CPU</div>
+                </div>
+              </div>
+              <div class="s5-gauge">
+                <svg viewBox="0 0 72 72">
+                  <circle class="s5-gauge-bg" cx="36" cy="36" r="30"/>
+                  <circle class="s5-gauge-fg" id="ramGauge" cx="36" cy="36" r="30" style="stroke:#F59E0B"/>
+                </svg>
+                <div class="s5-gauge-label">
+                  <div class="s5-gauge-pct" id="ramPct">0%</div>
+                  <div class="s5-gauge-name">RAM</div>
+                </div>
+              </div>
+              <div class="s5-gauge">
+                <svg viewBox="0 0 72 72">
+                  <circle class="s5-gauge-bg" cx="36" cy="36" r="30"/>
+                  <circle class="s5-gauge-fg" id="diskGauge" cx="36" cy="36" r="30" style="stroke:#EF4444"/>
+                </svg>
+                <div class="s5-gauge-label">
+                  <div class="s5-gauge-pct" id="diskPct">0%</div>
+                  <div class="s5-gauge-name">Disk</div>
+                </div>
+              </div>
+            </div>
+            <div class="s5-server-name">prod-web-01</div>
+          </div>
+
+          <!-- Screen 6: Transfer Monitor -->
+          <div class="screen" data-screen="5">
+            <div class="s6-ring-wrap">
+              <svg viewBox="0 0 120 120">
+                <circle class="s6-ring-bg" cx="60" cy="60" r="50"/>
+                <circle class="s6-ring-fg" id="transferRing" cx="60" cy="60" r="50"/>
+              </svg>
+              <div class="s6-ring-label">
+                <div class="s6-pct" id="transferPct">0%</div>
+                <div class="s6-sub">Uploading</div>
+              </div>
+            </div>
+            <div class="s6-info"><span>24.8 MB/s</span> &middot; 1.2 GB / 3.4 GB</div>
+            <div class="s6-actions">
+              <button class="s6-act s6-pause" onclick="this.textContent=this.textContent==='Pause'?'Resume':'Pause'">Pause</button>
+              <button class="s6-act s6-cancel">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Screen 7: Claude Code -->
+          <div class="screen" data-screen="6">
+            <div class="s7-card">
+              <div class="s7-badge"><span class="pulse"></span> Claude Code</div>
+              <div class="s7-msg">Wants to run <b>rm -rf ./dist</b> and rebuild production assets</div>
+              <div class="s7-detail">prod-web-01 &middot; 3s ago</div>
+            </div>
+            <div class="s7-actions">
+              <button class="s7-approve" onclick="this.textContent='Approved';this.style.opacity='0.6'">Approve</button>
+              <button class="s7-reject" onclick="this.textContent='Rejected';this.style.opacity='0.6'">Reject</button>
+            </div>
+          </div>
+
+          <!-- Screen 8: Panic Button -->
+          <div class="screen" data-screen="7">
+            <div class="s8-label">Emergency</div>
+            <div class="s8-btn" id="panicBtn">
+              <span class="icon">&#9888;</span>
+              <span class="text">Kill All</span>
+            </div>
+            <div class="s8-hint" id="panicHint">Double-tap to confirm</div>
+            <div class="s8-confirm" id="panicConfirm">KILLING ALL PROCESSES...</div>
+          </div>
+
+        </div>
+        <div class="swipe-hint" id="swipeHint">&#8592; swipe &#8594;</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <div class="nav-area">
+    <div class="nav-arrow" id="navPrev">&#8249;</div>
+    <div class="nav-dots" id="navDots"></div>
+    <div class="nav-arrow" id="navNext">&#8250;</div>
+  </div>
+
+  <div class="screen-label" id="screenLabel">Main Tile</div>
+  <div class="screen-sublabel" id="screenSublabel">Connection status &amp; active transfer</div>
+</div>
+
+<!-- Complications Preview -->
+<div class="complications-section">
+  <div class="complications-title">Watch Face Complications</div>
+  <div class="complications-grid">
+
+    <div class="complication-card">
+      <div class="comp-preview">
+        <svg viewBox="0 0 60 60">
+          <circle cx="30" cy="30" r="24" fill="none" stroke="#1a1a2e" stroke-width="4"/>
+          <circle cx="30" cy="30" r="24" fill="none" stroke="#10B981" stroke-width="4"
+            stroke-dasharray="150.8" stroke-dashoffset="45" stroke-linecap="round" transform="rotate(-90 30 30)"/>
+          <text x="30" y="33" text-anchor="middle" fill="#fff" font-size="12" font-weight="700" font-family="system-ui">3</text>
+        </svg>
+      </div>
+      <div class="comp-name">Server Count</div>
+      <div class="comp-desc">Shows active connections with color-coded ring (green = all healthy)</div>
+    </div>
+
+    <div class="complication-card">
+      <div class="comp-preview">
+        <svg viewBox="0 0 60 60">
+          <circle cx="30" cy="30" r="24" fill="none" stroke="#1a1a2e" stroke-width="4"/>
+          <circle cx="30" cy="30" r="24" fill="none" stroke="#6366F1" stroke-width="4"
+            stroke-dasharray="150.8" stroke-dashoffset="75" stroke-linecap="round" transform="rotate(-90 30 30)"/>
+          <text x="30" y="28" text-anchor="middle" fill="#6366F1" font-size="8" font-weight="700" font-family="system-ui">50%</text>
+          <text x="30" y="38" text-anchor="middle" fill="#666" font-size="6" font-family="system-ui">1.7GB</text>
+        </svg>
+      </div>
+      <div class="comp-name">Transfer</div>
+      <div class="comp-desc">Active file transfer progress with speed indicator at a glance</div>
+    </div>
+
+    <div class="complication-card">
+      <div class="comp-preview" style="background:linear-gradient(135deg,#111,#1a0a0a);">
+        <svg viewBox="0 0 60 60">
+          <text x="30" y="28" text-anchor="middle" fill="#EF4444" font-size="20">&#9888;</text>
+          <text x="30" y="40" text-anchor="middle" fill="#EF4444" font-size="7" font-weight="700" font-family="system-ui">PANIC</text>
+        </svg>
+      </div>
+      <div class="comp-name">Panic Shortcut</div>
+      <div class="comp-desc">One-tap access to emergency kill-all with double-tap confirmation</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  const screens = document.querySelectorAll('.screen');
+  const totalScreens = screens.length;
+  let current = 0;
+  let panicTaps = 0;
+  let panicTimer = null;
+
+  const labels = [
+    ['Main Tile','Connection status & active transfer'],
+    ['Connections','Server list with live latency'],
+    ['Quick Commands','Run actions on any server'],
+    ['Command Output','Live terminal stream'],
+    ['Server Health','CPU, RAM & Disk at a glance'],
+    ['Transfer Monitor','File upload/download progress'],
+    ['Claude Code','Approve or reject AI actions'],
+    ['Panic Button','Emergency kill-all switch']
+  ];
+
+  // Build nav dots
+  const dotsContainer = document.getElementById('navDots');
+  for(let i=0;i<totalScreens;i++){
+    const d=document.createElement('div');
+    d.className='nav-dot'+(i===0?' active':'');
+    d.onclick=()=>goTo(i);
+    dotsContainer.appendChild(d);
+  }
+
+  function goTo(idx){
+    if(idx<0||idx>=totalScreens||idx===current) return;
+    const dir = idx > current ? 1 : -1;
+    screens[current].classList.remove('active');
+    screens[current].classList.add(dir>0?'exit-left':'');
+    setTimeout(()=>{
+      screens[current].classList.remove('exit-left');
+    },400);
+    current=idx;
+    screens[current].style.transform=dir>0?'translateX(30px)':'translateX(-30px)';
+    screens[current].classList.add('active');
+
+    // Update dots
+    dotsContainer.querySelectorAll('.nav-dot').forEach((d,i)=>{
+      d.classList.toggle('active',i===current);
+    });
+
+    // Update labels
+    document.getElementById('screenLabel').textContent=labels[current][0];
+    document.getElementById('screenSublabel').textContent=labels[current][1];
+
+    // Animate gauges on entry
+    animateScreen(current);
+
+    // Hide swipe hint
+    document.getElementById('swipeHint').style.display='none';
+  }
+
+  document.getElementById('navPrev').onclick=()=>goTo(current-1);
+  document.getElementById('navNext').onclick=()=>goTo(current+1);
+  document.getElementById('crownBtn').onclick=()=>goTo(0);
+
+  // Swipe support
+  let touchStartX=0;
+  const display=document.getElementById('watchDisplay');
+  display.addEventListener('touchstart',e=>{touchStartX=e.touches[0].clientX;},{passive:true});
+  display.addEventListener('touchend',e=>{
+    const diff=e.changedTouches[0].clientX-touchStartX;
+    if(Math.abs(diff)>40){
+      if(diff<0) goTo(current+1);
+      else goTo(current-1);
+    }
+  },{passive:true});
+
+  // Mouse swipe
+  let mouseDown=false,mouseStartX=0;
+  display.addEventListener('mousedown',e=>{mouseDown=true;mouseStartX=e.clientX;});
+  display.addEventListener('mouseup',e=>{
+    if(!mouseDown)return;
+    mouseDown=false;
+    const diff=e.clientX-mouseStartX;
+    if(Math.abs(diff)>40){
+      if(diff<0) goTo(current+1);
+      else goTo(current-1);
+    }
+  });
+
+  // Keyboard nav
+  document.addEventListener('keydown',e=>{
+    if(e.key==='ArrowRight') goTo(current+1);
+    if(e.key==='ArrowLeft') goTo(current-1);
+    if(e.key==='Home') goTo(0);
+  });
+
+  // Chip selection
+  document.querySelectorAll('.s3-chip').forEach(chip=>{
+    chip.onclick=()=>{
+      document.querySelectorAll('.s3-chip').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+    };
+  });
+
+  // Button feedback
+  document.querySelectorAll('.s3-btn').forEach(btn=>{
+    btn.addEventListener('click',function(){
+      this.style.background='rgba(99,102,241,0.25)';
+      setTimeout(()=>{this.style.background='';},300);
+    });
+  });
+
+  // Panic button
+  const panicBtn=document.getElementById('panicBtn');
+  const panicHint=document.getElementById('panicHint');
+  const panicConfirm=document.getElementById('panicConfirm');
+  panicBtn.onclick=()=>{
+    panicTaps++;
+    if(panicTaps===1){
+      panicBtn.style.boxShadow='0 0 50px rgba(239,68,68,0.6),inset 0 -4px 8px rgba(0,0,0,0.3)';
+      panicHint.textContent='TAP AGAIN TO CONFIRM';
+      panicHint.style.color='#EF4444';
+      panicHint.style.fontWeight='700';
+      panicTimer=setTimeout(()=>{
+        panicTaps=0;
+        panicBtn.style.boxShadow='';
+        panicHint.textContent='Double-tap to confirm';
+        panicHint.style.color='#555';
+        panicHint.style.fontWeight='';
+      },2500);
+    } else if(panicTaps>=2){
+      clearTimeout(panicTimer);
+      panicConfirm.style.display='block';
+      panicHint.style.display='none';
+      panicBtn.style.opacity='0.5';
+      panicBtn.style.pointerEvents='none';
+      setTimeout(()=>{
+        panicConfirm.style.display='none';
+        panicHint.style.display='block';
+        panicHint.textContent='Double-tap to confirm';
+        panicHint.style.color='#555';
+        panicHint.style.fontWeight='';
+        panicBtn.style.opacity='1';
+        panicBtn.style.pointerEvents='auto';
+        panicBtn.style.boxShadow='';
+        panicTaps=0;
+      },3000);
+    }
+  };
+
+  // Gauge animation
+  function animateScreen(idx){
+    if(idx===0){
+      // Main ring - 68%
+      const ring=document.getElementById('mainRing');
+      const pct=document.getElementById('mainPct');
+      const circumference=2*Math.PI*40;
+      setTimeout(()=>{
+        ring.style.strokeDashoffset=circumference*(1-0.68);
+        animateCounter(pct,0,68,'%');
+      },200);
+    }
+    if(idx===4){
+      // Health gauges
+      const circumference=2*Math.PI*30;
+      const gauges=[
+        {el:'cpuGauge',pctEl:'cpuPct',val:34,color:'#10B981'},
+        {el:'ramGauge',pctEl:'ramPct',val:67,color:'#F59E0B'},
+        {el:'diskGauge',pctEl:'diskPct',val:89,color:'#EF4444'}
+      ];
+      gauges.forEach((g,i)=>{
+        setTimeout(()=>{
+          document.getElementById(g.el).style.strokeDashoffset=circumference*(1-g.val/100);
+          animateCounter(document.getElementById(g.pctEl),0,g.val,'%');
+        },200+i*150);
+      });
+    }
+    if(idx===5){
+      // Transfer ring - 52%
+      const ring=document.getElementById('transferRing');
+      const pct=document.getElementById('transferPct');
+      const circumference=2*Math.PI*50;
+      setTimeout(()=>{
+        ring.style.strokeDashoffset=circumference*(1-0.52);
+        animateCounter(pct,0,52,'%');
+      },200);
+    }
+  }
+
+  function animateCounter(el,from,to,suffix){
+    const duration=800;
+    const start=performance.now();
+    function tick(now){
+      const elapsed=now-start;
+      const progress=Math.min(elapsed/duration,1);
+      const eased=1-Math.pow(1-progress,3);
+      const val=Math.round(from+(to-from)*eased);
+      el.textContent=val+suffix;
+      if(progress<1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // Initial animation
+  setTimeout(()=>animateScreen(0),600);
+
+  // Terminal auto-scroll
+  const term=document.getElementById('termOutput');
+  if(term) term.scrollTop=term.scrollHeight;
+
+})();
+</script>
+</body>
+</html>

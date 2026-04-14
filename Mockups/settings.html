@@ -1,0 +1,1472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ori:Dev — Settings</title>
+<style>
+  :root {
+    --accent: #6366F1;
+    --accent-light: #EEF2FF;
+    --accent-hover: #4F46E5;
+    --gradient-start: #6366F1;
+    --gradient-end: #8B5CF6;
+    --bg: #FAFAFA;
+    --surface: #FFFFFF;
+    --text-primary: #111827;
+    --text-secondary: #374151;
+    --text-tertiary: #6B7280;
+    --border: #E5E7EB;
+    --border-light: #F3F4F6;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+    --shadow-lg: 0 12px 40px rgba(0,0,0,0.12);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-xs: 6px;
+    --toggle-on: var(--accent);
+    --toggle-off: #D1D5DB;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  /* Header */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .header-back {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-xs);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+  }
+
+  .header-back:hover { background: var(--border-light); }
+
+  .header-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .header-logo {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    letter-spacing: -0.3px;
+  }
+
+  /* Main content */
+  .content {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 24px 16px 120px;
+  }
+
+  /* Section */
+  .section {
+    margin-bottom: 32px;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-tertiary);
+    padding: 0 4px;
+    margin-bottom: 8px;
+  }
+
+  .section-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  /* Row */
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    min-height: 52px;
+    transition: background 0.1s;
+  }
+
+  .row:not(:last-child) {
+    border-bottom: 1px solid var(--border-light);
+  }
+
+  .row-clickable { cursor: pointer; }
+  .row-clickable:hover { background: #F9FAFB; }
+
+  .row-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .row-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-xs);
+    background: var(--accent-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--accent);
+    font-size: 15px;
+  }
+
+  .row-text { min-width: 0; }
+
+  .row-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .row-subtitle {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin-top: 1px;
+  }
+
+  .row-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-left: 12px;
+  }
+
+  .row-value {
+    font-size: 13px;
+    color: var(--text-tertiary);
+    font-weight: 400;
+  }
+
+  .row-chevron {
+    color: #C9CDD3;
+    font-size: 14px;
+  }
+
+  /* Pill / Badge */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+  }
+
+  .pill-accent {
+    background: var(--accent);
+    color: #fff;
+  }
+  .pill-accent:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(99,102,241,0.3);
+  }
+
+  .badge-premium {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-size: 10px;
+    font-weight: 600;
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    color: #fff;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    white-space: nowrap;
+  }
+
+  .badge-premium:hover {
+    transform: scale(1.05);
+  }
+
+  .badge-premium:active {
+    animation: premiumBounce 0.4s ease;
+  }
+
+  @keyframes premiumBounce {
+    0% { transform: scale(1); }
+    30% { transform: scale(1.15); }
+    60% { transform: scale(0.95); }
+    100% { transform: scale(1); }
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--border-light);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent);
+    transition: width 0.4s ease;
+  }
+
+  /* Toggle */
+  .toggle {
+    position: relative;
+    width: 44px;
+    height: 26px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+
+  .toggle-track {
+    position: absolute;
+    inset: 0;
+    background: var(--toggle-off);
+    border-radius: 13px;
+    transition: background 0.25s ease;
+  }
+
+  .toggle-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .toggle input:checked ~ .toggle-track {
+    background: var(--toggle-on);
+  }
+
+  .toggle input:checked ~ .toggle-thumb {
+    transform: translateX(18px);
+  }
+
+  /* Dropdown */
+  .dropdown {
+    position: relative;
+  }
+
+  .dropdown-select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    padding: 6px 28px 6px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--text-secondary);
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236B7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    min-width: 140px;
+  }
+
+  .dropdown-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+  }
+
+  /* Color picker circles */
+  .color-picker {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .color-circle {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .color-circle:hover {
+    transform: scale(1.15);
+  }
+
+  .color-circle.active {
+    border-color: var(--text-primary);
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text-primary);
+    transform: scale(1.1);
+  }
+
+  .color-circle.active::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    background: #fff;
+    border-radius: 50%;
+  }
+
+  /* Font size slider */
+  .font-slider-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .font-slider-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    width: 14px;
+    text-align: center;
+  }
+
+  .font-slider-label.active { color: var(--accent); }
+
+  .font-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+
+  .font-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(99,102,241,0.3);
+    transition: transform 0.15s;
+  }
+
+  .font-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+  }
+
+  .font-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: none;
+  }
+
+  .font-preview {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    min-width: 32px;
+    text-align: center;
+  }
+
+  /* Link rows */
+  .link-row {
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .link-row:hover { text-decoration: underline; }
+
+  /* Overlay */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 100;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .overlay.active {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  /* Premium Modal */
+  .premium-modal {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 101;
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    max-height: 92vh;
+    overflow-y: auto;
+    transform: translateY(100%);
+    transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
+    box-shadow: 0 -4px 40px rgba(0,0,0,0.15);
+  }
+
+  .premium-modal.active {
+    transform: translateY(0);
+  }
+
+  .modal-handle {
+    width: 36px;
+    height: 4px;
+    background: #D1D5DB;
+    border-radius: 2px;
+    margin: 10px auto 0;
+  }
+
+  .modal-header {
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    padding: 32px 24px 28px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .modal-header::before {
+    content: '';
+    position: absolute;
+    top: -40%;
+    right: -20%;
+    width: 200px;
+    height: 200px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 50%;
+  }
+
+  .modal-header::after {
+    content: '';
+    position: absolute;
+    bottom: -30%;
+    left: -10%;
+    width: 160px;
+    height: 160px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 50%;
+  }
+
+  .modal-header-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 12px;
+    font-size: 22px;
+    color: #fff;
+    backdrop-filter: blur(8px);
+  }
+
+  .modal-header h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 6px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .modal-header p {
+    font-size: 14px;
+    color: rgba(255,255,255,0.85);
+    position: relative;
+    z-index: 1;
+  }
+
+  .modal-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.2);
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    transition: background 0.15s;
+  }
+
+  .modal-close:hover { background: rgba(255,255,255,0.3); }
+
+  .modal-body {
+    padding: 24px;
+  }
+
+  /* Feature comparison */
+  .comparison {
+    margin-bottom: 28px;
+  }
+
+  .comparison-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+
+  .comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .comparison-table th {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-tertiary);
+    padding: 8px 0;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .comparison-table th:first-child {
+    text-align: left;
+  }
+
+  .comparison-table td {
+    padding: 10px 0;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border-light);
+    text-align: center;
+  }
+
+  .comparison-table td:first-child {
+    text-align: left;
+    color: var(--text-secondary);
+    font-weight: 450;
+  }
+
+  .check { color: var(--accent); font-size: 16px; font-weight: 600; }
+  .cross { color: #D1D5DB; font-size: 16px; }
+
+  /* Pricing cards */
+  .pricing-cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+
+  .pricing-card {
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    background: var(--surface);
+  }
+
+  .pricing-card:hover {
+    border-color: #C7D2FE;
+    background: #FAFBFF;
+  }
+
+  .pricing-card.selected {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+
+  .pricing-card.highlighted {
+    border-color: var(--accent);
+  }
+
+  .pricing-card-best {
+    position: absolute;
+    top: -9px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 10px;
+    border-radius: 100px;
+    white-space: nowrap;
+  }
+
+  .pricing-card-period {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .pricing-card-price {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .pricing-card-price span {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-tertiary);
+  }
+
+  .pricing-card-save {
+    font-size: 11px;
+    color: var(--accent);
+    font-weight: 600;
+    margin-top: 4px;
+  }
+
+  /* CTA */
+  .cta-button {
+    width: 100%;
+    padding: 14px 24px;
+    border: none;
+    border-radius: var(--radius);
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 14px rgba(99,102,241,0.3);
+  }
+
+  .cta-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(99,102,241,0.4);
+  }
+
+  .cta-button:active {
+    transform: translateY(0);
+  }
+
+  .restore-link {
+    display: block;
+    text-align: center;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    border: none;
+    background: none;
+    font-family: inherit;
+    transition: color 0.15s;
+    width: 100%;
+  }
+
+  .restore-link:hover { color: var(--accent); }
+
+  .fine-print {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-light);
+    font-size: 11px;
+    color: #9CA3AF;
+    line-height: 1.6;
+    text-align: center;
+  }
+
+  /* Scrollbar */
+  .premium-modal::-webkit-scrollbar {
+    width: 4px;
+  }
+  .premium-modal::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .premium-modal::-webkit-scrollbar-thumb {
+    background: #D1D5DB;
+    border-radius: 2px;
+  }
+
+  /* Responsive */
+  @media (max-width: 480px) {
+    .content { padding: 16px 12px 120px; }
+    .pricing-cards { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    .pricing-card { padding: 12px 8px; }
+    .pricing-card-price { font-size: 20px; }
+    .dropdown-select { min-width: 120px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <button class="header-back" onclick="history.back()" aria-label="Go back">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+    <span class="header-title">Settings</span>
+  </div>
+  <span class="header-logo">Ori:Dev</span>
+</div>
+
+<!-- Main Content -->
+<div class="content">
+
+  <!-- ACCOUNT & PREMIUM -->
+  <div class="section">
+    <div class="section-label">Account & Premium</div>
+    <div class="section-card">
+      <div class="row row-clickable" onclick="openPremium()">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">Plan</div>
+            <div class="row-subtitle">Free Tier</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <button class="pill pill-accent" onclick="event.stopPropagation(); openPremium()">Upgrade</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">Profiles</div>
+            <div class="row-subtitle">2 of 2 used</div>
+            <div class="progress-bar"><div class="progress-fill" style="width: 100%"></div></div>
+          </div>
+        </div>
+        <div class="row-right">
+          <span class="row-value">2/2</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPEARANCE -->
+  <div class="section">
+    <div class="section-label">Appearance</div>
+    <div class="section-card">
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">Theme</div>
+            <div class="row-subtitle">Light</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <span class="row-value">Light</span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 0 20"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">Accent Color</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <div class="color-picker">
+            <div class="color-circle active" style="background: #6366F1" data-accent="#6366F1" data-accent-light="#EEF2FF" data-gradient-end="#8B5CF6" onclick="setAccent(this)"></div>
+            <div class="color-circle" style="background: #3B82F6" data-accent="#3B82F6" data-accent-light="#EFF6FF" data-gradient-end="#6366F1" onclick="setAccent(this)"></div>
+            <div class="color-circle" style="background: #10B981" data-accent="#10B981" data-accent-light="#ECFDF5" data-gradient-end="#34D399" onclick="setAccent(this)"></div>
+            <div class="color-circle" style="background: #F43F5E" data-accent="#F43F5E" data-accent-light="#FFF1F2" data-gradient-end="#FB7185" onclick="setAccent(this)"></div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">Font Size</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <div class="font-slider-container">
+            <span class="font-slider-label" id="label-s">S</span>
+            <input type="range" class="font-slider" min="0" max="2" value="1" step="1" id="fontSlider" oninput="updateFontSize(this)">
+            <span class="font-slider-label" id="label-l">L</span>
+            <span class="font-preview" id="fontPreview">14px</span>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon" style="font-family: monospace; font-size: 13px; font-weight: 700;">A</div>
+          <div class="row-text">
+            <div class="row-title">Terminal Font</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <div class="dropdown">
+            <select class="dropdown-select" id="terminalFont" onchange="updateTerminalFont(this)">
+              <option value="JetBrains Mono" selected>JetBrains Mono</option>
+              <option value="Fira Code">Fira Code</option>
+              <option value="Source Code Pro">Source Code Pro</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TERMINAL -->
+  <div class="section">
+    <div class="section-label">Terminal</div>
+    <div class="section-card">
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">Default Shell</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <div class="dropdown">
+            <select class="dropdown-select">
+              <option>bash</option>
+              <option selected>zsh</option>
+              <option>fish</option>
+              <option>sh</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">Scrollback Lines</div>
+            <div class="row-subtitle">Number of lines kept in buffer</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <div class="dropdown">
+            <select class="dropdown-select">
+              <option>1,000</option>
+              <option>5,000</option>
+              <option selected>10,000</option>
+              <option>50,000</option>
+              <option>Unlimited</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">Bell Mode</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <div class="dropdown">
+            <select class="dropdown-select">
+              <option selected>Visual</option>
+              <option>Sound</option>
+              <option>Both</option>
+              <option>None</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-text">
+            <div class="row-title">Hardware Keyboard</div>
+            <div class="row-subtitle">Optimize for external keyboard input</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <label class="toggle">
+            <input type="checkbox" checked>
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-text">
+            <div class="row-title">Keyboard Toolbar</div>
+            <div class="row-subtitle">Show extra keys above keyboard</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <label class="toggle">
+            <input type="checkbox" checked>
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRANSFERS -->
+  <div class="section">
+    <div class="section-label">Transfers</div>
+    <div class="section-card">
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">Max Parallel Transfers</div>
+            <div class="row-subtitle">Currently limited to 2</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <span class="badge-premium" onclick="openPremium()">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+            Unlimited with Premium
+          </span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-text">
+            <div class="row-title">Auto-Resume</div>
+            <div class="row-subtitle">Resume transfers after connection loss</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <label class="toggle">
+            <input type="checkbox" checked>
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">Overwrite Mode</div>
+            <div class="row-subtitle">When destination file exists</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <div class="dropdown">
+            <select class="dropdown-select">
+              <option selected>Ask</option>
+              <option>Always Overwrite</option>
+              <option>Skip</option>
+              <option>Rename</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECURITY -->
+  <div class="section">
+    <div class="section-label">Security</div>
+    <div class="section-card">
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">
+              Biometric Unlock
+              <span class="badge-premium" onclick="event.stopPropagation(); openPremium()">
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+                Premium
+              </span>
+            </div>
+            <div class="row-subtitle">Use fingerprint or face to unlock</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <label class="toggle">
+            <input type="checkbox" disabled>
+            <div class="toggle-track" style="opacity: 0.5"></div>
+            <div class="toggle-thumb" style="opacity: 0.5"></div>
+          </label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">Auto-Lock Timeout</div>
+            <div class="row-subtitle">Lock app after inactivity</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <div class="dropdown">
+            <select class="dropdown-select">
+              <option>Immediately</option>
+              <option>1 minute</option>
+              <option selected>5 minutes</option>
+              <option>15 minutes</option>
+              <option>Never</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">Clipboard Clear Timer</div>
+            <div class="row-subtitle">Auto-clear copied passwords</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <div class="dropdown">
+            <select class="dropdown-select">
+              <option>30 seconds</option>
+              <option selected>1 minute</option>
+              <option>5 minutes</option>
+              <option>Never</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTIFICATIONS -->
+  <div class="section">
+    <div class="section-label">Notifications</div>
+    <div class="section-card">
+      <div class="row">
+        <div class="row-left">
+          <div class="row-text">
+            <div class="row-title">Transfer Completion</div>
+            <div class="row-subtitle">Notify when file transfers finish</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <label class="toggle">
+            <input type="checkbox" checked>
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-text">
+            <div class="row-title">Connection Status</div>
+            <div class="row-subtitle">Alert on disconnect or reconnect</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <label class="toggle">
+            <input type="checkbox" checked>
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-text">
+            <div class="row-title">Claude Code</div>
+            <div class="row-subtitle">AI assistant task notifications</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <label class="toggle">
+            <input type="checkbox">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-left">
+          <div class="row-text">
+            <div class="row-title">Wear OS</div>
+            <div class="row-subtitle">Forward alerts to smartwatch</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <label class="toggle">
+            <input type="checkbox">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ABOUT -->
+  <div class="section">
+    <div class="section-label">About</div>
+    <div class="section-card">
+      <div class="row">
+        <div class="row-left">
+          <div class="row-text">
+            <div class="row-title">Version</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <span class="row-value">1.4.2 (build 142)</span>
+        </div>
+      </div>
+      <div class="row row-clickable">
+        <div class="row-left">
+          <div class="row-text">
+            <div class="row-title">Privacy Policy</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <span class="row-chevron">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </span>
+        </div>
+      </div>
+      <div class="row row-clickable">
+        <div class="row-left">
+          <div class="row-text">
+            <div class="row-title">Terms of Service</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <span class="row-chevron">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </span>
+        </div>
+      </div>
+      <div class="row row-clickable">
+        <div class="row-left">
+          <div class="row-text">
+            <div class="row-title">Open Source Licenses</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <span class="row-chevron">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Overlay -->
+<div class="overlay" id="overlay" onclick="closePremium()"></div>
+
+<!-- Premium Modal -->
+<div class="premium-modal" id="premiumModal">
+  <div class="modal-handle"></div>
+  <div class="modal-header">
+    <button class="modal-close" onclick="closePremium()" aria-label="Close">&times;</button>
+    <div class="modal-header-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/></svg>
+    </div>
+    <h2>Upgrade to Premium</h2>
+    <p>Unlock the full power of Ori:Dev</p>
+  </div>
+  <div class="modal-body">
+
+    <!-- Feature Comparison -->
+    <div class="comparison">
+      <div class="comparison-title">What you get</div>
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Free</th>
+            <th>Premium</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Server Profiles</td>
+            <td><span class="row-value">2</span></td>
+            <td><span class="check">Unlimited</span></td>
+          </tr>
+          <tr>
+            <td>Parallel Transfers</td>
+            <td><span class="row-value">2</span></td>
+            <td><span class="check">Unlimited</span></td>
+          </tr>
+          <tr>
+            <td>Biometric Unlock</td>
+            <td><span class="cross">&times;</span></td>
+            <td><span class="check">&check;</span></td>
+          </tr>
+          <tr>
+            <td>Claude Code Integration</td>
+            <td><span class="row-value">Basic</span></td>
+            <td><span class="check">Full</span></td>
+          </tr>
+          <tr>
+            <td>Wear OS Companion</td>
+            <td><span class="cross">&times;</span></td>
+            <td><span class="check">&check;</span></td>
+          </tr>
+          <tr>
+            <td>Custom Themes</td>
+            <td><span class="cross">&times;</span></td>
+            <td><span class="check">&check;</span></td>
+          </tr>
+          <tr>
+            <td>Priority Support</td>
+            <td><span class="cross">&times;</span></td>
+            <td><span class="check">&check;</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pricing Cards -->
+    <div class="pricing-cards">
+      <div class="pricing-card" onclick="selectPlan(this)">
+        <div class="pricing-card-period">Monthly</div>
+        <div class="pricing-card-price">$6<span>.99</span></div>
+        <div class="pricing-card-save" style="visibility: hidden">-</div>
+      </div>
+      <div class="pricing-card highlighted selected" onclick="selectPlan(this)">
+        <div class="pricing-card-best">Best Value</div>
+        <div class="pricing-card-period">Yearly</div>
+        <div class="pricing-card-price">$69<span>.99</span></div>
+        <div class="pricing-card-save">Save 16%</div>
+      </div>
+      <div class="pricing-card" onclick="selectPlan(this)">
+        <div class="pricing-card-period">Lifetime</div>
+        <div class="pricing-card-price">$139<span>.98</span></div>
+        <div class="pricing-card-save">Pay once</div>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <button class="cta-button" onclick="closePremium()">Start 7-Day Free Trial</button>
+    <button class="restore-link" onclick="closePremium()">Restore Purchase</button>
+
+    <!-- Fine Print -->
+    <div class="fine-print">
+      Payment will be charged to your Google Play account at confirmation of purchase.
+      Subscription automatically renews unless auto-renew is turned off at least 24 hours before
+      the end of the current period. You can manage or cancel your subscription in your
+      Google Play account settings. Free trial available once per account.
+    </div>
+  </div>
+</div>
+
+<script>
+  // Toggle switches
+  document.querySelectorAll('.toggle').forEach(toggle => {
+    toggle.addEventListener('click', function(e) {
+      const input = this.querySelector('input');
+      if (input.disabled) {
+        e.preventDefault();
+        openPremium();
+        return;
+      }
+    });
+  });
+
+  // Accent color
+  function setAccent(el) {
+    document.querySelectorAll('.color-circle').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+
+    const accent = el.dataset.accent;
+    const accentLight = el.dataset.accentLight;
+    const gradientEnd = el.dataset.gradientEnd;
+
+    const root = document.documentElement;
+    root.style.setProperty('--accent', accent);
+    root.style.setProperty('--accent-light', accentLight);
+    root.style.setProperty('--gradient-start', accent);
+    root.style.setProperty('--gradient-end', gradientEnd);
+    root.style.setProperty('--toggle-on', accent);
+
+    // Compute hover color (darken slightly)
+    const r = parseInt(accent.slice(1,3), 16);
+    const g = parseInt(accent.slice(3,5), 16);
+    const b = parseInt(accent.slice(5,7), 16);
+    const darker = '#' + [r,g,b].map(c => Math.max(0, c - 20).toString(16).padStart(2,'0')).join('');
+    root.style.setProperty('--accent-hover', darker);
+  }
+
+  // Font size slider
+  const fontSizes = [12, 14, 16];
+  const fontLabels = ['S', 'M', 'L'];
+
+  function updateFontSize(slider) {
+    const idx = parseInt(slider.value);
+    document.getElementById('fontPreview').textContent = fontSizes[idx] + 'px';
+
+    document.getElementById('label-s').classList.toggle('active', idx === 0);
+    document.getElementById('label-l').classList.toggle('active', idx === 2);
+  }
+
+  // Terminal font
+  function updateTerminalFont(select) {
+    // Preview could update a terminal mockup; for now just stores preference
+  }
+
+  // Premium modal
+  function openPremium() {
+    document.getElementById('overlay').classList.add('active');
+    document.getElementById('premiumModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closePremium() {
+    document.getElementById('overlay').classList.remove('active');
+    document.getElementById('premiumModal').classList.remove('active');
+    document.body.style.overflow = '';
+  }
+
+  // Plan selection
+  function selectPlan(card) {
+    document.querySelectorAll('.pricing-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+  }
+
+  // Premium badge bounce on tap
+  document.querySelectorAll('.badge-premium').forEach(badge => {
+    badge.addEventListener('click', function(e) {
+      e.stopPropagation();
+      this.style.animation = 'none';
+      void this.offsetHeight; // trigger reflow
+      this.style.animation = 'premiumBounce 0.4s ease';
+      setTimeout(() => openPremium(), 200);
+    });
+  });
+
+  // Swipe-down to close modal
+  let touchStartY = 0;
+  const modal = document.getElementById('premiumModal');
+
+  modal.addEventListener('touchstart', function(e) {
+    if (modal.scrollTop <= 0) {
+      touchStartY = e.touches[0].clientY;
+    }
+  }, { passive: true });
+
+  modal.addEventListener('touchmove', function(e) {
+    if (modal.scrollTop <= 0) {
+      const diff = e.touches[0].clientY - touchStartY;
+      if (diff > 80) {
+        closePremium();
+      }
+    }
+  }, { passive: true });
+
+  // Keyboard escape
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closePremium();
+  });
+</script>
+
+</body>
+</html>
