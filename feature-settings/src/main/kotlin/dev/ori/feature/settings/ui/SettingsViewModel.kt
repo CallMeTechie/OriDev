@@ -5,17 +5,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.ori.core.security.preferences.CrashReportingPreferences
+import dev.ori.feature.settings.data.AppPreferences
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
-class SettingsViewModel @Inject constructor(
+public class SettingsViewModel @Inject constructor(
     application: Application,
     private val crashReportingPreferences: CrashReportingPreferences,
+    private val appPreferences: AppPreferences,
 ) : ViewModel() {
 
     private val versionName: String = runCatching {
@@ -26,23 +28,91 @@ class SettingsViewModel @Inject constructor(
             .orEmpty()
     }.getOrDefault("")
 
-    val state: StateFlow<SettingsState> = crashReportingPreferences.enabled
-        .map { enabled ->
-            SettingsState(
-                crashReportingEnabled = enabled,
-                versionName = versionName,
-            )
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(STATE_TIMEOUT_MS),
-            initialValue = SettingsState(versionName = versionName),
+    public val state: StateFlow<SettingsState> = combine(
+        crashReportingPreferences.enabled,
+        appPreferences.all,
+    ) { crashReporting, prefs ->
+        SettingsState(
+            crashReportingEnabled = crashReporting,
+            versionName = versionName,
+            preferences = prefs,
+            premiumStatus = PremiumStatus.Free,
         )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(STATE_TIMEOUT_MS),
+        initialValue = SettingsState(versionName = versionName),
+    )
 
-    fun setCrashReportingEnabled(value: Boolean) {
-        viewModelScope.launch {
-            crashReportingPreferences.setEnabled(value)
-        }
+    public fun setCrashReportingEnabled(value: Boolean) {
+        viewModelScope.launch { crashReportingPreferences.setEnabled(value) }
+    }
+
+    // ---- Appearance --------------------------------------------------------
+    public fun setTheme(value: String) {
+        viewModelScope.launch { appPreferences.setTheme(value) }
+    }
+    public fun setAccent(value: String) {
+        viewModelScope.launch { appPreferences.setAccent(value) }
+    }
+    public fun setFontSize(value: Int) {
+        viewModelScope.launch { appPreferences.setFontSize(value) }
+    }
+    public fun setTerminalFont(value: String) {
+        viewModelScope.launch { appPreferences.setTerminalFont(value) }
+    }
+
+    // ---- Terminal ----------------------------------------------------------
+    public fun setDefaultShell(value: String) {
+        viewModelScope.launch { appPreferences.setDefaultShell(value) }
+    }
+    public fun setScrollback(value: Int) {
+        viewModelScope.launch { appPreferences.setScrollback(value) }
+    }
+    public fun setBellMode(value: String) {
+        viewModelScope.launch { appPreferences.setBellMode(value) }
+    }
+    public fun setHardwareKeyboard(value: Boolean) {
+        viewModelScope.launch { appPreferences.setHardwareKeyboard(value) }
+    }
+    public fun setKeyboardToolbar(value: Boolean) {
+        viewModelScope.launch { appPreferences.setKeyboardToolbar(value) }
+    }
+
+    // ---- Transfers ---------------------------------------------------------
+    public fun setMaxParallelTransfers(value: Int) {
+        viewModelScope.launch { appPreferences.setMaxParallelTransfers(value) }
+    }
+    public fun setAutoResume(value: Boolean) {
+        viewModelScope.launch { appPreferences.setAutoResume(value) }
+    }
+    public fun setOverwriteMode(value: String) {
+        viewModelScope.launch { appPreferences.setOverwriteMode(value) }
+    }
+
+    // ---- Security ----------------------------------------------------------
+    public fun setBiometricUnlock(value: Boolean) {
+        viewModelScope.launch { appPreferences.setBiometricUnlock(value) }
+    }
+    public fun setAutoLockTimeoutMinutes(value: Int) {
+        viewModelScope.launch { appPreferences.setAutoLockTimeoutMinutes(value) }
+    }
+    public fun setClipboardClearSeconds(value: Int) {
+        viewModelScope.launch { appPreferences.setClipboardClearSeconds(value) }
+    }
+
+    // ---- Notifications -----------------------------------------------------
+    public fun setNotifyTransferDone(value: Boolean) {
+        viewModelScope.launch { appPreferences.setNotifyTransferDone(value) }
+    }
+    public fun setNotifyConnection(value: Boolean) {
+        viewModelScope.launch { appPreferences.setNotifyConnection(value) }
+    }
+    public fun setNotifyClaude(value: Boolean) {
+        viewModelScope.launch { appPreferences.setNotifyClaude(value) }
+    }
+    public fun setNotifyWear(value: Boolean) {
+        viewModelScope.launch { appPreferences.setNotifyWear(value) }
     }
 
     private companion object {

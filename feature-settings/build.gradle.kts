@@ -51,6 +51,10 @@ dependencies {
     ksp(libs.hilt.android.compiler)
     implementation(libs.navigation.compose)
     implementation(libs.billing.ktx)
+    // Phase 11 P1.2: AppPreferences DataStore aggregates all 7 settings
+    // sections (Appearance/Terminal/Transfers/Security/Notifications) into
+    // a single backing file ori_settings.preferences_pb.
+    implementation(libs.datastore.preferences)
 
     testImplementation(libs.junit5.api)
     testRuntimeOnly(libs.junit5.engine)

@@ -3,39 +3,52 @@ package dev.ori.feature.settings.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.ori.core.ui.components.OriCard
-import dev.ori.core.ui.components.OriSectionLabel
-import dev.ori.core.ui.components.OriToggle
 import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.components.OriTopBarDefaults
+import dev.ori.feature.settings.sections.AboutSection
+import dev.ori.feature.settings.sections.AccountPremiumSection
+import dev.ori.feature.settings.sections.AppearanceSection
+import dev.ori.feature.settings.sections.NotificationsSection
+import dev.ori.feature.settings.sections.SecuritySection
+import dev.ori.feature.settings.sections.TerminalSection
+import dev.ori.feature.settings.sections.TransfersSection
 
+/**
+ * Settings entry composable — Phase 11 P1.2 expansion to 7 sections.
+ *
+ * **Sections** (top → bottom, per `settings.html` mockup order):
+ * 1. Konto & Premium
+ * 2. Darstellung (Light-only — kein Dark-Mode per `feedback_design_light`)
+ * 3. Terminal
+ * 4. Übertragungen
+ * 5. Sicherheit
+ * 6. Benachrichtigungen
+ * 7. Über die App (inkl. Crash-Reporting + Lizenzen-Placeholder)
+ *
+ * **Layout:** `LazyColumn`-style scrolling `Column` with 16 dp content padding
+ * and 24 dp gap between sections. Content is centered with `widthIn(max = 720.dp)`
+ * so on the unfolded Pixel Fold inner display the settings don't stretch
+ * to fill the whole 2208 dp width — they sit in a comfortable column.
+ */
 @Composable
-fun SettingsScreen(
+public fun SettingsScreen(
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -43,6 +56,14 @@ fun SettingsScreen(
     SettingsContent(
         state = state,
         onCrashReportingChanged = viewModel::setCrashReportingEnabled,
+        onHardwareKeyboardChanged = viewModel::setHardwareKeyboard,
+        onKeyboardToolbarChanged = viewModel::setKeyboardToolbar,
+        onAutoResumeChanged = viewModel::setAutoResume,
+        onBiometricUnlockChanged = viewModel::setBiometricUnlock,
+        onTransferDoneNotificationChanged = viewModel::setNotifyTransferDone,
+        onConnectionNotificationChanged = viewModel::setNotifyConnection,
+        onClaudeNotificationChanged = viewModel::setNotifyClaude,
+        onWearNotificationChanged = viewModel::setNotifyWear,
         modifier = modifier,
     )
 }
@@ -51,13 +72,19 @@ fun SettingsScreen(
 internal fun SettingsContent(
     state: SettingsState,
     onCrashReportingChanged: (Boolean) -> Unit,
+    onHardwareKeyboardChanged: (Boolean) -> Unit = {},
+    onKeyboardToolbarChanged: (Boolean) -> Unit = {},
+    onAutoResumeChanged: (Boolean) -> Unit = {},
+    onBiometricUnlockChanged: (Boolean) -> Unit = {},
+    onTransferDoneNotificationChanged: (Boolean) -> Unit = {},
+    onConnectionNotificationChanged: (Boolean) -> Unit = {},
+    onClaudeNotificationChanged: (Boolean) -> Unit = {},
+    onWearNotificationChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            // Phase 11 PR 4a — replaces Material 3 TopAppBar (64 dp default,
-            // way too tall for the mockup) with the 56 dp OriTopBar.
             OriTopBar(
                 title = "Einstellungen",
                 height = OriTopBarDefaults.Height,
@@ -67,120 +94,58 @@ internal fun SettingsContent(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .testTag("settings_content")
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(innerPadding),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            PrivacySection(
-                crashReportingEnabled = state.crashReportingEnabled,
-                onCrashReportingChanged = onCrashReportingChanged,
-            )
-            HorizontalDivider()
-            InfoSection(versionName = state.versionName)
-        }
-    }
-}
-
-@Composable
-private fun PrivacySection(
-    crashReportingEnabled: Boolean,
-    onCrashReportingChanged: (Boolean) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OriSectionLabel(
-            text = "Datenschutz",
-            modifier = Modifier.semantics {
-                contentDescription = "Abschnitt Datenschutz"
-                heading()
-            },
-        )
-        OriCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .semantics {
-                    contentDescription =
-                        "Anonyme Absturzberichte senden, ${if (crashReportingEnabled) "aktiviert" else "deaktiviert"}"
-                    role = Role.Switch
-                },
-        ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .widthIn(max = MAX_CONTENT_WIDTH)
+                    .testTag("settings_content")
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = "Anonyme Absturzberichte senden",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        text = "Hilft uns, Bugs zu finden. Keine persönlichen Daten. " +
-                            "Wirkt nach dem nächsten Absturz.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                OriToggle(
-                    checked = crashReportingEnabled,
-                    onCheckedChange = onCrashReportingChanged,
-                    modifier = Modifier.semantics {
-                        contentDescription = "Schalter Anonyme Absturzberichte"
-                    },
+                AccountPremiumSection()
+                AppearanceSection(prefs = state.preferences)
+                TerminalSection(
+                    prefs = state.preferences,
+                    onHardwareKeyboardChanged = onHardwareKeyboardChanged,
+                    onKeyboardToolbarChanged = onKeyboardToolbarChanged,
+                )
+                TransfersSection(
+                    prefs = state.preferences,
+                    onAutoResumeChanged = onAutoResumeChanged,
+                )
+                SecuritySection(
+                    prefs = state.preferences,
+                    onBiometricUnlockChanged = onBiometricUnlockChanged,
+                )
+                NotificationsSection(
+                    prefs = state.preferences,
+                    onTransferDoneChanged = onTransferDoneNotificationChanged,
+                    onConnectionChanged = onConnectionNotificationChanged,
+                    onClaudeChanged = onClaudeNotificationChanged,
+                    onWearChanged = onWearNotificationChanged,
+                )
+                AboutSection(
+                    versionName = state.versionName,
+                    crashReportingEnabled = state.crashReportingEnabled,
+                    onCrashReportingChanged = onCrashReportingChanged,
                 )
             }
         }
     }
 }
 
-@Composable
-private fun InfoSection(versionName: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OriSectionLabel(
-            text = "Info",
-            modifier = Modifier.semantics {
-                contentDescription = "Abschnitt Info"
-                heading()
-            },
-        )
-        OriCard(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp)
-                    .semantics {
-                        contentDescription = "App-Version $versionName"
-                    },
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = "Version",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    text = versionName.ifEmpty { "—" },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
+private val MAX_CONTENT_WIDTH = 720.dp
 
 @Preview(showBackground = true)
 @Composable
 private fun SettingsContentPreview() {
     Surface {
         SettingsContent(
-            state = SettingsState(
-                crashReportingEnabled = false,
-                versionName = "0.1.0",
-            ),
+            state = SettingsState(versionName = "0.7.0"),
             onCrashReportingChanged = {},
             modifier = Modifier.padding(PaddingValues(0.dp)),
         )
