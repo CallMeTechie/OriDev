@@ -48,6 +48,7 @@ import dev.ori.core.ui.component.StatusDot
 import dev.ori.core.ui.components.OriCard
 import dev.ori.core.ui.components.OriFab
 import dev.ori.core.ui.components.OriIconButton
+import dev.ori.core.ui.components.OriServiceIndicator
 import dev.ori.core.ui.components.OriStatusBadge
 import dev.ori.core.ui.components.OriStatusBadgeIntent
 import dev.ori.core.ui.components.OriTopBar
@@ -71,6 +72,12 @@ fun ConnectionListScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    // Phase 11 carry-over #E — number of currently-connected sessions shown
+    // as a pulsing pill in OriTopBar's indicator slot (e.g. "2 aktiv").
+    val activeCount = uiState.activeConnections.count {
+        it.status == ConnectionStatus.CONNECTED
+    }
 
     // Bottom sheet state
     var selectedProfile by remember { mutableStateOf<ServerProfile?>(null) }
@@ -128,6 +135,11 @@ fun ConnectionListScreen(
             OriTopBar(
                 title = "Connections",
                 height = 60.dp,
+                indicator = if (activeCount > 0) {
+                    { OriServiceIndicator(count = activeCount, label = "aktiv") }
+                } else {
+                    null
+                },
                 actions = {
                     OriIconButton(
                         icon = LucideIcons.Server,

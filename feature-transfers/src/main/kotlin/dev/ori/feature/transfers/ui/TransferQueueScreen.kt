@@ -23,8 +23,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.ori.core.common.model.TransferStatus
 import dev.ori.core.ui.components.OriEmptyState
 import dev.ori.core.ui.components.OriSegmentedControl
+import dev.ori.core.ui.components.OriServiceIndicator
 import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.icons.lucide.ArrowLeftRight
 import dev.ori.core.ui.icons.lucide.LucideIcons
@@ -36,6 +38,10 @@ fun TransferQueueScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Phase 11 carry-over #E — count of transfers currently in-flight so the
+    // top bar can surface live service activity via OriServiceIndicator.
+    val activeCount = uiState.transfers.count { it.status == TransferStatus.ACTIVE }
 
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
@@ -49,6 +55,11 @@ fun TransferQueueScreen(
             OriTopBar(
                 title = "Transfers",
                 height = 60.dp,
+                indicator = if (activeCount > 0) {
+                    { OriServiceIndicator(count = activeCount, label = "Transfers") }
+                } else {
+                    null
+                },
                 actions = {
                     TextButton(onClick = { viewModel.onEvent(TransferEvent.ClearCompleted) }) {
                         Text("Clear", color = Indigo500)

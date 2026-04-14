@@ -32,6 +32,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.ori.core.ui.components.OriServiceIndicator
 import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.icons.lucide.LucideIcons
 import dev.ori.core.ui.icons.lucide.Trash2
@@ -97,11 +98,25 @@ fun FileManagerScreen(
         }
     }
 
+    // Phase 11 carry-over #E — total files selected across both panes is the
+    // best signal of "service activity" until the transfer engine exposes a
+    // real in-flight count for this screen.
+    val activeCount = uiState.leftPane.selectedFiles.size +
+        uiState.rightPane.selectedFiles.size
+
     Scaffold(
         topBar = {
             // Phase 11 P2.5 — replaces deprecated OriDevTopBar with 60 dp
             // OriTopBar per file-manager.html mockup spec.
-            OriTopBar(title = "File Manager", height = 60.dp)
+            OriTopBar(
+                title = "File Manager",
+                height = 60.dp,
+                indicator = if (activeCount > 0) {
+                    { OriServiceIndicator(count = activeCount, label = "ausgewählt") }
+                } else {
+                    null
+                },
+            )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
