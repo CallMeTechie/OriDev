@@ -9,14 +9,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import dev.ori.core.ui.theme.GreenText
+import dev.ori.core.ui.theme.YellowText
 
 /**
  * Bottom status bar used as a fallback for the git diff gutter.
  *
  * See `docs/superpowers/specs/2026-04-11-sora-gutter-spike.md` for why the
  * gutter was rejected in favor of this summary.
+ *
+ * Phase 11 P2.2-polish — replaced hardcoded hex colours (#047857 / #B45309)
+ * with [GreenText] and [YellowText] theme tokens so the status bar matches
+ * the mockup palette and reacts to future theme changes.
  */
 @Composable
 fun GitDiffStatusBar(
@@ -34,14 +39,14 @@ fun GitDiffStatusBar(
         if (summary.added > 0) {
             Text(
                 text = "+${summary.added} added",
-                color = Color(0xFF047857),
+                color = GreenText,
                 style = MaterialTheme.typography.labelSmall,
             )
         }
         if (summary.modified > 0) {
             Text(
                 text = "~${summary.modified} modified",
-                color = Color(0xFFB45309),
+                color = YellowText,
                 style = MaterialTheme.typography.labelSmall,
             )
         }
