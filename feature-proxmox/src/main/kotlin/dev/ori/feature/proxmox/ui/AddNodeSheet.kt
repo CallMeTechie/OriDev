@@ -6,9 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,6 +27,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.ori.core.common.extension.isValidHost
+import dev.ori.core.ui.icons.lucide.Eye
+import dev.ori.core.ui.icons.lucide.EyeOff
+import dev.ori.core.ui.icons.lucide.LucideIcons
 
 private const val DEFAULT_PORT = "8006"
 
@@ -126,9 +126,9 @@ fun AddNodeSheet(
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
                     Icon(
                         imageVector = if (passwordVisible) {
-                            Icons.Filled.VisibilityOff
+                            LucideIcons.EyeOff
                         } else {
-                            Icons.Filled.Visibility
+                            LucideIcons.Eye
                         },
                         contentDescription = if (passwordVisible) {
                             "Hide secret"
