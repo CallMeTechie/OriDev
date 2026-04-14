@@ -89,6 +89,12 @@ public class SettingsViewModel @Inject constructor(
     public fun setOverwriteMode(value: String) {
         viewModelScope.launch { appPreferences.setOverwriteMode(value) }
     }
+    public fun setMaxRetryAttempts(value: Int) {
+        viewModelScope.launch { appPreferences.setMaxRetryAttempts(value) }
+    }
+    public fun setRetryBackoffSeconds(value: Int) {
+        viewModelScope.launch { appPreferences.setRetryBackoffSeconds(value) }
+    }
 
     // ---- Security ----------------------------------------------------------
     public fun setBiometricUnlock(value: Boolean) {

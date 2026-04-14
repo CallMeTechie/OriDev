@@ -59,6 +59,8 @@ public fun SettingsScreen(
         onHardwareKeyboardChanged = viewModel::setHardwareKeyboard,
         onKeyboardToolbarChanged = viewModel::setKeyboardToolbar,
         onAutoResumeChanged = viewModel::setAutoResume,
+        onMaxRetryAttemptsChanged = viewModel::setMaxRetryAttempts,
+        onRetryBackoffSecondsChanged = viewModel::setRetryBackoffSeconds,
         onBiometricUnlockChanged = viewModel::setBiometricUnlock,
         onTransferDoneNotificationChanged = viewModel::setNotifyTransferDone,
         onConnectionNotificationChanged = viewModel::setNotifyConnection,
@@ -75,6 +77,8 @@ internal fun SettingsContent(
     onHardwareKeyboardChanged: (Boolean) -> Unit = {},
     onKeyboardToolbarChanged: (Boolean) -> Unit = {},
     onAutoResumeChanged: (Boolean) -> Unit = {},
+    onMaxRetryAttemptsChanged: (Int) -> Unit = {},
+    onRetryBackoffSecondsChanged: (Int) -> Unit = {},
     onBiometricUnlockChanged: (Boolean) -> Unit = {},
     onTransferDoneNotificationChanged: (Boolean) -> Unit = {},
     onConnectionNotificationChanged: (Boolean) -> Unit = {},
@@ -116,6 +120,8 @@ internal fun SettingsContent(
                 TransfersSection(
                     prefs = state.preferences,
                     onAutoResumeChanged = onAutoResumeChanged,
+                    onMaxRetryAttemptsChanged = onMaxRetryAttemptsChanged,
+                    onRetryBackoffSecondsChanged = onRetryBackoffSecondsChanged,
                 )
                 SecuritySection(
                     prefs = state.preferences,

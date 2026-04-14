@@ -1,12 +1,21 @@
 package dev.ori.feature.settings.sections
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import dev.ori.core.ui.components.OriIconButton
 import dev.ori.core.ui.components.OriToggle
 import dev.ori.core.ui.icons.lucide.ArrowLeftRight
 import dev.ori.core.ui.icons.lucide.Clock
 import dev.ori.core.ui.icons.lucide.Download
 import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.Minus
+import dev.ori.core.ui.icons.lucide.Plus
 import dev.ori.core.ui.icons.lucide.RotateCcw
 import dev.ori.core.ui.theme.Gray500
 import dev.ori.feature.settings.components.PremiumBadge
@@ -18,6 +27,8 @@ import dev.ori.feature.settings.data.AppPreferencesSnapshot
 internal fun TransfersSection(
     prefs: AppPreferencesSnapshot,
     onAutoResumeChanged: (Boolean) -> Unit,
+    onMaxRetryAttemptsChanged: (Int) -> Unit,
+    onRetryBackoffSecondsChanged: (Int) -> Unit,
 ) {
     SettingsCard(sectionLabel = "Übertragungen") {
         SettingsRow(
@@ -45,19 +56,65 @@ internal fun TransfersSection(
             subtitle = "Verhalten bei Datei-Konflikt",
             trailing = { Text(text = prefs.overwriteMode, color = Gray500) },
         )
-        // Phase 11 P4.6 — retry policy rows. Display-only for now; in-place
-        // editing (slider / stepper) ships with a future settings iteration.
+        // Phase 11 carry-over F — editable retry policy steppers.
         SettingsRow(
             icon = LucideIcons.RotateCcw,
             title = "Max. Wiederholungen",
             subtitle = "Anzahl automatischer Retries pro fehlgeschlagenem Transfer",
-            trailing = { Text(text = prefs.maxRetryAttempts.toString(), color = Gray500) },
+            trailing = {
+                Stepper(
+                    value = prefs.maxRetryAttempts,
+                    range = MAX_RETRY_ATTEMPTS_RANGE,
+                    onChange = onMaxRetryAttemptsChanged,
+                )
+            },
         )
         SettingsRow(
             icon = LucideIcons.Clock,
             title = "Retry-Verzögerung",
             subtitle = "Initialer Abstand (Exponential Backoff)",
-            trailing = { Text(text = "${prefs.retryBackoffSeconds}s", color = Gray500) },
+            trailing = {
+                Stepper(
+                    value = prefs.retryBackoffSeconds,
+                    range = RETRY_BACKOFF_RANGE,
+                    suffix = "s",
+                    onChange = onRetryBackoffSecondsChanged,
+                )
+            },
         )
     }
 }
+
+@Composable
+private fun Stepper(
+    value: Int,
+    range: IntRange,
+    onChange: (Int) -> Unit,
+    suffix: String = "",
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.End,
+    ) {
+        OriIconButton(
+            icon = LucideIcons.Minus,
+            contentDescription = "Verringern",
+            enabled = value > range.first,
+            onClick = { onChange(value - 1) },
+        )
+        Text(
+            text = "$value$suffix",
+            color = Gray500,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+        OriIconButton(
+            icon = LucideIcons.Plus,
+            contentDescription = "Erhöhen",
+            enabled = value < range.last,
+            onClick = { onChange(value + 1) },
+        )
+    }
+}
+
+private val MAX_RETRY_ATTEMPTS_RANGE = 0..10
+private val RETRY_BACKOFF_RANGE = 1..120
