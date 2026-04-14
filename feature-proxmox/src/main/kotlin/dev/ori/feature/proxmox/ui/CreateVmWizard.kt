@@ -15,9 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -39,7 +36,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.ori.core.ui.component.OriDevTopBar
+import dev.ori.core.ui.components.OriIconButton
+import dev.ori.core.ui.components.OriTopBar
+import dev.ori.core.ui.icons.lucide.Check
+import dev.ori.core.ui.icons.lucide.ChevronLeft
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.TriangleAlert
 import dev.ori.domain.model.ProxmoxVm
 
 private const val TOTAL_STEPS = 4
@@ -57,7 +59,16 @@ fun CreateVmWizard(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
-            OriDevTopBar(title = stepTitle(state.step))
+            OriTopBar(
+                title = stepTitle(state.step),
+                navigationIcon = {
+                    OriIconButton(
+                        icon = LucideIcons.ChevronLeft,
+                        contentDescription = "Zurück",
+                        onClick = onBack,
+                    )
+                },
+            )
         },
     ) { padding ->
         Column(
@@ -345,7 +356,7 @@ private fun DoneStep(
         ) {
             if (state.warningMessage != null) {
                 Icon(
-                    imageVector = Icons.Filled.Warning,
+                    imageVector = LucideIcons.TriangleAlert,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.error,
                 )
@@ -357,7 +368,7 @@ private fun DoneStep(
                 Button(onClick = onBack) { Text("View VM") }
             } else {
                 Icon(
-                    imageVector = Icons.Filled.CheckCircle,
+                    imageVector = LucideIcons.Check,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                 )
