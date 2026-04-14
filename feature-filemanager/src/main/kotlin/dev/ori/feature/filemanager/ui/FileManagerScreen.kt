@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.icons.lucide.LucideIcons
 import dev.ori.core.ui.icons.lucide.Trash2
+import dev.ori.domain.model.FileItem
 
 @Composable
 @Suppress("UnusedParameter")
@@ -50,6 +51,19 @@ fun FileManagerScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
     var deletePane by remember { mutableStateOf(ActivePane.LEFT) }
+
+    // Phase 11 P4.1 — dialog state for Rename / Chmod / Mkdir. Each var
+    // carries the target pane alongside the target file (or null for mkdir,
+    // which targets the pane's current directory).
+    var renameTarget by remember {
+        mutableStateOf<Pair<ActivePane, FileItem>?>(null)
+    }
+    var chmodTarget by remember {
+        mutableStateOf<Pair<ActivePane, FileItem>?>(null)
+    }
+    var mkdirTarget by remember {
+        mutableStateOf<ActivePane?>(null)
+    }
 
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
@@ -152,11 +166,17 @@ fun FileManagerScreen(
             }
 
             // Content area
+            val dialogCallbacks = FileOpCallbacks(
+                onShowRename = { pane, file -> renameTarget = pane to file },
+                onShowChmod = { pane, file -> chmodTarget = pane to file },
+                onShowMkdir = { pane -> mkdirTarget = pane },
+            )
             if (isFolded) {
                 // Single pane with tab switching
                 FoldedContent(
                     uiState = uiState,
                     onEvent = viewModel::onEvent,
+                    dialogCallbacks = dialogCallbacks,
                 )
             } else {
                 // Dual pane layout
@@ -164,6 +184,7 @@ fun FileManagerScreen(
                     uiState = uiState,
                     onEvent = viewModel::onEvent,
                     viewModel = viewModel,
+                    dialogCallbacks = dialogCallbacks,
                 )
             }
         }
@@ -204,6 +225,39 @@ fun FileManagerScreen(
         )
     }
 
+    // Phase 11 P4.1 — Rename / Chmod / Mkdir dialogs backed by dialog state.
+    renameTarget?.let { (pane, file) ->
+        RenameDialog(
+            file = file,
+            onConfirm = { newPath ->
+                viewModel.onEvent(FileManagerEvent.RenameFile(pane, file.path, newPath))
+                renameTarget = null
+            },
+            onDismiss = { renameTarget = null },
+        )
+    }
+    chmodTarget?.let { (pane, file) ->
+        ChmodDialog(
+            file = file,
+            onConfirm = { perms ->
+                viewModel.onEvent(FileManagerEvent.Chmod(pane, file.path, perms))
+                chmodTarget = null
+            },
+            onDismiss = { chmodTarget = null },
+        )
+    }
+    mkdirTarget?.let { pane ->
+        val paneState = if (pane == ActivePane.LEFT) uiState.leftPane else uiState.rightPane
+        MkdirDialog(
+            parentPath = paneState.currentPath,
+            onConfirm = { newPath ->
+                viewModel.onEvent(FileManagerEvent.CreateDirectory(pane, newPath))
+                mkdirTarget = null
+            },
+            onDismiss = { mkdirTarget = null },
+        )
+    }
+
     // File preview bottom sheet
     uiState.previewFile?.let { file ->
         FilePreviewSheet(
@@ -221,10 +275,21 @@ fun FileManagerScreen(
     }
 }
 
+/**
+ * Phase 11 P4.1 — bundle of "open this dialog" callbacks so we can pass
+ * one parameter through the content tree instead of three.
+ */
+private class FileOpCallbacks(
+    val onShowRename: (ActivePane, FileItem) -> Unit,
+    val onShowChmod: (ActivePane, FileItem) -> Unit,
+    val onShowMkdir: (ActivePane) -> Unit,
+)
+
 @Composable
 private fun FoldedContent(
     uiState: FileManagerUiState,
     onEvent: (FileManagerEvent) -> Unit,
+    dialogCallbacks: FileOpCallbacks,
 ) {
     val selectedTabIndex = if (uiState.activePane == ActivePane.LEFT) 0 else 1
 
@@ -252,6 +317,7 @@ private fun FoldedContent(
         paneState = paneState,
         pane = pane,
         onEvent = onEvent,
+        dialogCallbacks = dialogCallbacks,
     )
 }
 
@@ -260,6 +326,7 @@ private fun UnfoldedContent(
     uiState: FileManagerUiState,
     onEvent: (FileManagerEvent) -> Unit,
     viewModel: FileManagerViewModel,
+    dialogCallbacks: FileOpCallbacks,
 ) {
     DualPaneLayout(
         splitRatio = uiState.splitRatio,
@@ -271,6 +338,7 @@ private fun UnfoldedContent(
                 pane = ActivePane.LEFT,
                 onEvent = onEvent,
                 viewModel = viewModel,
+                dialogCallbacks = dialogCallbacks,
             )
         },
         rightPane = {
@@ -279,6 +347,7 @@ private fun UnfoldedContent(
                 pane = ActivePane.RIGHT,
                 onEvent = onEvent,
                 viewModel = viewModel,
+                dialogCallbacks = dialogCallbacks,
             )
         },
     )
@@ -289,6 +358,7 @@ private fun PaneContent(
     paneState: PaneState,
     pane: ActivePane,
     onEvent: (FileManagerEvent) -> Unit,
+    dialogCallbacks: FileOpCallbacks,
     viewModel: FileManagerViewModel? = null,
 ) {
     FileListPane(
@@ -300,18 +370,16 @@ private fun PaneContent(
         onSelectAll = { onEvent(FileManagerEvent.SelectAllFiles(pane)) },
         onSetViewMode = { mode -> onEvent(FileManagerEvent.SetViewMode(pane, mode)) },
         onRefresh = { onEvent(FileManagerEvent.RefreshPane(pane)) },
-        onCreateDirectory = {
-            /* Create directory dialog -- handled by parent in future iteration */
-        },
+        onCreateDirectory = { dialogCallbacks.onShowMkdir(pane) },
         onShowFileInfo = { file -> onEvent(FileManagerEvent.ShowFileInfo(file)) },
         onShowFilePreview = { file -> onEvent(FileManagerEvent.ShowFilePreview(pane, file)) },
         onShowContextMenu = { file -> onEvent(FileManagerEvent.ShowContextMenu(file)) },
-        onRename = { /* Rename dialog -- handled by parent in future iteration */ },
+        onRename = { file -> dialogCallbacks.onShowRename(pane, file) },
         onDelete = { file ->
             onEvent(FileManagerEvent.ToggleFileSelection(pane, file.path))
             onEvent(FileManagerEvent.DeleteSelected(pane))
         },
-        onChmod = { /* Chmod dialog -- handled by parent in future iteration */ },
+        onChmod = { file -> dialogCallbacks.onShowChmod(pane, file) },
         onDragStart = { filePath ->
             val selectedPaths = paneState.selectedFiles.toList().ifEmpty { listOf(filePath) }
             viewModel?.setDragState(
