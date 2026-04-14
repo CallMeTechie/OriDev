@@ -34,7 +34,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,11 +46,12 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.ori.core.ui.components.OriTopBar
+import dev.ori.core.ui.components.OriTopBarDefaults
+import dev.ori.core.ui.theme.OriTypography
 import dev.ori.core.ui.theme.TerminalBackground
 import dev.ori.core.ui.theme.TerminalText
 import org.connectbot.terminal.Terminal
@@ -92,8 +92,11 @@ fun TerminalScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Terminal") },
+            // Phase 11 P2.1 — replaces M3 TopAppBar (64 dp default) with the
+            // 44 dp HeightCompact OriTopBar per terminal.html mockup spec.
+            OriTopBar(
+                title = "Terminal",
+                height = OriTopBarDefaults.HeightCompact,
                 actions = {
                     TerminalTopBarActions(
                         uiState = uiState,
@@ -401,9 +404,10 @@ private fun TerminalTopBarActions(
 }
 
 @Composable
+@Suppress("UnusedParameter")
 private fun TerminalContentArea(
     emulator: TerminalEmulator?,
-    fontSize: Float,
+    fontSize: Float, // P2.1: now unused — placeholder text uses OriTypography.terminalBody
     modifier: Modifier = Modifier,
 ) {
     if (emulator != null) {
@@ -426,10 +430,13 @@ private fun TerminalContentArea(
                 .padding(8.dp),
         ) {
             Text(
+                // Phase 11 P2.1 — JetBrains Mono via OriTypography.terminalBody
+                // (was generic FontFamily.Monospace which fell back to system
+                // monospace on Android — typically a less legible font).
                 text = "No active session. Tap + to open a new terminal tab.",
-                fontFamily = FontFamily.Monospace,
-                fontSize = fontSize.sp,
-                color = TerminalText.copy(alpha = 0.5f),
+                style = OriTypography.terminalBody.copy(
+                    color = TerminalText.copy(alpha = 0.5f),
+                ),
             )
         }
     }
