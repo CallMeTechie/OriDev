@@ -12,13 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ViewList
-import androidx.compose.material.icons.filled.ViewColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -34,7 +29,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.ori.core.ui.component.OriDevTopBar
+import dev.ori.core.ui.components.OriIconButton
+import dev.ori.core.ui.components.OriTopBar
+import dev.ori.core.ui.components.OriTopBarDefaults
+import dev.ori.core.ui.icons.lucide.ChevronLeft
+import dev.ori.core.ui.icons.lucide.Grid2x2
+import dev.ori.core.ui.icons.lucide.List
+import dev.ori.core.ui.icons.lucide.LucideIcons
 
 private val AddedBackground = Color(0xFFD1FAE5)
 private val RemovedBackground = Color(0xFFFEE2E2)
@@ -54,32 +55,42 @@ fun DiffViewerScreen(
 
     Scaffold(
         topBar = {
-            OriDevTopBar(
+            // Phase 11 carry-over D — replaces deprecated OriDevTopBar with the
+            // 40 dp HeightDense OriTopBar primitive, matching CodeEditorScreen.
+            // Material ViewColumn/ViewList icons are swapped for Lucide
+            // Grid2x2/List per the Phase 11 forbidden-imports policy.
+            OriTopBar(
                 title = title,
-                onNavigateBack = onNavigateBack,
+                height = OriTopBarDefaults.HeightDense,
+                navigationIcon = if (onNavigateBack != null) {
+                    {
+                        OriIconButton(
+                            icon = LucideIcons.ChevronLeft,
+                            contentDescription = "Zurück",
+                            onClick = onNavigateBack,
+                        )
+                    }
+                } else {
+                    null
+                },
                 actions = {
-                    IconButton(
+                    val isUnified = uiState.viewMode == DiffViewMode.UNIFIED
+                    OriIconButton(
+                        icon = if (isUnified) LucideIcons.Grid2x2 else LucideIcons.List,
+                        contentDescription = if (isUnified) {
+                            "Zu Seite-an-Seite-Ansicht wechseln"
+                        } else {
+                            "Zu einheitlicher Ansicht wechseln"
+                        },
                         onClick = {
-                            val next = if (uiState.viewMode == DiffViewMode.UNIFIED) {
+                            val next = if (isUnified) {
                                 DiffViewMode.SIDE_BY_SIDE
                             } else {
                                 DiffViewMode.UNIFIED
                             }
                             viewModel.onEvent(DiffViewerEvent.SetViewMode(next))
                         },
-                    ) {
-                        if (uiState.viewMode == DiffViewMode.UNIFIED) {
-                            Icon(
-                                Icons.Default.ViewColumn,
-                                contentDescription = "Zu Seite-an-Seite-Ansicht wechseln",
-                            )
-                        } else {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ViewList,
-                                contentDescription = "Zu einheitlicher Ansicht wechseln",
-                            )
-                        }
-                    }
+                    )
                 },
             )
         },
