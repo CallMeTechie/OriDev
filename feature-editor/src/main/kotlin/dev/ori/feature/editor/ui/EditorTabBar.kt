@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,6 +23,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.X
 
 @Composable
 fun EditorTabBar(
@@ -93,9 +93,12 @@ private fun EditorTabChip(
             color = if (isActive) accent else MaterialTheme.colorScheme.onSurface,
         )
         Spacer(modifier = Modifier.width(4.dp))
+        // Phase 11 P2.2-polish — LucideIcons.X replaces Material Icons.Filled.Close
+        // per forbidden-imports policy (no androidx.compose.material.icons.* in
+        // feature code).
         IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
             Icon(
-                imageVector = Icons.Default.Close,
+                imageVector = LucideIcons.X,
                 contentDescription = "Tab schließen",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(14.dp),
