@@ -18,6 +18,10 @@ android {
 
     defaultConfig {
         minSdk = 34
+        // Phase 11 PR 4b: enable instrumented tests for SoraThemingSpike
+        // (P0.8 — proves Sora-Editor accepts JetBrainsMono typeface and a
+        // GitHub-palette EditorColorScheme, which P2.2 needs).
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
@@ -56,6 +60,12 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.truth)
     testImplementation(libs.kotlinx.coroutines.test)
+
+    // Phase 11 PR 4b — instrumented test scaffolding for SoraThemingSpike
+    androidTestImplementation(project(":core:core-fonts"))
+    androidTestImplementation(libs.test.runner)
+    androidTestImplementation(libs.test.ext.junit)
+    androidTestImplementation(libs.truth)
 
     debugImplementation(libs.compose.ui.tooling)
 }
