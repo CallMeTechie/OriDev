@@ -27,6 +27,10 @@ object LanguageDetector {
 
     private val PLAIN = Language(id = "plain", displayName = "Plain Text", scopeName = "text.plain")
 
+    // Phase 11 P4.2 — 10 additional placeholder grammars added alongside the
+    // original 5 (kotlin/json/markdown/shell/yaml). Each shares the same
+    // pattern style: keyword regex + string fences + comment fences. Full
+    // TextMate grammars will replace these placeholders in a later pass.
     private val GRAMMAR_INFO: Map<String, LanguageInfo> = mapOf(
         "kt" to LanguageInfo("source.kotlin", "textmate/grammars/kotlin.placeholder.json"),
         "kts" to LanguageInfo("source.kotlin", "textmate/grammars/kotlin.placeholder.json"),
@@ -37,6 +41,28 @@ object LanguageDetector {
         "bash" to LanguageInfo("source.shell", "textmate/grammars/shell.placeholder.json"),
         "yml" to LanguageInfo("source.yaml", "textmate/grammars/yaml.placeholder.json"),
         "yaml" to LanguageInfo("source.yaml", "textmate/grammars/yaml.placeholder.json"),
+        "py" to LanguageInfo("source.python", "textmate/grammars/python.placeholder.json"),
+        "pyw" to LanguageInfo("source.python", "textmate/grammars/python.placeholder.json"),
+        "java" to LanguageInfo("source.java", "textmate/grammars/java.placeholder.json"),
+        "js" to LanguageInfo("source.js", "textmate/grammars/javascript.placeholder.json"),
+        "mjs" to LanguageInfo("source.js", "textmate/grammars/javascript.placeholder.json"),
+        "cjs" to LanguageInfo("source.js", "textmate/grammars/javascript.placeholder.json"),
+        "jsx" to LanguageInfo("source.js", "textmate/grammars/javascript.placeholder.json"),
+        "ts" to LanguageInfo("source.ts", "textmate/grammars/typescript.placeholder.json"),
+        "tsx" to LanguageInfo("source.ts", "textmate/grammars/typescript.placeholder.json"),
+        "rs" to LanguageInfo("source.rust", "textmate/grammars/rust.placeholder.json"),
+        "go" to LanguageInfo("source.go", "textmate/grammars/go.placeholder.json"),
+        "c" to LanguageInfo("source.c", "textmate/grammars/c.placeholder.json"),
+        "h" to LanguageInfo("source.c", "textmate/grammars/c.placeholder.json"),
+        "cpp" to LanguageInfo("source.cpp", "textmate/grammars/cpp.placeholder.json"),
+        "cc" to LanguageInfo("source.cpp", "textmate/grammars/cpp.placeholder.json"),
+        "cxx" to LanguageInfo("source.cpp", "textmate/grammars/cpp.placeholder.json"),
+        "hpp" to LanguageInfo("source.cpp", "textmate/grammars/cpp.placeholder.json"),
+        "hh" to LanguageInfo("source.cpp", "textmate/grammars/cpp.placeholder.json"),
+        "hxx" to LanguageInfo("source.cpp", "textmate/grammars/cpp.placeholder.json"),
+        "html" to LanguageInfo("text.html.basic", "textmate/grammars/html.placeholder.json"),
+        "htm" to LanguageInfo("text.html.basic", "textmate/grammars/html.placeholder.json"),
+        "css" to LanguageInfo("source.css", "textmate/grammars/css.placeholder.json"),
     )
 
     /** Returns the TextMate scope name for the given filename, or null if unsupported. */

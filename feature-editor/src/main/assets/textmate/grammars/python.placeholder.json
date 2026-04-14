@@ -1,0 +1,35 @@
+{
+  "name": "Python (placeholder)",
+  "scopeName": "source.python",
+  "fileTypes": ["py", "pyw"],
+  "patterns": [
+    {
+      "match": "\\b(def|class|if|elif|else|for|while|return|yield|import|from|as|pass|break|continue|lambda|try|except|finally|raise|with|global|nonlocal|assert|in|is|not|and|or|True|False|None|async|await)\\b",
+      "name": "keyword.control.python"
+    },
+    {
+      "begin": "\"\"\"",
+      "end": "\"\"\"",
+      "name": "string.quoted.triple.python"
+    },
+    {
+      "begin": "'''",
+      "end": "'''",
+      "name": "string.quoted.triple.python"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.python"
+    },
+    {
+      "begin": "'",
+      "end": "'",
+      "name": "string.quoted.single.python"
+    },
+    {
+      "match": "#[^\\n]*",
+      "name": "comment.line.number-sign.python"
+    }
+  ]
+}

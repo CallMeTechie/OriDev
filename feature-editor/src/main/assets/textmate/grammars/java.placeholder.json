@@ -1,0 +1,29 @@
+{
+  "name": "Java (placeholder)",
+  "scopeName": "source.java",
+  "fileTypes": ["java"],
+  "patterns": [
+    {
+      "match": "\\b(abstract|assert|break|case|catch|class|const|continue|default|do|else|enum|extends|final|finally|for|goto|if|implements|import|instanceof|interface|native|new|package|private|protected|public|return|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while|true|false|null|record|sealed|permits|yield|var)\\b",
+      "name": "keyword.control.java"
+    },
+    {
+      "match": "\\b(boolean|byte|char|double|float|int|long|short|String)\\b",
+      "name": "storage.type.java"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.java"
+    },
+    {
+      "match": "//[^\\n]*",
+      "name": "comment.line.double-slash.java"
+    },
+    {
+      "begin": "/\\*",
+      "end": "\\*/",
+      "name": "comment.block.java"
+    }
+  ]
+}

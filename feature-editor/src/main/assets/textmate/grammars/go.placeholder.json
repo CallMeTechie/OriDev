@@ -1,0 +1,34 @@
+{
+  "name": "Go (placeholder)",
+  "scopeName": "source.go",
+  "fileTypes": ["go"],
+  "patterns": [
+    {
+      "match": "\\b(break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var|nil|true|false|iota)\\b",
+      "name": "keyword.control.go"
+    },
+    {
+      "match": "\\b(bool|byte|complex64|complex128|error|float32|float64|int|int8|int16|int32|int64|rune|string|uint|uint8|uint16|uint32|uint64|uintptr)\\b",
+      "name": "storage.type.go"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.go"
+    },
+    {
+      "begin": "`",
+      "end": "`",
+      "name": "string.quoted.raw.go"
+    },
+    {
+      "match": "//[^\\n]*",
+      "name": "comment.line.double-slash.go"
+    },
+    {
+      "begin": "/\\*",
+      "end": "\\*/",
+      "name": "comment.block.go"
+    }
+  ]
+}

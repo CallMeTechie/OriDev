@@ -149,14 +149,90 @@ class LanguageDetectorTest {
     @Test
     fun allLanguages_returnsDistinctList() {
         val all = LanguageDetector.allLanguages()
-        // 5 distinct languages: kotlin, json, markdown, shell, yaml
-        assertThat(all).hasSize(5)
+        // Phase 11 P4.2 — 15 distinct languages: 5 original
+        // (kotlin/json/markdown/shell/yaml) + 10 new placeholders
+        // (python/java/javascript/typescript/rust/go/c/cpp/html/css).
+        assertThat(all).hasSize(15)
         assertThat(all.map { it.scopeName }).containsExactly(
             "source.kotlin",
             "source.json",
             "text.html.markdown",
             "source.shell",
             "source.yaml",
+            "source.python",
+            "source.java",
+            "source.js",
+            "source.ts",
+            "source.rust",
+            "source.go",
+            "source.c",
+            "source.cpp",
+            "text.html.basic",
+            "source.css",
         )
+    }
+
+    // --- Phase 11 P4.2 new scope lookups ---
+
+    @Test
+    fun scopeForFile_python_returnsPythonScope() {
+        assertThat(LanguageDetector.scopeForFile("script.py")).isEqualTo("source.python")
+        assertThat(LanguageDetector.scopeForFile("app.pyw")).isEqualTo("source.python")
+    }
+
+    @Test
+    fun scopeForFile_java_returnsJavaScope() {
+        assertThat(LanguageDetector.scopeForFile("Main.java")).isEqualTo("source.java")
+    }
+
+    @Test
+    fun scopeForFile_javascript_variants() {
+        assertThat(LanguageDetector.scopeForFile("app.js")).isEqualTo("source.js")
+        assertThat(LanguageDetector.scopeForFile("app.mjs")).isEqualTo("source.js")
+        assertThat(LanguageDetector.scopeForFile("app.cjs")).isEqualTo("source.js")
+        assertThat(LanguageDetector.scopeForFile("app.jsx")).isEqualTo("source.js")
+    }
+
+    @Test
+    fun scopeForFile_typescript_variants() {
+        assertThat(LanguageDetector.scopeForFile("app.ts")).isEqualTo("source.ts")
+        assertThat(LanguageDetector.scopeForFile("App.tsx")).isEqualTo("source.ts")
+    }
+
+    @Test
+    fun scopeForFile_rust_returnsRustScope() {
+        assertThat(LanguageDetector.scopeForFile("main.rs")).isEqualTo("source.rust")
+    }
+
+    @Test
+    fun scopeForFile_go_returnsGoScope() {
+        assertThat(LanguageDetector.scopeForFile("main.go")).isEqualTo("source.go")
+    }
+
+    @Test
+    fun scopeForFile_c_handlesCAndHeader() {
+        assertThat(LanguageDetector.scopeForFile("main.c")).isEqualTo("source.c")
+        assertThat(LanguageDetector.scopeForFile("main.h")).isEqualTo("source.c")
+    }
+
+    @Test
+    fun scopeForFile_cpp_handlesAllVariants() {
+        assertThat(LanguageDetector.scopeForFile("main.cpp")).isEqualTo("source.cpp")
+        assertThat(LanguageDetector.scopeForFile("main.cc")).isEqualTo("source.cpp")
+        assertThat(LanguageDetector.scopeForFile("main.cxx")).isEqualTo("source.cpp")
+        assertThat(LanguageDetector.scopeForFile("main.hpp")).isEqualTo("source.cpp")
+        assertThat(LanguageDetector.scopeForFile("main.hh")).isEqualTo("source.cpp")
+        assertThat(LanguageDetector.scopeForFile("main.hxx")).isEqualTo("source.cpp")
+    }
+
+    @Test
+    fun scopeForFile_html_handlesHtmlAndHtm() {
+        assertThat(LanguageDetector.scopeForFile("index.html")).isEqualTo("text.html.basic")
+        assertThat(LanguageDetector.scopeForFile("index.htm")).isEqualTo("text.html.basic")
+    }
+
+    @Test
+    fun scopeForFile_css_returnsCssScope() {
+        assertThat(LanguageDetector.scopeForFile("style.css")).isEqualTo("source.css")
     }
 }
