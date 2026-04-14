@@ -62,6 +62,11 @@ public fun OriTopBar(
     height: Dp = OriTopBarDefaults.Height,
     navigationIcon: @Composable (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
+    // Phase 11 P4.7 — optional indicator slot rendered between the title and
+    // the actions. Intended for a foreground-service / active-transfer
+    // indicator built with [OriServiceIndicator], but the slot is generic so
+    // other pulse-dot content (background sync, recording, etc.) can reuse it.
+    indicator: @Composable (RowScope.() -> Unit)? = null,
     hairline: Boolean = true,
 ) {
     val borderColor = Gray200
@@ -107,6 +112,9 @@ public fun OriTopBar(
                     ) {
                         Text(text = title)
                     }
+                }
+                if (indicator != null) {
+                    indicator()
                 }
                 actions()
             }
