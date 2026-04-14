@@ -104,7 +104,10 @@ class TransferMapperTest {
 
         val result = original.toDomain().toEntity()
 
-        assertThat(result).isEqualTo(original)
+        // queuedAt/nextRetryAt are data-layer-only and never surface on the domain model,
+        // so round-trips normalize them. Compare everything else.
+        assertThat(result.copy(queuedAt = original.queuedAt, nextRetryAt = original.nextRetryAt))
+            .isEqualTo(original)
     }
 
     @Test
@@ -128,6 +131,7 @@ class TransferMapperTest {
 
         val result = original.toDomain().toEntity()
 
-        assertThat(result).isEqualTo(original)
+        assertThat(result.copy(queuedAt = original.queuedAt, nextRetryAt = original.nextRetryAt))
+            .isEqualTo(original)
     }
 }

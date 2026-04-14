@@ -17,7 +17,10 @@ import dev.ori.core.common.model.TransferStatus
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("serverProfileId")],
+    indices = [
+        Index("serverProfileId"),
+        Index(value = ["status", "queuedAt"]),
+    ],
 )
 data class TransferRecordEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -34,4 +37,6 @@ data class TransferRecordEntity(
     val completedAt: Long? = null,
     val errorMessage: String? = null,
     val retryCount: Int = 0,
+    val queuedAt: Long = System.currentTimeMillis(),
+    val nextRetryAt: Long? = null,
 )

@@ -28,7 +28,7 @@ import dev.ori.data.entity.TransferRecordEntity
         ProxmoxNodeEntity::class,
         KnownHostEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

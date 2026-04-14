@@ -37,4 +37,6 @@ fun TransferRequest.toEntity(): TransferRecordEntity =
         completedAt = completedAt,
         errorMessage = errorMessage,
         retryCount = retryCount,
+        queuedAt = System.currentTimeMillis(),
+        nextRetryAt = null,
     )
