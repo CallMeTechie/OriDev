@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,6 +31,8 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import dev.ori.core.ui.icons.lucide.Copy
+import dev.ori.core.ui.icons.lucide.LucideIcons
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -154,7 +154,7 @@ fun SendToClaudeSheet(
                                 modifier = Modifier.weight(1f),
                             )
                             IconButton(onClick = { clipboard.setText(AnnotatedString(resp)) }) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy response")
+                                Icon(LucideIcons.Copy, contentDescription = "Copy response")
                             }
                         }
                         Text(

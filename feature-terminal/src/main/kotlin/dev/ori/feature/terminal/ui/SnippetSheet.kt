@@ -9,12 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -40,6 +34,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.ori.core.ui.icons.lucide.EllipsisVertical
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.PenLine
+import dev.ori.core.ui.icons.lucide.Plus
+import dev.ori.core.ui.icons.lucide.Search
+import dev.ori.core.ui.icons.lucide.Trash2
 import dev.ori.domain.model.CommandSnippet
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,7 +77,7 @@ fun SnippetSheet(
                 modifier = Modifier.weight(1f),
             )
             IconButton(onClick = onAddClick) {
-                Icon(Icons.Default.Add, contentDescription = "Add snippet")
+                Icon(LucideIcons.Plus, contentDescription = "Add snippet")
             }
         }
 
@@ -88,7 +88,7 @@ fun SnippetSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp),
             placeholder = { Text("Search snippets") },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            leadingIcon = { Icon(LucideIcons.Search, contentDescription = null) },
             singleLine = true,
         )
 
@@ -177,12 +177,12 @@ private fun SnippetRow(
         }
         Box {
             IconButton(onClick = { menuExpanded = true }) {
-                Icon(Icons.Default.MoreVert, contentDescription = "More")
+                Icon(LucideIcons.EllipsisVertical, contentDescription = "More")
             }
             DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                 DropdownMenuItem(
                     text = { Text("Edit") },
-                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                    leadingIcon = { Icon(LucideIcons.PenLine, contentDescription = null) },
                     onClick = {
                         menuExpanded = false
                         onEdit()
@@ -190,7 +190,7 @@ private fun SnippetRow(
                 )
                 DropdownMenuItem(
                     text = { Text("Delete") },
-                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                    leadingIcon = { Icon(LucideIcons.Trash2, contentDescription = null) },
                     onClick = {
                         menuExpanded = false
                         onDelete()

@@ -8,18 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.IosShare
-import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.KeyboardHide
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -51,6 +39,17 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.components.OriTopBarDefaults
+import dev.ori.core.ui.icons.lucide.Circle
+import dev.ori.core.ui.icons.lucide.CircleStop
+import dev.ori.core.ui.icons.lucide.Clipboard
+import dev.ori.core.ui.icons.lucide.Code
+import dev.ori.core.ui.icons.lucide.Copy
+import dev.ori.core.ui.icons.lucide.Keyboard
+import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.Play
+import dev.ori.core.ui.icons.lucide.Settings
+import dev.ori.core.ui.icons.lucide.Share2
+import dev.ori.core.ui.icons.lucide.Zap
 import dev.ori.core.ui.theme.OriTypography
 import dev.ori.core.ui.theme.TerminalBackground
 import dev.ori.core.ui.theme.TerminalText
@@ -119,7 +118,7 @@ fun TerminalScreen(
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 icon = {
                     Icon(
-                        Icons.Default.AutoAwesome,
+                        LucideIcons.Zap,
                         contentDescription = "An Claude senden",
                     )
                 },
@@ -307,7 +306,7 @@ private fun TerminalTopBarActions(
     // Clipboard history
     Box {
         IconButton(onClick = { onShowClipboardHistoryChange(true) }) {
-            Icon(Icons.Default.ContentCopy, contentDescription = "Zwischenablageverlauf")
+            Icon(LucideIcons.Copy, contentDescription = "Zwischenablageverlauf")
         }
         ClipboardHistory(
             expanded = showClipboardHistory,
@@ -322,12 +321,12 @@ private fun TerminalTopBarActions(
 
     // Paste from system clipboard
     IconButton(onClick = onPasteFromSystem) {
-        Icon(Icons.Default.ContentPaste, contentDescription = "Aus Zwischenablage einfügen")
+        Icon(LucideIcons.Clipboard, contentDescription = "Aus Zwischenablage einfügen")
     }
 
     // Snippets
     IconButton(onClick = { onEvent(TerminalEvent.ToggleSnippets) }) {
-        Icon(Icons.Default.PlayArrow, contentDescription = "Snippets öffnen")
+        Icon(LucideIcons.Play, contentDescription = "Snippets öffnen")
     }
 
     // Detected code blocks
@@ -340,7 +339,7 @@ private fun TerminalTopBarActions(
             },
         ) {
             Icon(
-                Icons.Default.Code,
+                LucideIcons.Code,
                 contentDescription = "Erkannte Code-Blöcke anzeigen",
             )
         }
@@ -349,13 +348,9 @@ private fun TerminalTopBarActions(
     // Keyboard toggle
     IconButton(onClick = { onEvent(TerminalEvent.ToggleKeyboard) }) {
         Icon(
-            imageVector = if (uiState.isKeyboardVisible) {
-                Icons.Default.KeyboardHide
-            } else {
-                Icons.Default.Keyboard
-            },
+            imageVector = LucideIcons.Keyboard,
             contentDescription = if (uiState.isKeyboardVisible) {
-                "Tastatur ausblenden"
+                "Tastatur verbergen"
             } else {
                 "Tastatur einblenden"
             },
@@ -372,9 +367,9 @@ private fun TerminalTopBarActions(
     }) {
         Icon(
             imageVector = if (uiState.isRecording) {
-                Icons.Default.Stop
+                LucideIcons.CircleStop
             } else {
-                Icons.Default.FiberManualRecord
+                LucideIcons.Circle
             },
             contentDescription = if (uiState.isRecording) {
                 "Aufzeichnung stoppen"
@@ -394,12 +389,12 @@ private fun TerminalTopBarActions(
         onClick = { onEvent(TerminalEvent.ExportRecording) },
         enabled = uiState.activeRecordingId != null,
     ) {
-        Icon(Icons.Default.IosShare, contentDescription = "Aufzeichnung exportieren")
+        Icon(LucideIcons.Share2, contentDescription = "Aufzeichnung exportieren")
     }
 
     // Preferences
     IconButton(onClick = { onEvent(TerminalEvent.TogglePreferences) }) {
-        Icon(Icons.Default.Settings, contentDescription = "Terminal-Einstellungen")
+        Icon(LucideIcons.Settings, contentDescription = "Terminal-Einstellungen")
     }
 }
 
