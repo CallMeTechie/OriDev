@@ -1,6 +1,8 @@
 package dev.ori.wear.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -13,11 +15,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
-import androidx.wear.compose.foundation.lazy.items
-import androidx.wear.compose.material3.FilledTonalButton
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
+import dev.ori.wear.ui.component.OriWearCard
 
 @Composable
 fun CommandOutputScreen(
@@ -36,6 +37,7 @@ fun CommandOutputScreen(
                 Text(
                     text = "Waiting for output...",
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground,
                 )
             }
             return@ScreenScaffold
@@ -44,19 +46,42 @@ fun CommandOutputScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.Start,
         ) {
-            items(lines) { line ->
-                Text(
-                    text = line.ifEmpty { " " },
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                )
+            // Phase 11 P3.2 (T2c) — output lines are stacked inside a single
+            // OriWearCard so the monospace log reads as one surface on top of
+            // OriDevWearColors.Background, matching the terminal-style mockup.
+            item {
+                OriWearCard(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                        lines.forEach { line ->
+                            Text(
+                                text = line.ifEmpty { " " },
+                                style = MaterialTheme.typography.bodySmall
+                                    .copy(fontFamily = FontFamily.Monospace),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
             }
             item {
-                FilledTonalButton(
-                    onClick = { navController.popBackStack() },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
-                    label = { Text("Back") },
-                )
+                OriWearCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { navController.popBackStack() },
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Back",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                    }
+                }
             }
         }
     }

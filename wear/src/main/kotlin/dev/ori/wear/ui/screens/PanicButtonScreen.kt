@@ -60,6 +60,12 @@ fun PanicButtonScreen(
         }
     }
 
+    // Phase 11 P3.2 (T2c) — panic hold target stays a full-screen ring rather
+    // than an OriWearCard because the mockup shows a circular hold surface,
+    // not a rectangular list row. All colors (error ring, HOLD TO / PANIC
+    // text) resolve through MaterialTheme.colorScheme, which is populated
+    // from OriDevWearColors via OriDevWearTheme, so the palette stays in
+    // sync with the rest of the Wear screens without hardcoded hex.
     ScreenScaffold {
         Box(
             modifier = Modifier

@@ -1,6 +1,8 @@
 package dev.ori.wear.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -13,12 +15,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.items
-import androidx.wear.compose.material3.FilledTonalButton
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
 import dev.ori.wear.ui.ROUTE_COMMAND_OUTPUT
 import dev.ori.wear.ui.WearAppViewModel
+import dev.ori.wear.ui.component.OriWearCard
 
 @Composable
 fun QuickCommandsScreen(
@@ -60,14 +62,29 @@ fun QuickCommandsScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             items(snippets) { snippet ->
-                FilledTonalButton(
-                    onClick = {
-                        viewModel.sendCommand(target.profileId, snippet.command)
-                        navController.navigate(ROUTE_COMMAND_OUTPUT)
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                    label = { Text(snippet.name) },
-                )
+                // Phase 11 P3.2 (T2c) — quick command rows are OriWearCards
+                // instead of FilledTonalButton, matching the rest of the Wear
+                // screens on OriDevWearTheme.
+                OriWearCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            viewModel.sendCommand(target.profileId, snippet.command)
+                            navController.navigate(ROUTE_COMMAND_OUTPUT)
+                        },
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = snippet.name,
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                    }
+                }
             }
         }
     }
