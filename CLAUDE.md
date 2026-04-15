@@ -59,6 +59,20 @@ Multi-module Android project: Kotlin, Jetpack Compose, Material 3, Hilt, Room, M
 - Clipboard: Set EXTRA_IS_SENSITIVE flag. Auto-clear after 30s.
 - SSH Host Keys: Trust on First Use (TOFU). Reject on mismatch.
 
+#### Semgrep gate
+
+Security rules live in `.semgrep.yml`. The `semgrep` GitHub Actions workflow
+runs them on every PR and push to master. To run locally:
+
+    semgrep --config .semgrep.yml --no-git-ignore --error .
+
+ERROR-severity findings block the PR; WARNING-severity findings are advisory
+and surfaced in the PR check log but don't fail CI. The current rules cover
+Material Icons leakage in feature modules (tracker, WARNING until Phase 11
+P2 finishes), `String` passwords in network/security/data, clipboard writes
+without `EXTRA_IS_SENSITIVE`, hardcoded secrets, and SSH `PromiscuousVerifier`
+(host-key bypass).
+
 ## Build
 
 - Debug: `./gradlew assembleDebug`

@@ -1,0 +1,102 @@
+rules:
+  # Phase 11 forbidden-imports policy — semantic backup for the shell-based
+  # check in .github/ci/check-forbidden-imports.sh. Catches any Material
+  # Icons import in feature modules (wildcard, aliased, or specific symbol).
+  - id: oridev-no-material-icons-in-features
+    pattern-regex: '^import\s+androidx\.compose\.material\.icons\.'
+    message: >
+      Feature modules must use Lucide vendored icons from
+      dev.ori.core.ui.icons.lucide.*, not androidx.compose.material.icons.
+      NOTE: this rule is WARNING because Phase 11 P2 migration is still in
+      progress. The authoritative ERROR gate for NEW violations on the PR
+      diff lives in .github/ci/check-forbidden-imports.sh — that script
+      runs per-file against added lines only and blocks regressions. This
+      semgrep rule is a whole-tree tracker; once P2 migration finishes and
+      the finding count reaches zero, promote this rule to ERROR.
+    languages: [kotlin]
+    severity: WARNING
+    paths:
+      include:
+        - "feature-connections/src/main/**/*.kt"
+        - "feature-filemanager/src/main/**/*.kt"
+        - "feature-terminal/src/main/**/*.kt"
+        - "feature-transfers/src/main/**/*.kt"
+        - "feature-proxmox/src/main/**/*.kt"
+        - "feature-editor/src/main/**/*.kt"
+        - "feature-settings/src/main/**/*.kt"
+        - "feature-onboarding/src/main/**/*.kt"
+        - "wear/src/main/**/*.kt"
+
+  # Security: String-based password handling in network/security/data layers.
+  # Passwords must be CharArray so they can be zero-filled after use.
+  - id: oridev-password-must-be-char-array
+    patterns:
+      - pattern-either:
+          - pattern: |
+              val password: String = $X
+          - pattern: |
+              var password: String = $X
+          - pattern: |
+              val $F: String = $X
+          - pattern-regex: '\bpassword\s*:\s*String\b'
+    message: >
+      Passwords must be stored as CharArray, not String, so they can be
+      zero-filled after use. See CLAUDE.md Security section.
+    languages: [kotlin]
+    severity: WARNING
+    paths:
+      include:
+        - "core/core-security/**/*.kt"
+        - "core/core-network/**/*.kt"
+        - "data/**/*.kt"
+      exclude:
+        - "**/test/**"
+        - "**/androidTest/**"
+
+  # Security: clipboard text writes that skip EXTRA_IS_SENSITIVE. On Android
+  # 13+ this flag tells the OS preview overlay to redact the value.
+  - id: oridev-clipboard-missing-sensitive-flag
+    pattern-either:
+      - pattern: $CM.setPrimaryClip(ClipData.newPlainText(...))
+      - pattern: $CM.setText(...)
+    message: >
+      Clipboard writes must set EXTRA_IS_SENSITIVE on Android 13+ so the
+      preview overlay redacts the value. Use a helper from core-security.
+    languages: [kotlin]
+    severity: WARNING
+    paths:
+      include:
+        - "**/*.kt"
+      exclude:
+        - "**/test/**"
+        - "**/androidTest/**"
+
+  # Security: hardcoded credentials / tokens / API keys in Kotlin sources.
+  - id: oridev-no-hardcoded-secrets
+    pattern-regex: '(?i)(password|secret|token|api[_-]?key)\s*=\s*"[A-Za-z0-9+/=_\-]{16,}"'
+    message: >
+      Potential hardcoded secret. Move to BuildConfig, an env var, or a
+      runtime credential store. Never commit literal credentials.
+    languages: [kotlin]
+    severity: WARNING
+    paths:
+      exclude:
+        - "**/test/**"
+        - "**/androidTest/**"
+
+  # Security: SSH host-key verification bypass. SSHJ PromiscuousVerifier()
+  # trusts any host key, defeating TOFU. Must be rejected in core-network.
+  - id: oridev-ssh-strict-host-key-required
+    pattern-either:
+      - pattern: $X.setHostKeyVerifier(PromiscuousVerifier())
+      - pattern: $X.addHostKeyVerifier(PromiscuousVerifier())
+      - pattern: PromiscuousVerifier()
+    message: >
+      SSH host-key verification must not be bypassed. Use TOFU verification
+      via KnownHostRepository. See CLAUDE.md Security section.
+    languages: [kotlin]
+    severity: ERROR
+    paths:
+      include:
+        - "core/core-network/**/*.kt"
+        - "data/**/*.kt"

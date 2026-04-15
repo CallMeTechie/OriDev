@@ -1,0 +1,44 @@
+name: semgrep
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep Kotlin rules
+    runs-on: ubuntu-latest
+    # Use the official semgrep Docker image rather than returntocorp/semgrep-action.
+    # The action is in maintenance mode; the Docker image is the supported path.
+    container:
+      image: returntocorp/semgrep:latest
+    env:
+      SEMGREP_SEND_METRICS: "off"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: semgrep scan (ERROR severity blocks CI)
+        run: |
+          semgrep \
+            --config .semgrep.yml \
+            --no-git-ignore \
+            --error \
+            --severity=ERROR \
+            --metrics=off \
+            .
+
+      - name: semgrep advisory findings (WARNING, non-blocking)
+        if: always()
+        run: |
+          semgrep \
+            --config .semgrep.yml \
+            --no-git-ignore \
+            --severity=WARNING \
+            --metrics=off \
+            . || true
