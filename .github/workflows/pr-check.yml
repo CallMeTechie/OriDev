@@ -228,6 +228,68 @@ jobs:
             wear/build/outputs/apk/debug/*.apk
 
   # ============================================================
+  # Stage 4b: Release build smoke test (TD3)
+  # ------------------------------------------------------------
+  # 80+ PRs shipped to master before this job existed without anyone
+  # running :app:assembleRelease. R8/ProGuard silently produces a
+  # broken artifact if keep rules drift (Hilt @Inject missing from
+  # keep rules, Moshi/Retrofit reflection shrunk away, Room type
+  # converters stripped, etc.). This job is the CI gate that catches
+  # that class of regression on every PR.
+  #
+  # No release signing secrets are required: app/build.gradle.kts
+  # already falls back to the debug keystore when KEYSTORE_PASSWORD
+  # is unset, so the produced APK is NOT shippable -- but it fully
+  # exercises the R8 shrinker + obfuscator + resource shrinker
+  # pipeline, which is what we actually want to gate on.
+  #
+  # NOTE to repo owner: after this job lands, add "Release Build"
+  # to the master branch protection required-checks list. The TD1
+  # protection script does not automatically pick up new checks.
+  # ============================================================
+  release-build:
+    name: Release Build
+    runs-on: ubuntu-latest
+    needs: [code-quality, unit-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+
+      # No KEYSTORE_PASSWORD env is set here, so app/build.gradle.kts
+      # automatically falls back to signingConfigs.debug (see the
+      # `if (!System.getenv("KEYSTORE_PASSWORD").isNullOrBlank())`
+      # branch). That keeps this job secret-free and self-contained.
+      - name: Assemble release (R8 + ProGuard smoke test)
+        run: ./gradlew :app:assembleRelease
+
+      - name: Report release APK size
+        if: always()
+        run: |
+          echo "## Release APK Size" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          for apk in $(find app/build/outputs/apk/release -name "*.apk" 2>/dev/null); do
+            size=$(du -h "$apk" | cut -f1)
+            name=$(basename "$apk")
+            echo "- **$name**: $size (debug-signed, NOT shippable)" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Upload release APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk-unsigned
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 7
+
+  # ============================================================
   # Stage 5a: Mockup layout gate (Phase 11 PR 4a, P0.10.6)
   # Runs UNCONDITIONALLY on every PR (not label-gated like ui-tests).
   # The SettingsScreenLayoutTest asserts the topbar-to-content offset
