@@ -11,6 +11,8 @@ import net.schmizz.sshj.sftp.FileAttributes
 import net.schmizz.sshj.sftp.OpenMode
 import net.schmizz.sshj.sftp.RemoteFile
 import net.schmizz.sshj.sftp.SFTPClient
+import net.schmizz.sshj.sftp.SFTPException
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -138,6 +140,39 @@ class SshClientImplTest {
         assertThat(progressUpdates.size).isAtLeast(2)
         assertThat(progressUpdates.last().first).isEqualTo(payload.size.toLong())
         assertThat(progressUpdates.last().second).isEqualTo(payload.size.toLong())
+    }
+
+    @Test
+    fun fileSize_existingFile_returnsSize() = runTest {
+        every { sftp.stat("/remote/foo") } returns mockk<FileAttributes>(relaxed = true) {
+            every { size } returns 12_345L
+        }
+
+        val result = sshClient.fileSize(sessionId, "/remote/foo")
+
+        assertThat(result).isEqualTo(12_345L)
+    }
+
+    @Test
+    fun fileSize_fileDoesNotExist_returnsNull() = runTest {
+        every { sftp.stat("/remote/missing") } throws
+            SFTPException("No such file")
+
+        val result = sshClient.fileSize(sessionId, "/remote/missing")
+
+        assertThat(result).isNull()
+    }
+
+    @Test
+    fun fileSize_noActiveSession_throwsIllegalStateException() = runTest {
+        // `withSftpClient` calls `getClient`, which throws for unknown sessionIds.
+        // The try/catch inside `fileSize` only wraps `sftp.stat`, so the
+        // IllegalStateException propagates to the caller.
+        assertThrows(IllegalStateException::class.java) {
+            kotlinx.coroutines.runBlocking {
+                sshClient.fileSize("no-such-session", "/remote/foo")
+            }
+        }
     }
 
     private fun injectSession(client: SshClientImpl, id: String, ssh: SSHClient) {

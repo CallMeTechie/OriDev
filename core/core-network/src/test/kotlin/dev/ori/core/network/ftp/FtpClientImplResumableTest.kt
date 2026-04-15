@@ -7,6 +7,8 @@ import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.apache.commons.net.ftp.FTPClient
+import org.apache.commons.net.ftp.FTPFile
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -137,5 +139,53 @@ class FtpClientImplResumableTest {
 
         assertThat(progress.size).isAtLeast(2)
         assertThat(progress.last().first).isEqualTo(payload.size.toLong())
+    }
+
+    @Test
+    fun fileSize_existingFile_returnsSize() = runTest {
+        val file = mockk<FTPFile>(relaxed = true) {
+            every { isFile } returns true
+            every { size } returns 67_890L
+        }
+        every { ftp.listFiles("/remote/foo") } returns arrayOf(file)
+
+        val result = impl.fileSize("/remote/foo")
+
+        assertThat(result).isEqualTo(67_890L)
+    }
+
+    @Test
+    fun fileSize_listReturnsDirectory_returnsNull() = runTest {
+        val dir = mockk<FTPFile>(relaxed = true) {
+            every { isFile } returns false
+            every { isDirectory } returns true
+        }
+        every { ftp.listFiles("/remote/dir") } returns arrayOf(dir)
+
+        val result = impl.fileSize("/remote/dir")
+
+        assertThat(result).isNull()
+    }
+
+    @Test
+    fun fileSize_listReturnsEmpty_returnsNull() = runTest {
+        every { ftp.listFiles("/remote/missing") } returns emptyArray()
+
+        val result = impl.fileSize("/remote/missing")
+
+        assertThat(result).isNull()
+    }
+
+    @Test
+    fun fileSize_notConnected_throwsIllegalStateException() = runTest {
+        // `requireClient()` sits outside the try/catch in `fileSize`, so a
+        // null client surfaces as an IllegalStateException to the caller.
+        val unconnected = FtpClientImpl()
+
+        assertThrows(IllegalStateException::class.java) {
+            kotlinx.coroutines.runBlocking {
+                unconnected.fileSize("/remote/foo")
+            }
+        }
     }
 }
