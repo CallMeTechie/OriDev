@@ -1,7 +1,10 @@
 package dev.ori.wear.tile
 
+import androidx.compose.ui.graphics.toArgb
 import androidx.concurrent.futures.CallbackToFutureAdapter
+import androidx.wear.protolayout.ColorBuilders
 import androidx.wear.protolayout.LayoutElementBuilders
+import androidx.wear.protolayout.ModifiersBuilders
 import androidx.wear.protolayout.ResourceBuilders
 import androidx.wear.protolayout.TimelineBuilders
 import androidx.wear.tiles.EventBuilders
@@ -11,6 +14,7 @@ import androidx.wear.tiles.TileService
 import com.google.common.util.concurrent.ListenableFuture
 import dagger.hilt.android.AndroidEntryPoint
 import dev.ori.wear.sync.WearState
+import dev.ori.wear.ui.theme.OriDevWearColors
 import javax.inject.Inject
 
 /**
@@ -19,6 +23,14 @@ import javax.inject.Inject
  * Shows active connection and transfer counts from [WearState]. The tile is
  * refreshed every [FRESHNESS_INTERVAL_MILLIS] ms and supports tile preview for
  * the tile carousel editor.
+ *
+ * Phase 11 P3.2 (T2c) — the tile palette is sourced from [OriDevWearColors]
+ * via [androidx.compose.ui.graphics.Color.toArgb] so the protolayout-rendered
+ * tile and the Compose-rendered Wear screens stay in sync. The tile itself is
+ * NOT a Compose composable (it's a `TileService` that serializes a protobuf
+ * layout), so we can't use `MaterialTheme.colorScheme.*` here — instead we
+ * read the Color objects directly and unwrap them into ARGB ints for
+ * [ColorBuilders.argb].
  */
 @AndroidEntryPoint
 class MainTileService : TileService() {
@@ -58,22 +70,55 @@ class MainTileService : TileService() {
         val connectionCount = wearState.connections.value.size
         val transferCount = wearState.transfers.value.size
 
+        // Palette — resolved once per tile build from OriDevWearColors so
+        // any future palette tweak flows through a single file.
+        val backgroundArgb = OriDevWearColors.Background.toArgb()
+        val onBackgroundArgb = OriDevWearColors.OnBackground.toArgb()
+        val mutedArgb = OriDevWearColors.OnSurfaceVariant.toArgb()
+        val primaryArgb = OriDevWearColors.Primary.toArgb()
+
+        val titleStyle = LayoutElementBuilders.FontStyle.Builder()
+            .setColor(ColorBuilders.argb(primaryArgb))
+            .build()
+        val primaryLineStyle = LayoutElementBuilders.FontStyle.Builder()
+            .setColor(ColorBuilders.argb(onBackgroundArgb))
+            .build()
+        val mutedLineStyle = LayoutElementBuilders.FontStyle.Builder()
+            .setColor(ColorBuilders.argb(mutedArgb))
+            .build()
+
+        val background = ModifiersBuilders.Modifiers.Builder()
+            .setBackground(
+                ModifiersBuilders.Background.Builder()
+                    .setColor(ColorBuilders.argb(backgroundArgb))
+                    .build(),
+            )
+            .build()
+
         val layout = LayoutElementBuilders.Layout.Builder()
             .setRoot(
-                LayoutElementBuilders.Column.Builder()
+                LayoutElementBuilders.Box.Builder()
+                    .setModifiers(background)
                     .addContent(
-                        LayoutElementBuilders.Text.Builder()
-                            .setText("Ori:Dev")
-                            .build(),
-                    )
-                    .addContent(
-                        LayoutElementBuilders.Text.Builder()
-                            .setText("$connectionCount connected")
-                            .build(),
-                    )
-                    .addContent(
-                        LayoutElementBuilders.Text.Builder()
-                            .setText("$transferCount transfers")
+                        LayoutElementBuilders.Column.Builder()
+                            .addContent(
+                                LayoutElementBuilders.Text.Builder()
+                                    .setText("Ori:Dev")
+                                    .setFontStyle(titleStyle)
+                                    .build(),
+                            )
+                            .addContent(
+                                LayoutElementBuilders.Text.Builder()
+                                    .setText("$connectionCount connected")
+                                    .setFontStyle(primaryLineStyle)
+                                    .build(),
+                            )
+                            .addContent(
+                                LayoutElementBuilders.Text.Builder()
+                                    .setText("$transferCount transfers")
+                                    .setFontStyle(mutedLineStyle)
+                                    .build(),
+                            )
                             .build(),
                     )
                     .build(),
