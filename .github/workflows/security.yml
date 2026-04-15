@@ -24,7 +24,7 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Generate dependency report
         run: ./gradlew dependencies --configuration releaseRuntimeClasspath > /tmp/deps.txt 2>&1 || true
@@ -59,7 +59,7 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Check dependency licenses
         run: |
