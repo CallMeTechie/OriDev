@@ -19,7 +19,7 @@ jobs:
       # fetch-depth: 0 lets .github/ci/check-forbidden-imports.sh diff against
       # origin/master when this workflow runs on push (default fetch-depth: 1
       # would make origin/master unavailable).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -90,7 +90,7 @@ jobs:
           - variant: release
             sign: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-java@v4
         with:
