@@ -63,6 +63,27 @@ sealed class AddEditEffect {
     data class ShowError(val message: String) : AddEditEffect()
 }
 
+/**
+ * ViewModel for the Add/Edit Connection form.
+ *
+ * ## Credential handling (Phase 11 Security-S1, T2d partial mitigation)
+ *
+ * The credential field is held as a [String] in [AddEditFormState] because
+ * Jetpack Compose's [androidx.compose.material3.OutlinedTextField] and the
+ * [dev.ori.core.ui.components.OriInput] primitive are both backed by
+ * [String]-typed state (`value: String, onValueChange: (String) -> Unit`).
+ * Switching to a `CharArray`-backed buffer would require migrating the UI
+ * to the Compose 1.7+ `TextFieldState` API — tracked as a follow-up.
+ *
+ * As a partial mitigation, [onCleared] explicitly blanks the credential
+ * field so the String state isn't retained beyond the screen lifetime.
+ * **Limitation:** the JVM String pool may still hold the typed characters
+ * until GC; this is unavoidable with the current Compose text-field API.
+ * The real zero-fill happens downstream in
+ * `SshClientImpl.connect(..., password = chars)` (P11-S1), which reads the
+ * String once, copies into a `CharArray`, and zero-fills in a `finally`
+ * block.
+ */
 @HiltViewModel
 class AddEditConnectionViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -82,6 +103,14 @@ class AddEditConnectionViewModel @Inject constructor(
         if (profileId != 0L) {
             loadProfile(profileId)
         }
+    }
+
+    override fun onCleared() {
+        // Phase 11 T2d — clear credential on VM death so the String-backed
+        // state isn't retained past screen lifetime. See class KDoc for the
+        // JVM String-pool limitation.
+        _formState.update { it.copy(credential = "") }
+        super.onCleared()
     }
 
     private fun loadProfile(id: Long) {
