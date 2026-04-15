@@ -65,6 +65,7 @@ internal fun TransfersSection(
                 Stepper(
                     value = prefs.maxRetryAttempts,
                     range = MAX_RETRY_ATTEMPTS_RANGE,
+                    label = "Max. Wiederholungen",
                     onChange = onMaxRetryAttemptsChanged,
                 )
             },
@@ -77,6 +78,7 @@ internal fun TransfersSection(
                 Stepper(
                     value = prefs.retryBackoffSeconds,
                     range = RETRY_BACKOFF_RANGE,
+                    label = "Retry-Verzögerung",
                     suffix = "s",
                     onChange = onRetryBackoffSecondsChanged,
                 )
@@ -89,6 +91,7 @@ internal fun TransfersSection(
 private fun Stepper(
     value: Int,
     range: IntRange,
+    label: String,
     onChange: (Int) -> Unit,
     suffix: String = "",
 ) {
@@ -98,7 +101,10 @@ private fun Stepper(
     ) {
         OriIconButton(
             icon = LucideIcons.Minus,
-            contentDescription = "Verringern",
+            // Phase 11 P4.6-polish: per-stepper contentDescription so the two
+            // retry steppers in this section are individually addressable for
+            // the TransfersSectionTest Compose UI assertions and screen readers.
+            contentDescription = "$label verringern",
             enabled = value > range.first,
             onClick = { onChange(value - 1) },
         )
@@ -109,7 +115,7 @@ private fun Stepper(
         )
         OriIconButton(
             icon = LucideIcons.Plus,
-            contentDescription = "Erhöhen",
+            contentDescription = "$label erhöhen",
             enabled = value < range.last,
             onClick = { onChange(value + 1) },
         )
