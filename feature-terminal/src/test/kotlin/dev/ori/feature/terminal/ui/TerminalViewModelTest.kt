@@ -105,7 +105,19 @@ class TerminalViewModelTest {
             onClose = {},
         )
 
-        coEvery { sshClient.connect(any(), any(), any(), any(), any()) } returns SshSession(
+        // Phase 12 S1 — SshClient.connect now has two overloads (String +
+        // CharArray password). Disambiguate MockK's `any()` matchers by
+        // specifying the CharArray overload via explicit type on the
+        // password matcher.
+        coEvery {
+            sshClient.connect(
+                any<String>(),
+                any<Int>(),
+                any<String>(),
+                any<CharArray>(),
+                any(),
+            )
+        } returns SshSession(
             sessionId = "session-1",
             profileId = 1L,
             host = "192.168.1.1",
