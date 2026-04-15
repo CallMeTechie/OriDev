@@ -10,6 +10,21 @@ data class CommandResult(
 
 @Suppress("TooManyFunctions")
 interface SshClient {
+    /**
+     * Authenticates against [host]:[port] as [username] using either a
+     * [password] char buffer or a [privateKey] byte array.
+     *
+     * Security contract (Option 5 S1): the [password] buffer is **consumed**
+     * by this call — implementations zero-fill it (`Arrays.fill(..., '\u0000')`)
+     * in a `try/finally` on both the happy path and on exception, so callers
+     * can rely on the buffer being wiped when this method returns.
+     *
+     * Known limitation: SSHJ's `authPassword` internally accepts a `String`,
+     * so the password will transit a JVM `String` object once during the
+     * authentication handshake. That `String` is then eligible for GC but
+     * may still linger in the string pool until collected. The CharArray
+     * buffer owned by the caller IS wiped — that is the part we control.
+     */
     suspend fun connect(
         host: String,
         port: Int,
@@ -17,6 +32,32 @@ interface SshClient {
         password: CharArray? = null,
         privateKey: ByteArray? = null,
     ): SshSession
+
+    /**
+     * Deprecated String overload kept for backward compatibility. Converts
+     * the [password] String to a CharArray, delegates to the CharArray
+     * variant, and zero-fills the intermediate buffer. The original String
+     * itself cannot be wiped and remains in the JVM string pool until GC —
+     * new code should use the CharArray variant.
+     */
+    @Deprecated(
+        "Use CharArray variant for zero-fill security",
+        ReplaceWith("connect(host, port, username, password.toCharArray(), privateKey)"),
+    )
+    suspend fun connect(
+        host: String,
+        port: Int,
+        username: String,
+        password: String,
+        privateKey: ByteArray? = null,
+    ): SshSession {
+        val chars = password.toCharArray()
+        return try {
+            connect(host, port, username, chars, privateKey)
+        } finally {
+            chars.fill('\u0000')
+        }
+    }
 
     suspend fun disconnect(sessionId: String)
 
