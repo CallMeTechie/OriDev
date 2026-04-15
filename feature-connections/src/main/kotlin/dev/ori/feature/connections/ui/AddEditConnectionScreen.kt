@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -25,9 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -52,6 +48,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.common.model.AuthMethod
 import dev.ori.core.common.model.Protocol
 import dev.ori.core.ui.components.OriIconButton
+import dev.ori.core.ui.components.OriInput
+import dev.ori.core.ui.components.OriSegmentedControl
 import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.icons.lucide.ChevronDown
 import dev.ori.core.ui.icons.lucide.ChevronLeft
@@ -102,28 +100,24 @@ fun AddEditConnectionScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Name
-            OutlinedTextField(
+            // Name — Phase 11 T2d — OriInput primitive.
+            OriInput(
                 value = formState.name,
                 onValueChange = { viewModel.onEvent(AddEditEvent.NameChanged(it)) },
-                label = { Text("Name") },
-                placeholder = { Text("My Server") },
+                label = "Name",
+                placeholder = "My Server",
                 isError = formState.nameError != null,
-                supportingText = formState.nameError?.let { { Text(it) } },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                errorMessage = formState.nameError,
             )
 
             // Host
-            OutlinedTextField(
+            OriInput(
                 value = formState.host,
                 onValueChange = { viewModel.onEvent(AddEditEvent.HostChanged(it)) },
-                label = { Text("Host") },
-                placeholder = { Text("192.168.1.100 or server.example.com") },
+                label = "Host",
+                placeholder = "192.168.1.100 or server.example.com",
                 isError = formState.hostError != null,
-                supportingText = formState.hostError?.let { { Text(it) } },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                errorMessage = formState.hostError,
             )
 
             // Port and Protocol row
@@ -132,18 +126,19 @@ fun AddEditConnectionScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 // Port
-                OutlinedTextField(
+                OriInput(
                     value = formState.port,
                     onValueChange = { viewModel.onEvent(AddEditEvent.PortChanged(it)) },
-                    label = { Text("Port") },
+                    label = "Port",
                     isError = formState.portError != null,
-                    supportingText = formState.portError?.let { { Text(it) } },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    errorMessage = formState.portError,
+                    keyboardType = KeyboardType.Number,
                     modifier = Modifier.weight(1f),
                 )
 
-                // Protocol dropdown
+                // Protocol dropdown — kept on M3 OutlinedTextField because
+                // ExposedDropdownMenuBox's menuAnchor requires a Material3
+                // TextField anchor. No Ori dropdown primitive for this yet.
                 var protocolExpanded by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(
                     expanded = protocolExpanded,
@@ -179,42 +174,33 @@ fun AddEditConnectionScreen(
             }
 
             // Username
-            OutlinedTextField(
+            OriInput(
                 value = formState.username,
                 onValueChange = { viewModel.onEvent(AddEditEvent.UsernameChanged(it)) },
-                label = { Text("Username") },
-                placeholder = { Text("root") },
+                label = "Username",
+                placeholder = "root",
                 isError = formState.usernameError != null,
-                supportingText = formState.usernameError?.let { { Text(it) } },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                errorMessage = formState.usernameError,
             )
 
-            // Auth Method segmented button
+            // Auth Method — Phase 11 T2d — OriSegmentedControl primitive.
             Text(
                 text = "Authentication",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.semantics { heading() },
             )
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                val authOptions = listOf(AuthMethod.PASSWORD, AuthMethod.SSH_KEY)
-                authOptions.forEachIndexed { index, method ->
-                    SegmentedButton(
-                        selected = formState.authMethod == method,
-                        onClick = { viewModel.onEvent(AddEditEvent.AuthMethodChanged(method)) },
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = authOptions.size,
-                        ),
-                    ) {
-                        Text(method.displayName)
-                    }
-                }
-            }
+            OriSegmentedControl(
+                options = listOf(AuthMethod.PASSWORD, AuthMethod.SSH_KEY),
+                selectedValue = formState.authMethod,
+                onValueChange = { viewModel.onEvent(AddEditEvent.AuthMethodChanged(it)) },
+                optionLabel = { it.displayName },
+            )
 
             // Password or SSH Key path
             if (formState.authMethod == AuthMethod.PASSWORD) {
+                // Password field is kept on M3 OutlinedTextField because OriInput
+                // doesn't yet support trailing icons (needed for the eye toggle).
                 var passwordVisible by rememberSaveable { mutableStateOf(false) }
                 OutlinedTextField(
                     value = formState.credential,
@@ -247,15 +233,13 @@ fun AddEditConnectionScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else {
-                OutlinedTextField(
+                OriInput(
                     value = formState.credential,
                     onValueChange = { viewModel.onEvent(AddEditEvent.CredentialChanged(it)) },
-                    label = { Text("SSH Key Path") },
-                    placeholder = { Text("/storage/emulated/0/.ssh/id_ed25519") },
+                    label = "SSH Key Path",
+                    placeholder = "/storage/emulated/0/.ssh/id_ed25519",
                     isError = formState.credentialError != null,
-                    supportingText = formState.credentialError?.let { { Text(it) } },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    errorMessage = formState.credentialError,
                 )
             }
 
@@ -286,25 +270,21 @@ fun AddEditConnectionScreen(
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    OutlinedTextField(
+                    OriInput(
                         value = formState.startupCommand,
                         onValueChange = {
                             viewModel.onEvent(AddEditEvent.StartupCommandChanged(it))
                         },
-                        label = { Text("Startup Command") },
-                        placeholder = { Text("cd /opt/project && source venv/bin/activate") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        label = "Startup Command",
+                        placeholder = "cd /opt/project && source venv/bin/activate",
                     )
-                    OutlinedTextField(
+                    OriInput(
                         value = formState.projectDirectory,
                         onValueChange = {
                             viewModel.onEvent(AddEditEvent.ProjectDirectoryChanged(it))
                         },
-                        label = { Text("Project Directory") },
-                        placeholder = { Text("/home/user/project") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        label = "Project Directory",
+                        placeholder = "/home/user/project",
                     )
                 }
             }
