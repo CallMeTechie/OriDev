@@ -177,6 +177,67 @@ class FtpClientImplResumableTest {
     }
 
     @Test
+    fun uploadFileResumableDedicated_unconnectedImpl_doesNotTouchSingletonField(@TempDir tmp: Path) = runTest {
+        // Fresh impl with NO `client` field set — the dedicated overload
+        // must not route through `requireClient()`. It should attempt its
+        // own FTPClient connect and fail with IOException (not ISE) when it
+        // can't reach the bogus host, and the singleton field must remain null.
+        val fresh = FtpClientImpl()
+        val payload = tmp.resolve("dedicated.bin")
+        payload.writeBytes(ByteArray(16) { 1 })
+
+        val password = "pw".toCharArray()
+        val thrown = runCatching {
+            fresh.uploadFileResumableDedicated(
+                host = "127.0.0.1",
+                // Port 1 is almost certainly closed on test hosts — Commons Net
+                // surfaces that as an IOException, which is what we want to see.
+                port = 1,
+                username = "anon",
+                password = password,
+                tls = false,
+                localPath = payload.toString(),
+                remotePath = "/remote/x",
+                offsetBytes = 0L,
+            )
+        }.exceptionOrNull()
+
+        assertThat(thrown).isInstanceOf(java.io.IOException::class.java)
+
+        // Crucially: the singleton-backed field must NOT have been populated
+        // by the dedicated call — otherwise two parallel dedicated transfers
+        // would still race each other.
+        val field = FtpClientImpl::class.java.getDeclaredField("client")
+        field.isAccessible = true
+        assertThat(field.get(fresh)).isNull()
+
+        // Caller owns zero-fill — executor does this, not the impl.
+        password.fill('\u0000')
+    }
+
+    @Test
+    fun downloadFileResumableDedicated_unconnectedImpl_failsWithIOException(@TempDir tmp: Path) = runTest {
+        val fresh = FtpClientImpl()
+        val sink = tmp.resolve("dl.bin")
+        sink.writeBytes(ByteArray(0))
+
+        val thrown = runCatching {
+            fresh.downloadFileResumableDedicated(
+                host = "127.0.0.1",
+                port = 1,
+                username = "anon",
+                password = "pw".toCharArray(),
+                tls = false,
+                remotePath = "/remote/x",
+                localPath = sink.toString(),
+                offsetBytes = 0L,
+            )
+        }.exceptionOrNull()
+
+        assertThat(thrown).isInstanceOf(java.io.IOException::class.java)
+    }
+
+    @Test
     fun fileSize_notConnected_throwsIllegalStateException() = runTest {
         // `requireClient()` sits outside the try/catch in `fileSize`, so a
         // null client surfaces as an IllegalStateException to the caller.

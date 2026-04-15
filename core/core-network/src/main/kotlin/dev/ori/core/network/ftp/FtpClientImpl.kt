@@ -123,7 +123,32 @@ class FtpClientImpl @Inject constructor() : FtpClient {
         offsetBytes: Long,
         onProgress: suspend (transferred: Long, total: Long) -> Unit,
     ) = withContext(Dispatchers.IO) {
-        val c = requireClient()
+        doUploadFileResumable(requireClient(), localPath, remotePath, offsetBytes, onProgress)
+    }
+
+    override suspend fun uploadFileResumableDedicated(
+        host: String,
+        port: Int,
+        username: String,
+        password: CharArray,
+        tls: Boolean,
+        localPath: String,
+        remotePath: String,
+        offsetBytes: Long,
+        onProgress: suspend (transferred: Long, total: Long) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        withDedicatedFtpClient(host, port, username, password, tls) { c ->
+            doUploadFileResumable(c, localPath, remotePath, offsetBytes, onProgress)
+        }
+    }
+
+    private fun doUploadFileResumable(
+        c: FTPClient,
+        localPath: String,
+        remotePath: String,
+        offsetBytes: Long,
+        onProgress: suspend (transferred: Long, total: Long) -> Unit,
+    ) {
         val localFile = java.io.File(localPath)
         val totalSize = localFile.length()
         val safeOffset = offsetBytes.coerceIn(0L, totalSize)
@@ -163,7 +188,32 @@ class FtpClientImpl @Inject constructor() : FtpClient {
         offsetBytes: Long,
         onProgress: suspend (transferred: Long, total: Long) -> Unit,
     ) = withContext(Dispatchers.IO) {
-        val c = requireClient()
+        doDownloadFileResumable(requireClient(), remotePath, localPath, offsetBytes, onProgress)
+    }
+
+    override suspend fun downloadFileResumableDedicated(
+        host: String,
+        port: Int,
+        username: String,
+        password: CharArray,
+        tls: Boolean,
+        remotePath: String,
+        localPath: String,
+        offsetBytes: Long,
+        onProgress: suspend (transferred: Long, total: Long) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        withDedicatedFtpClient(host, port, username, password, tls) { c ->
+            doDownloadFileResumable(c, remotePath, localPath, offsetBytes, onProgress)
+        }
+    }
+
+    private fun doDownloadFileResumable(
+        c: FTPClient,
+        remotePath: String,
+        localPath: String,
+        offsetBytes: Long,
+        onProgress: suspend (transferred: Long, total: Long) -> Unit,
+    ) {
         val localFile = java.io.File(localPath)
         val safeOffset = offsetBytes.coerceAtLeast(0L)
         RandomAccessFile(localFile, "rw").use { raf ->
@@ -183,6 +233,45 @@ class FtpClientImpl @Inject constructor() : FtpClient {
             val success = c.retrieveFile(remotePath, countingStream)
             if (!success) {
                 throw IOException("FTP resumable download failed: ${c.replyString}")
+            }
+        }
+    }
+
+    /**
+     * Opens a fresh `FTPClient` / `FTPSClient`, connects, authenticates,
+     * runs [block], then tears the connection down in a `finally` regardless
+     * of success or failure. The caller retains ownership of [password] and
+     * is responsible for zero-filling it — we intentionally do NOT wipe it
+     * here because the Transfer Engine reuses the same CharArray across
+     * retries.
+     */
+    private fun <T> withDedicatedFtpClient(
+        host: String,
+        port: Int,
+        username: String,
+        password: CharArray,
+        tls: Boolean,
+        block: (FTPClient) -> T,
+    ): T {
+        val ftpClient = if (tls) FTPSClient(true) else FTPClient()
+        try {
+            ftpClient.connect(host, port)
+            // Commons Net `login` takes a String — transient JVM allocation we cannot avoid.
+            val loginSuccess = ftpClient.login(username, String(password))
+            if (!loginSuccess) {
+                throw IOException("FTP login failed for user: $username")
+            }
+            ftpClient.setFileType(FTP.BINARY_FILE_TYPE)
+            ftpClient.enterLocalPassiveMode()
+            return block(ftpClient)
+        } finally {
+            try {
+                if (ftpClient.isConnected) {
+                    runCatching { ftpClient.logout() }
+                    ftpClient.disconnect()
+                }
+            } catch (_: IOException) {
+                // Best-effort teardown.
             }
         }
     }
