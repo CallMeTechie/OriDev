@@ -7,6 +7,7 @@ import dev.ori.core.common.result.appSuccess
 import dev.ori.core.network.ssh.ShellHandle
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.core.network.ssh.SshSession
+import dev.ori.core.security.clipboard.OriClipboard
 import dev.ori.domain.model.CommandSnippet
 import dev.ori.domain.model.SessionRecording
 import dev.ori.domain.repository.ClaudeRepository
@@ -62,6 +63,7 @@ class TerminalViewModelTest {
             claudeResult
     }
     private val sendToClaudeUseCase = SendToClaudeUseCase(claudeRepository)
+    private val oriClipboard = mockk<OriClipboard>(relaxed = true)
     private val context = mockk<Context>(relaxed = true)
 
     @BeforeEach
@@ -90,6 +92,7 @@ class TerminalViewModelTest {
             stopSessionRecordingUseCase = stopSessionRecordingUseCase,
             exportSessionRecordingUseCase = exportSessionRecordingUseCase,
             sendToClaudeUseCase = sendToClaudeUseCase,
+            oriClipboard = oriClipboard,
             context = context,
         )
     }

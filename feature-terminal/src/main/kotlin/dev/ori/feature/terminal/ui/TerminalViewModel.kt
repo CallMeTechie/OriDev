@@ -1,14 +1,17 @@
 package dev.ori.feature.terminal.ui
 
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Looper
+import androidx.core.content.getSystemService
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.ori.core.network.ssh.ShellHandle
 import dev.ori.core.network.ssh.SshClient
+import dev.ori.core.security.clipboard.OriClipboard
 import dev.ori.core.ui.theme.TerminalBackground
 import dev.ori.core.ui.theme.TerminalText
 import dev.ori.domain.model.CommandSnippet
@@ -49,6 +52,7 @@ class TerminalViewModel @Inject constructor(
     private val stopSessionRecordingUseCase: StopSessionRecordingUseCase,
     private val exportSessionRecordingUseCase: ExportSessionRecordingUseCase,
     private val sendToClaudeUseCase: SendToClaudeUseCase,
+    private val oriClipboard: OriClipboard,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -75,6 +79,8 @@ class TerminalViewModel @Inject constructor(
             is TerminalEvent.ConfirmPaste -> confirmPaste()
             is TerminalEvent.CancelPaste -> cancelPaste()
             is TerminalEvent.CopyToClipboard -> copyToClipboard(event.text)
+            is TerminalEvent.CopyClaudeResponse -> copyClaudeResponse(event.text)
+            is TerminalEvent.PasteFromSystem -> pasteFromSystem()
             is TerminalEvent.ToggleKeyboard -> toggleKeyboard()
             is TerminalEvent.UpdateSplitRatio -> updateSplitRatio(event.ratio)
             is TerminalEvent.ToggleSnippets -> toggleSnippets()
@@ -284,6 +290,26 @@ class TerminalViewModel @Inject constructor(
         _uiState.update { state ->
             val history = (listOf(text) + state.clipboardHistory).take(MAX_CLIPBOARD_HISTORY)
             state.copy(clipboardHistory = history)
+        }
+        // Terminal output is typically non-sensitive and user-initiated, so
+        // skip the 30 s auto-clear. EXTRA_IS_SENSITIVE is still set by
+        // OriClipboard so the system preview overlay is redacted.
+        oriClipboard.copy(label = "Terminal", text = text, holdForSeconds = 0)
+    }
+
+    private fun copyClaudeResponse(text: String) {
+        // Claude responses may contain sensitive context the user wants
+        // gone — use the default 30 s auto-clear hold.
+        oriClipboard.copy(label = "Claude", text = text)
+    }
+
+    private fun pasteFromSystem() {
+        val clipboardManager = context.getSystemService<ClipboardManager>() ?: return
+        val clip = clipboardManager.primaryClip ?: return
+        if (clip.itemCount == 0) return
+        val text = clip.getItemAt(0).coerceToText(context)?.toString().orEmpty()
+        if (text.isNotEmpty()) {
+            paste(text)
         }
     }
 
