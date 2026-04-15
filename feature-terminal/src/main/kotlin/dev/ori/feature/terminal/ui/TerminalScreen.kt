@@ -30,7 +30,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -65,7 +64,6 @@ fun TerminalScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    val clipboardManager = LocalClipboardManager.current
     val configuration = LocalConfiguration.current
     val isWideScreen = configuration.screenWidthDp >= 600
 
@@ -102,9 +100,7 @@ fun TerminalScreen(
                         showClipboardHistory = showClipboardHistory,
                         onShowClipboardHistoryChange = { showClipboardHistory = it },
                         onPasteFromSystem = {
-                            clipboardManager.getText()?.text?.let { text ->
-                                viewModel.onEvent(TerminalEvent.Paste(text))
-                            }
+                            viewModel.onEvent(TerminalEvent.PasteFromSystem)
                         },
                         onEvent = viewModel::onEvent,
                     )
@@ -269,6 +265,7 @@ fun TerminalScreen(
             response = uiState.claudeResponse,
             errorMessage = uiState.claudeError,
             onSend = { prompt -> viewModel.onEvent(TerminalEvent.SendToClaude(prompt)) },
+            onCopyResponse = { text -> viewModel.onEvent(TerminalEvent.CopyClaudeResponse(text)) },
             onDismiss = { viewModel.onEvent(TerminalEvent.HideSendToClaude) },
         )
     }

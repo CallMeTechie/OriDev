@@ -55,6 +55,8 @@ sealed class TerminalEvent {
     data object ConfirmPaste : TerminalEvent()
     data object CancelPaste : TerminalEvent()
     data class CopyToClipboard(val text: String) : TerminalEvent()
+    data class CopyClaudeResponse(val text: String) : TerminalEvent()
+    data object PasteFromSystem : TerminalEvent()
     data object ToggleKeyboard : TerminalEvent()
     data class UpdateSplitRatio(val ratio: Float) : TerminalEvent()
     data object ToggleSnippets : TerminalEvent()
