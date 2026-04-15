@@ -29,9 +29,9 @@ import javax.inject.Inject
  *  - `PAUSE_ALL` cancels every active worker; the worker's
  *    `CancellationException` handler flips each affected row to PAUSED.
  *  - `CANCEL_ALL` cancels every active worker and terminally marks every
- *    non-terminal row as FAILED with `"Cancelled by user"`. A dedicated
- *    `TransferStatus.CANCELLED` would be cleaner but requires a Room
- *    schema migration and is tracked as follow-up work.
+ *    non-terminal row as [TransferStatus.CANCELLED] (Tier 2 T2b). The
+ *    enum is stored as TEXT via Converters so no Room schema migration
+ *    was required when the value was added.
  *  - `RETRY` bumps `nextRetryAt = now` on the given transfer id and calls
  *    [TransferDispatcher.tryDispatch] immediately.
  */
@@ -122,8 +122,8 @@ internal class TransferEngineService : Service() {
             dispatcher.cancelWorker(entity.id)
             dao.updateStatus(
                 entity.id,
-                TransferStatus.FAILED,
-                "Cancelled by user",
+                TransferStatus.CANCELLED,
+                null,
                 now,
             )
         }

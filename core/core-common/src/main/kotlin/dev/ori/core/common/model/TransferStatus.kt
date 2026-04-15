@@ -6,8 +6,9 @@ enum class TransferStatus {
     PAUSED,
     COMPLETED,
     FAILED,
+    CANCELLED,
     ;
 
-    val isTerminal: Boolean get() = this == COMPLETED || this == FAILED
+    val isTerminal: Boolean get() = this == COMPLETED || this == FAILED || this == CANCELLED
     val isActive: Boolean get() = this == ACTIVE || this == QUEUED || this == PAUSED
 }

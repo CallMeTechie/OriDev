@@ -121,6 +121,45 @@ class TransferRecordDaoTest {
     }
 
     @Test
+    fun insert_cancelled_roundTripsThroughSchema() = runTest {
+        // Tier 2 T2b — adding TransferStatus.CANCELLED does not change the
+        // Room schema hash (enum stored as TEXT via Converters), so we must
+        // prove that inserting a CANCELLED row against the existing v3
+        // schema succeeds and that the value round-trips cleanly.
+        val id = dao.insert(record(status = TransferStatus.CANCELLED))
+
+        val row = dao.getById(id)!!
+        assertThat(row.status).isEqualTo(TransferStatus.CANCELLED)
+        assertThat(row.status.isTerminal).isTrue()
+        assertThat(row.status.isActive).isFalse()
+
+        // CANCELLED rows must not be counted as non-terminal (the
+        // foreground service uses observeNonTerminalCount to decide when
+        // to stopSelf()).
+        dao.observeNonTerminalCount().test {
+            assertThat(awaitItem()).isEqualTo(0)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun updateStatus_toCancelled_marksRowTerminal() = runTest {
+        val id = dao.insert(record(status = TransferStatus.ACTIVE))
+
+        dao.updateStatus(
+            id = id,
+            status = TransferStatus.CANCELLED,
+            error = null,
+            completedAt = 999L,
+        )
+
+        val row = dao.getById(id)!!
+        assertThat(row.status).isEqualTo(TransferStatus.CANCELLED)
+        assertThat(row.completedAt).isEqualTo(999L)
+        assertThat(row.errorMessage).isNull()
+    }
+
+    @Test
     fun scheduleRetry_setsNextRetryAtAndStatus() = runTest {
         val nowMillis = 50_000L
         val id = dao.insert(record(status = TransferStatus.ACTIVE, retryCount = 0))
