@@ -7,6 +7,8 @@ import dagger.hilt.components.SingletonComponent
 import dev.ori.core.security.KeyStoreManager
 import dev.ori.core.security.biometric.BiometricGate
 import dev.ori.core.security.biometric.BiometricGateImpl
+import dev.ori.core.security.biometric.BiometricPromptLauncher
+import dev.ori.core.security.biometric.RealBiometricPromptLauncher
 import dev.ori.domain.repository.CredentialStore
 import javax.inject.Singleton
 
@@ -21,4 +23,10 @@ abstract class SecurityModule {
     @Binds
     @Singleton
     abstract fun bindBiometricGate(impl: BiometricGateImpl): BiometricGate
+
+    @Binds
+    @Singleton
+    abstract fun bindBiometricPromptLauncher(
+        impl: RealBiometricPromptLauncher,
+    ): BiometricPromptLauncher
 }
