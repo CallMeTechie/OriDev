@@ -98,6 +98,54 @@ interface FtpClient {
     )
 
     /**
+     * Tier 2 T2a — dedicated resumable upload that owns its own `FTPClient`
+     * connection for the duration of the call.
+     *
+     * Unlike [uploadFileResumable], this overload does NOT touch the
+     * singleton-backed `FTPClient` field on [FtpClientImpl]. It creates a
+     * fresh `FTPClient` (or `FTPSClient` when [tls] is true), connects +
+     * authenticates, performs the resumable upload, and tears the connection
+     * down in a `finally` block — making it safe to call from multiple
+     * coroutines in parallel. Used by the Transfer Engine's
+     * `FtpTransferExecutor` so two concurrent FTP transfers can run without
+     * racing on shared field state.
+     *
+     * Password ownership: the caller retains ownership of the [password]
+     * CharArray and is responsible for zero-filling it after the call
+     * returns. This method does NOT wipe it — the executor needs to reuse
+     * the lookup from [dev.ori.domain.repository.CredentialStore] directly
+     * and wipe in its own `finally`.
+     */
+    suspend fun uploadFileResumableDedicated(
+        host: String,
+        port: Int,
+        username: String,
+        password: CharArray,
+        tls: Boolean,
+        localPath: String,
+        remotePath: String,
+        offsetBytes: Long,
+        onProgress: suspend (transferred: Long, total: Long) -> Unit = { _, _ -> },
+    )
+
+    /**
+     * Tier 2 T2a — dedicated resumable download that owns its own `FTPClient`
+     * connection for the duration of the call. See [uploadFileResumableDedicated]
+     * for the connection lifetime and password ownership contract.
+     */
+    suspend fun downloadFileResumableDedicated(
+        host: String,
+        port: Int,
+        username: String,
+        password: CharArray,
+        tls: Boolean,
+        remotePath: String,
+        localPath: String,
+        offsetBytes: Long,
+        onProgress: suspend (transferred: Long, total: Long) -> Unit = { _, _ -> },
+    )
+
+    /**
      * Phase 12 P12.5 — minimal stat helper the transfer engine calls to
      * decide whether a remote destination already exists (overwrite policy).
      * Returns `null` when [remotePath] does not exist, is a directory, or
