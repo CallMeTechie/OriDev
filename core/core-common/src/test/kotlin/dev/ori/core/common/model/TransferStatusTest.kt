@@ -29,4 +29,14 @@ class TransferStatusTest {
     fun completed_isNotActive() {
         assertThat(TransferStatus.COMPLETED.isActive).isFalse()
     }
+
+    @Test
+    fun cancelled_isTerminal() {
+        assertThat(TransferStatus.CANCELLED.isTerminal).isTrue()
+    }
+
+    @Test
+    fun cancelled_isNotActive() {
+        assertThat(TransferStatus.CANCELLED.isActive).isFalse()
+    }
 }

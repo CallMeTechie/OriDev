@@ -66,6 +66,7 @@ fun TransferItemCard(
         TransferStatus.PAUSED -> "pausiert"
         TransferStatus.COMPLETED -> "abgeschlossen"
         TransferStatus.FAILED -> "fehlgeschlagen"
+        TransferStatus.CANCELLED -> "abgebrochen"
     }
     val directionLabel = when (transfer.direction) {
         TransferDirection.UPLOAD -> "Upload"
@@ -186,6 +187,7 @@ private fun StatusAndActionsRow(
             TransferStatus.PAUSED -> "PAUSED" to OriStatusBadgeIntent.Paused
             TransferStatus.COMPLETED -> "COMPLETED" to OriStatusBadgeIntent.Completed
             TransferStatus.FAILED -> "FAILED" to OriStatusBadgeIntent.Failed
+            TransferStatus.CANCELLED -> "CANCELLED" to OriStatusBadgeIntent.Stopped
         }
         OriStatusBadge(label = label, intent = intent)
         ActionButtons(transfer, onPause, onResume, onCancel, onRetry)
@@ -237,6 +239,16 @@ private fun ActionButtons(
                 )
             }
             TransferStatus.FAILED -> {
+                SmallActionButton(
+                    LucideIcons.RotateCcw,
+                    "Übertragung erneut versuchen",
+                    Indigo500,
+                    onRetry,
+                )
+            }
+            TransferStatus.CANCELLED -> {
+                // Tier 2 T2b — cancelled transfers offer retry only
+                // (no pause/resume/cancel on a terminal row).
                 SmallActionButton(
                     LucideIcons.RotateCcw,
                     "Übertragung erneut versuchen",

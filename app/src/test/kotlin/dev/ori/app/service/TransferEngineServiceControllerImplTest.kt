@@ -86,12 +86,12 @@ class TransferEngineServiceControllerImplTest {
     }
 
     @Test
-    fun cancelTransfer_cancelsWorkerAndMarksFailed() = runTest {
+    fun cancelTransfer_cancelsWorkerAndMarksCancelled() = runTest {
         controller.cancelTransfer(42L)
 
         verify(exactly = 1) { dispatcher.cancelWorker(42L) }
         coVerify(exactly = 1) {
-            dao.updateStatus(42L, TransferStatus.FAILED, "Cancelled by user", any())
+            dao.updateStatus(42L, TransferStatus.CANCELLED, null, any())
         }
     }
 

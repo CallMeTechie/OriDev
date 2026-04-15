@@ -143,8 +143,8 @@ internal class TransferWorkerCoroutine(
             ConflictResolution.CANCEL -> {
                 repository.updateStatus(
                     id = transferId,
-                    status = TransferStatus.FAILED,
-                    error = "Cancelled by user at conflict prompt",
+                    status = TransferStatus.CANCELLED,
+                    error = null,
                     completedAt = nowProvider(),
                 )
                 null

@@ -66,14 +66,14 @@ internal class TransferEngineServiceControllerImpl @Inject constructor(
 
     override suspend fun cancelTransfer(id: Long) {
         dispatcher.cancelWorker(id)
-        // Phase 12 P12.5 uses FAILED+"Cancelled by user" as the terminal
-        // state for user-cancelled transfers. A dedicated
-        // TransferStatus.CANCELLED is tracked as follow-up work (requires
-        // a Room schema migration).
+        // Tier 2 T2b — dedicated CANCELLED terminal state replaces the
+        // Phase 12 P12.5 FAILED+"Cancelled by user" workaround. Enum is
+        // stored as TEXT via Converters so no Room schema change is
+        // required.
         dao.updateStatus(
             id,
-            TransferStatus.FAILED,
-            "Cancelled by user",
+            TransferStatus.CANCELLED,
+            null,
             System.currentTimeMillis(),
         )
     }
