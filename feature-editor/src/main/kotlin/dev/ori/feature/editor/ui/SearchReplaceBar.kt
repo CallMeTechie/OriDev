@@ -6,9 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -19,6 +16,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.ori.core.ui.icons.lucide.ChevronDown
+import dev.ori.core.ui.icons.lucide.ChevronUp
+import dev.ori.core.ui.icons.lucide.LucideIcons
 
 @Composable
 fun SearchReplaceBar(
@@ -58,10 +58,10 @@ fun SearchReplaceBar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             IconButton(onClick = onFindPrevious) {
-                Icon(Icons.Default.ArrowUpward, contentDescription = "Vorheriger Treffer")
+                Icon(LucideIcons.ChevronUp, contentDescription = "Vorheriger Treffer")
             }
             IconButton(onClick = onFindNext) {
-                Icon(Icons.Default.ArrowDownward, contentDescription = "Nächster Treffer")
+                Icon(LucideIcons.ChevronDown, contentDescription = "Nächster Treffer")
             }
             TextButton(onClick = onToggleCaseSensitive) {
                 Text(
