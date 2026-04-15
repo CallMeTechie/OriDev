@@ -37,6 +37,25 @@ dependencies {
     detektPlugins("io.gitlab.arturbosch.detekt:detekt-formatting:${libs.versions.detekt.get()}")
 }
 
+// KT-73255: opt into the future-safe Kotlin annotation-default-target so that
+// annotations declared on constructor `val` parameters (e.g. Hilt's
+// `@ApplicationContext`, `@Inject`, custom qualifiers) are applied to both
+// the parameter AND the generated property/field instead of only the
+// parameter. Without this flag the Kotlin compiler floods every build with
+// "This annotation is currently applied to the value parameter only, but in
+// the future it will also be applied to field" warnings. Applying the flag
+// here (rather than in each module's `kotlin { compilerOptions { ... } }`
+// block) keeps the setting centralised so future Kotlin upgrades that change
+// the default don't surprise us.
+// See https://youtrack.jetbrains.com/issue/KT-73255
+subprojects {
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+        compilerOptions {
+            freeCompilerArgs.add("-Xannotation-default-target=param-property")
+        }
+    }
+}
+
 // JaCoCo coverage for all subprojects with Kotlin
 subprojects {
     afterEvaluate {
