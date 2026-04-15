@@ -51,7 +51,9 @@ android {
         versionCode = vCode
         versionName = "$vMajor.$vMinor.$vPatch"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Tier 3 T3a — HiltTestRunner boots HiltTestApplication so @HiltAndroidTest
+        // classes can inject the real :app Hilt graph (with @TestInstallIn overrides).
+        testInstrumentationRunner = "dev.ori.app.HiltTestRunner"
 
         buildConfigField(
             "String",
@@ -187,6 +189,16 @@ dependencies {
     androidTestImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)
+
+    // Tier 3 T3a — Hilt instrumentation testing + AndroidX test rails.
+    androidTestImplementation(libs.hilt.android.testing)
+    kspAndroidTest(libs.hilt.android.compiler)
+    androidTestImplementation(libs.test.runner)
+    androidTestImplementation(libs.test.rules)
+    androidTestImplementation(libs.test.core)
+    androidTestImplementation(libs.test.ext.junit)
+    androidTestImplementation(libs.truth)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
 }
 
 tasks.withType<Test> {
