@@ -31,7 +31,7 @@ jobs:
           java-version: '21'
           cache: gradle
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       - name: Run detekt
         run: ./gradlew detekt
@@ -70,7 +70,7 @@ jobs:
           java-version: '21'
           cache: gradle
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # ------------------------------------------------------------
       # Semantic version bump based on head commit message.

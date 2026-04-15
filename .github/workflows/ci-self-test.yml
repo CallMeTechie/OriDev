@@ -27,7 +27,7 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # Forbidden-imports script positive control.
       # Should report 4 forbidden-pattern groups and exit 0. If the regex
