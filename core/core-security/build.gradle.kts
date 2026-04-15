@@ -32,7 +32,12 @@ dependencies {
     implementation(project(":domain"))
 
     implementation(libs.security.crypto)
-    implementation(libs.biometric)
+    // Phase 11 Tier-1 T1d — expose biometric (and its transitive androidx.fragment)
+    // via `api` so consumer modules can pass a FragmentActivity to
+    // CredentialUnlockGate.requireUnlock() without pulling the library in
+    // themselves. BiometricGate.authenticate also takes FragmentActivity, so
+    // this was always a public-API type.
+    api(libs.biometric)
     implementation(libs.datastore.preferences)
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)

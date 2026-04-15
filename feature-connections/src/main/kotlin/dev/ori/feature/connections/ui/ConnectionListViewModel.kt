@@ -1,9 +1,11 @@
 package dev.ori.feature.connections.ui
 
+import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.ori.core.common.result.getAppError
+import dev.ori.core.security.biometric.CredentialUnlockGate
 import dev.ori.domain.usecase.ConnectUseCase
 import dev.ori.domain.usecase.DeleteProfileUseCase
 import dev.ori.domain.usecase.DisconnectUseCase
@@ -27,6 +29,7 @@ class ConnectionListViewModel @Inject constructor(
     private val disconnectUseCase: DisconnectUseCase,
     private val deleteProfileUseCase: DeleteProfileUseCase,
     private val saveProfileUseCase: SaveProfileUseCase,
+    private val credentialUnlockGate: CredentialUnlockGate,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ConnectionListUiState())
@@ -83,6 +86,32 @@ class ConnectionListViewModel @Inject constructor(
             result.getAppError()?.let { error ->
                 _uiState.update { it.copy(error = error.message) }
             }
+        }
+    }
+
+    /**
+     * Phase 11 Tier-1 T1d — biometric gate wrapper for the connect flow.
+     * Called from [ConnectionListScreen] tap handler with the host
+     * [FragmentActivity] so [CredentialUnlockGate] can raise a BiometricPrompt
+     * when the user has enabled the unlock toggle. If the gate clears,
+     * dispatches the existing [ConnectionListEvent.Connect] pipeline; if it
+     * fails (user cancelled or sensor locked out), surfaces the error to
+     * [ConnectionListUiState.error].
+     */
+    fun unlockAndConnect(activity: FragmentActivity, profileId: Long) {
+        viewModelScope.launch {
+            val unlockResult = credentialUnlockGate.requireUnlock(
+                activity = activity,
+                title = "Verbindung entsperren",
+                subtitle = "Biometrie bestätigen, um Zugangsdaten zu laden",
+            )
+            if (unlockResult.isFailure) {
+                val message = unlockResult.exceptionOrNull()?.message
+                    ?: "Biometrie abgebrochen"
+                _uiState.update { it.copy(error = message) }
+                return@launch
+            }
+            connect(profileId)
         }
     }
 

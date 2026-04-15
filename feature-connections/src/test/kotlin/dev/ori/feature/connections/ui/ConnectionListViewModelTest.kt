@@ -5,6 +5,7 @@ import com.google.common.truth.Truth.assertThat
 import dev.ori.core.common.model.AuthMethod
 import dev.ori.core.common.model.Protocol
 import dev.ori.core.common.result.appSuccess
+import dev.ori.core.security.biometric.CredentialUnlockGate
 import dev.ori.domain.model.ServerProfile
 import dev.ori.domain.usecase.ConnectUseCase
 import dev.ori.domain.usecase.DeleteProfileUseCase
@@ -38,6 +39,7 @@ class ConnectionListViewModelTest {
     private val disconnectUseCase = mockk<DisconnectUseCase>()
     private val deleteProfileUseCase = mockk<DeleteProfileUseCase>()
     private val saveProfileUseCase = mockk<SaveProfileUseCase>()
+    private val credentialUnlockGate = mockk<CredentialUnlockGate>(relaxed = true)
 
     private val testProfile = ServerProfile(
         id = 1L,
@@ -69,6 +71,7 @@ class ConnectionListViewModelTest {
             disconnectUseCase = disconnectUseCase,
             deleteProfileUseCase = deleteProfileUseCase,
             saveProfileUseCase = saveProfileUseCase,
+            credentialUnlockGate = credentialUnlockGate,
         )
     }
 

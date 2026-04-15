@@ -1,5 +1,7 @@
 package dev.ori.feature.connections.ui
 
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,11 +33,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.common.model.Protocol
@@ -71,6 +75,12 @@ fun ConnectionListScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    // Phase 11 Tier-1 T1d — obtain the hosting FragmentActivity so the VM
+    // can forward it to CredentialUnlockGate for BiometricPrompt. Nullable
+    // to preserve @Preview rendering: the preview Context is not a
+    // FragmentActivity, so the tap handler falls back to the non-gated path.
+    val activity = LocalContext.current.findFragmentActivity()
+
     // Phase 11 carry-over #E — number of currently-connected sessions shown
     // as a pulsing pill in OriTopBar's indicator slot (e.g. "2 aktiv").
     val activeCount = uiState.activeConnections.count {
@@ -99,7 +109,14 @@ fun ConnectionListScreen(
             sheetState = sheetState,
             onDismiss = { selectedProfile = null },
             onConnect = {
-                viewModel.onEvent(ConnectionListEvent.Connect(profile.id))
+                // Phase 11 Tier-1 T1d — gate credential fetch behind the
+                // biometric preference. If we can't resolve a FragmentActivity
+                // (e.g. preview / test), fall through to the legacy flow.
+                if (activity != null) {
+                    viewModel.unlockAndConnect(activity, profile.id)
+                } else {
+                    viewModel.onEvent(ConnectionListEvent.Connect(profile.id))
+                }
                 selectedProfile = null
             },
             onDisconnect = {
@@ -247,6 +264,21 @@ fun ConnectionListScreen(
             }
         }
     }
+}
+
+/**
+ * Walks [ContextWrapper] chain to find a [FragmentActivity]. Returns null
+ * if the context is not hosted by one (Compose preview / unit test). This
+ * keeps the connection screen renderable in isolation while still letting
+ * the real activity flow through to [CredentialUnlockGate].
+ */
+private fun Context.findFragmentActivity(): FragmentActivity? {
+    var ctx: Context? = this
+    while (ctx is ContextWrapper) {
+        if (ctx is FragmentActivity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
 }
 
 /**
