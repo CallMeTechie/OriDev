@@ -11,6 +11,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.ori.app.R
 import dev.ori.feature.settings.data.AppPreferences
 import kotlinx.coroutines.flow.first
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -70,12 +71,7 @@ internal class TransferNotificationManager @Inject constructor(
         transferredBytes: Long,
         totalBytes: Long,
     ): Notification {
-        val contentText = if (activeCount == 0) {
-            "Preparing transfers"
-        } else {
-            val pluralS = if (activeCount == 1) "" else "s"
-            "$activeCount active transfer$pluralS"
-        }
+        val contentText = TransferNotificationText.aggregateTitle(activeCount)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle("Ori:Dev transfers")
@@ -97,9 +93,7 @@ internal class TransferNotificationManager @Inject constructor(
             )
 
         if (totalBytes > 0L) {
-            val percent = ((transferredBytes * PROGRESS_MAX) / totalBytes)
-                .toInt()
-                .coerceIn(0, PROGRESS_MAX)
+            val percent = TransferNotificationText.progressPercent(transferredBytes, totalBytes)
             builder.setProgress(PROGRESS_MAX, percent, false)
         } else {
             builder.setProgress(0, 0, true)
@@ -137,7 +131,7 @@ internal class TransferNotificationManager @Inject constructor(
         val verb = if (isUpload) "Uploaded" else "Downloaded"
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle("$verb $fileName")
-            .setContentText(formatSize(sizeBytes))
+            .setContentText(TransferNotificationText.humanReadableBytes(sizeBytes))
             .setSmallIcon(icon)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -197,13 +191,6 @@ internal class TransferNotificationManager @Inject constructor(
         )
     }
 
-    private fun formatSize(bytes: Long): String = when {
-        bytes >= ONE_GIB -> "%.2f GiB".format(bytes / ONE_GIB.toDouble())
-        bytes >= ONE_MIB -> "%.2f MiB".format(bytes / ONE_MIB.toDouble())
-        bytes >= ONE_KIB -> "%.2f KiB".format(bytes / ONE_KIB.toDouble())
-        else -> "$bytes B"
-    }
-
     companion object {
         const val CHANNEL_ID = "oridev_transfers"
         const val NOTIFICATION_ID_SERVICE = 2001
@@ -211,8 +198,52 @@ internal class TransferNotificationManager @Inject constructor(
         const val NOTIFICATION_ID_FAIL_BASE = 4000
         private const val PROGRESS_MAX = 100
         private const val RETRY_REQUEST_CODE_BASE = 10_000L
-        private const val ONE_KIB = 1024L
-        private const val ONE_MIB = 1024L * 1024L
-        private const val ONE_GIB = 1024L * 1024L * 1024L
+    }
+}
+
+/**
+ * Pure-Kotlin text formatting helpers extracted from [TransferNotificationManager]
+ * so they can be unit tested on the JVM without Robolectric.
+ *
+ * - [humanReadableBytes] — binary units ("512 B", "2.0 KiB", "5.0 MiB", "2.0 GiB").
+ * - [aggregateTitle] — content text for the foreground notification, e.g.
+ *   "Preparing transfers", "1 active transfer", "3 active transfers".
+ * - [aggregateBody] — "500 KiB / 1.0 MiB · 50%" style line; falls back to an
+ *   em-dash placeholder when the total is unknown (<= 0).
+ * - [progressPercent] — `(transferred / total * 100).toInt()` clamped to 0..100,
+ *   returning `0` for a zero/negative total.
+ */
+internal object TransferNotificationText {
+
+    private const val ONE_KIB = 1024L
+    private const val ONE_MIB = 1024L * 1024L
+    private const val ONE_GIB = 1024L * 1024L * 1024L
+    private const val PROGRESS_MAX = 100
+    private const val INDETERMINATE_BODY = "—"
+
+    fun humanReadableBytes(bytes: Long): String = when {
+        bytes >= ONE_GIB -> String.format(Locale.US, "%.1f GiB", bytes / ONE_GIB.toDouble())
+        bytes >= ONE_MIB -> String.format(Locale.US, "%.1f MiB", bytes / ONE_MIB.toDouble())
+        bytes >= ONE_KIB -> String.format(Locale.US, "%.1f KiB", bytes / ONE_KIB.toDouble())
+        else -> "$bytes B"
+    }
+
+    fun aggregateTitle(activeCount: Int): String = when {
+        activeCount <= 0 -> "Preparing transfers"
+        activeCount == 1 -> "1 active transfer"
+        else -> "$activeCount active transfers"
+    }
+
+    fun aggregateBody(transferred: Long, total: Long): String {
+        if (total <= 0L) return INDETERMINATE_BODY
+        val percent = progressPercent(transferred, total)
+        return "${humanReadableBytes(transferred)} / ${humanReadableBytes(total)} · $percent%"
+    }
+
+    fun progressPercent(transferred: Long, total: Long): Int {
+        if (total <= 0L) return 0
+        return ((transferred * PROGRESS_MAX) / total)
+            .toInt()
+            .coerceIn(0, PROGRESS_MAX)
     }
 }
