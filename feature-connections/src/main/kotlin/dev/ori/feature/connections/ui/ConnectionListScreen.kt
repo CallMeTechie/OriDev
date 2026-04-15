@@ -12,10 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,7 +50,9 @@ import dev.ori.core.ui.components.OriStatusBadgeIntent
 import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.icons.lucide.LucideIcons
 import dev.ori.core.ui.icons.lucide.Plus
+import dev.ori.core.ui.icons.lucide.Search
 import dev.ori.core.ui.icons.lucide.Server
+import dev.ori.core.ui.icons.lucide.Star
 import dev.ori.domain.model.ConnectionStatus
 import dev.ori.domain.model.ServerProfile
 import kotlinx.coroutines.launch
@@ -176,7 +174,7 @@ fun ConnectionListScreen(
                     placeholder = { Text("Search connections") },
                     leadingIcon = {
                         Icon(
-                            Icons.Default.Search,
+                            imageVector = LucideIcons.Search,
                             contentDescription = "Verbindungen durchsuchen",
                         )
                     },
@@ -322,13 +320,13 @@ private fun ServerProfileCard(
 
             Spacer(modifier = Modifier.width(8.dp))
 
+            // Phase 11 T1a — Lucide has a single Star outline; favorite
+            // vs non-favorite state is conveyed via `tint` (primary vs
+            // onSurfaceVariant) as an approximation of the M3 Filled
+            // Star / Outlined StarBorder pair.
             IconButton(onClick = onToggleFavorite) {
                 Icon(
-                    imageVector = if (profile.isFavorite) {
-                        Icons.Filled.Star
-                    } else {
-                        Icons.Outlined.StarBorder
-                    },
+                    imageVector = LucideIcons.Star,
                     contentDescription = if (profile.isFavorite) {
                         "Favorit entfernen"
                     } else {

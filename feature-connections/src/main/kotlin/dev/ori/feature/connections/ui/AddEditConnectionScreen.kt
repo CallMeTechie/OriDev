@@ -12,11 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -58,7 +53,11 @@ import dev.ori.core.common.model.AuthMethod
 import dev.ori.core.common.model.Protocol
 import dev.ori.core.ui.components.OriIconButton
 import dev.ori.core.ui.components.OriTopBar
+import dev.ori.core.ui.icons.lucide.ChevronDown
 import dev.ori.core.ui.icons.lucide.ChevronLeft
+import dev.ori.core.ui.icons.lucide.ChevronUp
+import dev.ori.core.ui.icons.lucide.Eye
+import dev.ori.core.ui.icons.lucide.EyeOff
 import dev.ori.core.ui.icons.lucide.LucideIcons
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -233,9 +232,9 @@ fun AddEditConnectionScreen(
                         IconButton(onClick = { passwordVisible = !passwordVisible }) {
                             Icon(
                                 imageVector = if (passwordVisible) {
-                                    Icons.Default.VisibilityOff
+                                    LucideIcons.EyeOff
                                 } else {
-                                    Icons.Default.Visibility
+                                    LucideIcons.Eye
                                 },
                                 contentDescription = if (passwordVisible) {
                                     "Passwort verbergen"
@@ -267,9 +266,9 @@ fun AddEditConnectionScreen(
             ) {
                 Icon(
                     imageVector = if (formState.isAdvancedExpanded) {
-                        Icons.Default.ExpandLess
+                        LucideIcons.ChevronUp
                     } else {
-                        Icons.Default.ExpandMore
+                        LucideIcons.ChevronDown
                     },
                     contentDescription = if (formState.isAdvancedExpanded) {
                         "Erweiterte Optionen einklappen"
