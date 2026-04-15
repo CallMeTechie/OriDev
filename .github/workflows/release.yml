@@ -1,9 +1,22 @@
 name: Release
 
+# Manual-only trigger. Branch protection blocks the release bot's direct
+# push of its chore(release) commit (GH006 protected-branch hook), so
+# auto-release-on-master-push is infeasible without admin bypass.
+# Releases now ship via either a workflow_dispatch with a bump selection
+# or by pushing a v*.*.* tag after a manual version.properties bump.
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        default: "patch"
+        type: choice
+        options: [patch, minor, major]
+  push:
+    tags:
+      - 'v*.*.*'
 
 # Serialize release jobs so that concurrent master pushes (e.g. a burst of
 # Dependabot merges) do not race each other for the final git push at the
@@ -26,7 +39,6 @@ jobs:
     name: Pre-Release Verification
     runs-on: ubuntu-latest
     # Skip on version-bump commits to prevent infinite loop
-    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
     steps:
       - uses: actions/checkout@v6
         with:
@@ -63,7 +75,6 @@ jobs:
     name: Build and Publish
     runs-on: ubuntu-latest
     needs: verify
-    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
     steps:
       - uses: actions/checkout@v6
         with:
@@ -85,48 +96,56 @@ jobs:
       # everything else        -> patch bump
       # BREAKING CHANGE / feat!: / fix!: -> major bump
       # ------------------------------------------------------------
-      - name: Determine version bump
+      - name: Determine version
         id: bump
         shell: bash
         env:
-          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          BUMP_INPUT: ${{ inputs.bump }}
+          REF_NAME: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -e
           source version.properties
           CURRENT="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
-          FIRST_LINE=$(echo "$COMMIT_MSG" | head -1)
 
-          if echo "$FIRST_LINE" | grep -qE '^(feat|fix|refactor|chore|ci|docs|style|test|build|perf)(\([^)]+\))?!:'; then
-            BUMP="major"
-          elif echo "$COMMIT_MSG" | grep -qE '^BREAKING CHANGE'; then
-            BUMP="major"
-          elif echo "$FIRST_LINE" | grep -qE '^feat(\([^)]+\))?:'; then
-            BUMP="minor"
+          if [ "$EVENT_NAME" = "push" ]; then
+            # Tag push path: the tag IS the new version. Do not bump.
+            # REF_NAME will be something like "v1.2.3".
+            NEW="${REF_NAME#v}"
+            IFS='.' read -r NEW_MAJOR NEW_MINOR NEW_PATCH <<< "$NEW"
+            NEW_CODE=$((VERSION_CODE + 1))
+            BUMP="tag"
+            TAG="$REF_NAME"
+            NEEDS_COMMIT="false"
           else
-            BUMP="patch"
+            # workflow_dispatch path: apply the selected bump to current.
+            BUMP="$BUMP_INPUT"
+            case "$BUMP" in
+              major)
+                NEW_MAJOR=$((VERSION_MAJOR + 1))
+                NEW_MINOR=0
+                NEW_PATCH=0
+                ;;
+              minor)
+                NEW_MAJOR=$VERSION_MAJOR
+                NEW_MINOR=$((VERSION_MINOR + 1))
+                NEW_PATCH=0
+                ;;
+              patch)
+                NEW_MAJOR=$VERSION_MAJOR
+                NEW_MINOR=$VERSION_MINOR
+                NEW_PATCH=$((VERSION_PATCH + 1))
+                ;;
+              *)
+                echo "::error::Invalid bump input: $BUMP"
+                exit 1
+                ;;
+            esac
+            NEW_CODE=$((VERSION_CODE + 1))
+            NEW="${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
+            TAG="v$NEW"
+            NEEDS_COMMIT="true"
           fi
-
-          case "$BUMP" in
-            major)
-              NEW_MAJOR=$((VERSION_MAJOR + 1))
-              NEW_MINOR=0
-              NEW_PATCH=0
-              ;;
-            minor)
-              NEW_MAJOR=$VERSION_MAJOR
-              NEW_MINOR=$((VERSION_MINOR + 1))
-              NEW_PATCH=0
-              ;;
-            patch)
-              NEW_MAJOR=$VERSION_MAJOR
-              NEW_MINOR=$VERSION_MINOR
-              NEW_PATCH=$((VERSION_PATCH + 1))
-              ;;
-          esac
-
-          NEW_CODE=$((VERSION_CODE + 1))
-          NEW="${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
-          TAG="v$NEW"
 
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
           echo "new=$NEW" >> "$GITHUB_OUTPUT"
@@ -136,6 +155,7 @@ jobs:
           echo "new_code=$NEW_CODE" >> "$GITHUB_OUTPUT"
           echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "needs_commit=$NEEDS_COMMIT" >> "$GITHUB_OUTPUT"
           echo "Version: $CURRENT -> $NEW ($BUMP)"
 
       - name: Check if tag already exists
@@ -307,37 +327,44 @@ jobs:
             echo "CHANGELOG_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Commit version bump and tag
+      - name: Tag release commit
         if: steps.check_tag.outputs.exists == 'false'
         shell: bash
         env:
           TAG: ${{ steps.bump.outputs.tag }}
           NEW_VERSION: ${{ steps.bump.outputs.new }}
+          NEEDS_COMMIT: ${{ steps.bump.outputs.needs_commit }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add version.properties
-          git commit -m "chore(release): v$NEW_VERSION"
-          git tag -a "$TAG" -m "Release $TAG"
 
-          # Retry-rebase loop: if another Release job beat us to master,
-          # fetch + rebase our version-bump commit on top and retry. The
-          # concurrency group above should already serialize runs, but this
-          # is a safety net for the short window between fetch and push.
-          for attempt in 1 2 3 4 5; do
-            if git push origin master && git push origin "$TAG"; then
-              echo "Push succeeded on attempt $attempt"
-              exit 0
-            fi
-            echo "Push attempt $attempt failed, rebasing onto origin/master..."
-            git fetch origin master
-            git rebase origin/master || {
-              echo "::error::Rebase conflict on version.properties — another release job ran concurrently. Aborting."
-              exit 1
-            }
-          done
-          echo "::error::Exhausted 5 push retries."
-          exit 1
+          if [ "$NEEDS_COMMIT" = "true" ]; then
+            # workflow_dispatch path: we changed version.properties above.
+            # Branch protection blocks direct pushes of chore(release)
+            # commits, so we open a PR against master with the bump
+            # instead of pushing directly. The tag is created locally and
+            # pushed separately (tag refs are not protected).
+            git add version.properties
+            git commit -m "chore(release): $TAG"
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+
+            BUMP_BRANCH="release/$TAG"
+            git checkout -b "$BUMP_BRANCH"
+            git push origin "$BUMP_BRANCH"
+            gh pr create \
+              --base master \
+              --head "$BUMP_BRANCH" \
+              --title "chore(release): $TAG" \
+              --body "Automated version bump created by the Release workflow. Merge after the release artifacts are verified."
+            echo "::notice::Version bump PR opened for $TAG — merge manually."
+          else
+            # Tag push path: the tag is already on origin; we just need to
+            # tag the current commit locally so subsequent steps see it.
+            # (Checkout already fetched the tag.)
+            echo "Tag $TAG already pushed; using as-is."
+          fi
 
       - name: Create GitHub Release
         if: steps.check_tag.outputs.exists == 'false'
