@@ -22,6 +22,12 @@ class FtpClientImpl @Inject constructor() : FtpClient {
     override val isConnected: Boolean
         get() = client?.isConnected == true
 
+    /**
+     * See [FtpClient.connect] for the security contract — this implementation
+     * zero-fills [password] in a `try/finally` on both success and failure
+     * paths. The intermediate `String(password)` passed to Commons Net
+     * `FTPClient.login` is a limitation of the Commons Net API.
+     */
     override suspend fun connect(
         host: String,
         port: Int,
@@ -29,16 +35,23 @@ class FtpClientImpl @Inject constructor() : FtpClient {
         password: CharArray,
         useTls: Boolean,
     ) = withContext(Dispatchers.IO) {
-        val ftpClient = if (useTls) FTPSClient(true) else FTPClient()
-        ftpClient.connect(host, port)
-        val loginSuccess = ftpClient.login(username, String(password))
-        if (!loginSuccess) {
-            ftpClient.disconnect()
-            throw IOException("FTP login failed for user: $username")
+        try {
+            val ftpClient = if (useTls) FTPSClient(true) else FTPClient()
+            ftpClient.connect(host, port)
+            // Commons Net FTPClient.login takes a String internally — we cannot avoid
+            // the transient JVM String allocation. The caller's CharArray IS wiped in
+            // the outer `finally`.
+            val loginSuccess = ftpClient.login(username, String(password))
+            if (!loginSuccess) {
+                ftpClient.disconnect()
+                throw IOException("FTP login failed for user: $username")
+            }
+            ftpClient.setFileType(FTP.BINARY_FILE_TYPE)
+            ftpClient.enterLocalPassiveMode()
+            client = ftpClient
+        } finally {
+            password.fill('\u0000')
         }
-        ftpClient.setFileType(FTP.BINARY_FILE_TYPE)
-        ftpClient.enterLocalPassiveMode()
-        client = ftpClient
     }
 
     override suspend fun disconnect() = withContext(Dispatchers.IO) {

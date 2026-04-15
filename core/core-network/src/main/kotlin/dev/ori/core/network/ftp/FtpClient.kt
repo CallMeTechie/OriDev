@@ -3,6 +3,20 @@ package dev.ori.core.network.ftp
 import dev.ori.core.network.model.RemoteFile
 
 interface FtpClient {
+    /**
+     * Connects and authenticates against [host]:[port] as [username] using
+     * the [password] char buffer.
+     *
+     * Security contract (Option 5 S1): the [password] buffer is **consumed**
+     * by this call — implementations zero-fill it (`Arrays.fill(..., '\u0000')`)
+     * in a `try/finally` on both the happy path and on exception.
+     *
+     * Known limitation: Apache Commons Net `FTPClient.login` takes a `String`
+     * internally, so the password will transit a JVM `String` object once
+     * during the login handshake. That `String` is then eligible for GC but
+     * may linger in the string pool until collected. The CharArray buffer
+     * owned by the caller IS wiped — that is the part we control.
+     */
     suspend fun connect(
         host: String,
         port: Int,
@@ -10,6 +24,32 @@ interface FtpClient {
         password: CharArray,
         useTls: Boolean = false,
     )
+
+    /**
+     * Deprecated String overload kept for backward compatibility. Converts
+     * the [password] String to a CharArray, delegates to the CharArray
+     * variant, and zero-fills the intermediate buffer. The original String
+     * remains in the JVM string pool until GC — new code should use the
+     * CharArray variant.
+     */
+    @Deprecated(
+        "Use CharArray variant for zero-fill security",
+        ReplaceWith("connect(host, port, username, password.toCharArray(), useTls)"),
+    )
+    suspend fun connect(
+        host: String,
+        port: Int,
+        username: String,
+        password: String,
+        useTls: Boolean = false,
+    ) {
+        val chars = password.toCharArray()
+        try {
+            connect(host, port, username, chars, useTls)
+        } finally {
+            chars.fill('\u0000')
+        }
+    }
 
     suspend fun disconnect()
 

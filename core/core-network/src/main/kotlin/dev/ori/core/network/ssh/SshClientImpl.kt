@@ -22,6 +22,13 @@ class SshClientImpl @Inject constructor(
 
     private val sessions = ConcurrentHashMap<String, SSHClient>()
 
+    /**
+     * See [SshClient.connect] for the security contract — this implementation
+     * zero-fills [password] in a `try/finally` on both success and failure
+     * paths. The intermediate `String(password)` passed to SSHJ's
+     * `authPassword` is a limitation of the SSHJ API and is tracked as a
+     * follow-up (Option 5 S1 known limitation).
+     */
     override suspend fun connect(
         host: String,
         port: Int,
@@ -29,40 +36,47 @@ class SshClientImpl @Inject constructor(
         password: CharArray?,
         privateKey: ByteArray?,
     ): SshSession {
-        val client = SSHClient()
-        client.addHostKeyVerifier(hostKeyVerifier)
-        client.connect(host, port)
-
         try {
-            when {
-                privateKey != null -> {
-                    val keyProvider = PKCS8KeyFile()
-                    keyProvider.init(InputStreamReader(ByteArrayInputStream(privateKey)))
-                    client.authPublickey(username, keyProvider)
+            val client = SSHClient()
+            client.addHostKeyVerifier(hostKeyVerifier)
+            client.connect(host, port)
+
+            try {
+                when {
+                    privateKey != null -> {
+                        val keyProvider = PKCS8KeyFile()
+                        keyProvider.init(InputStreamReader(ByteArrayInputStream(privateKey)))
+                        client.authPublickey(username, keyProvider)
+                    }
+                    password != null -> {
+                        // SSHJ's authPassword takes a String internally — we cannot avoid the
+                        // transient JVM String allocation. The caller's CharArray IS wiped in
+                        // the outer `finally`.
+                        client.authPassword(username, String(password))
+                    }
+                    else -> {
+                        throw IllegalArgumentException("Either password or private key must be provided")
+                    }
                 }
-                password != null -> {
-                    client.authPassword(username, String(password))
-                }
-                else -> {
-                    throw IllegalArgumentException("Either password or private key must be provided")
-                }
+
+                client.connection.keepAlive.keepAliveInterval = KEEPALIVE_INTERVAL_SECONDS
+
+                val sessionId = UUID.randomUUID().toString()
+                sessions[sessionId] = client
+
+                return SshSession(
+                    sessionId = sessionId,
+                    profileId = 0,
+                    host = host,
+                    port = port,
+                    connectedAt = System.currentTimeMillis(),
+                )
+            } catch (e: Exception) {
+                client.close()
+                throw e
             }
-
-            client.connection.keepAlive.keepAliveInterval = KEEPALIVE_INTERVAL_SECONDS
-
-            val sessionId = UUID.randomUUID().toString()
-            sessions[sessionId] = client
-
-            return SshSession(
-                sessionId = sessionId,
-                profileId = 0,
-                host = host,
-                port = port,
-                connectedAt = System.currentTimeMillis(),
-            )
-        } catch (e: Exception) {
-            client.close()
-            throw e
+        } finally {
+            password?.fill('\u0000')
         }
     }
 
