@@ -32,6 +32,9 @@ android {
 dependencies {
     implementation(project(":core:core-common"))
     implementation(project(":core:core-ui"))
+    // Phase 11 Tier-1 T1d — CredentialUnlockGate for biometric gating of
+    // connection-tap → credential-fetch. See ConnectionListViewModel.
+    implementation(project(":core:core-security"))
     implementation(project(":domain"))
 
     implementation(platform(libs.compose.bom))
@@ -45,6 +48,8 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.android.compiler)
     implementation(libs.navigation.compose)
+    // Phase 11 Tier-1 T1d — FragmentActivity type (for CredentialUnlockGate)
+    // comes transitively via :core:core-security → androidx.biometric.
 
     testImplementation(libs.junit5.api)
     testRuntimeOnly(libs.junit5.engine)
