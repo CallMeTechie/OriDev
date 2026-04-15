@@ -47,6 +47,7 @@ android {
         targetSdk = 36
         versionCode = vCode
         versionName = "$vMajor.$vMinor.$vPatch"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -111,6 +112,17 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.truth)
     testImplementation(libs.kotlinx.coroutines.test)
+
+    // Tier 3 T3b — Compose UI test infrastructure for :wear.
+    // OriWearCardTest uses createComposeRule(); compose-ui-test-manifest must be
+    // on debugImplementation so the test-only Activity manifest entry is merged
+    // into the androidTest APK.
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.test.runner)
+    androidTestImplementation(libs.test.ext.junit)
+    androidTestImplementation(libs.truth)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
 
 tasks.withType<Test> {
