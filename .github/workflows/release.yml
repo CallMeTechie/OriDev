@@ -5,6 +5,13 @@ on:
     branches: [master]
   workflow_dispatch:
 
+# Serialize release jobs so that concurrent master pushes (e.g. a burst of
+# Dependabot merges) do not race each other for the final git push at the
+# end of the build.
+concurrency:
+  group: release-master
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
@@ -312,8 +319,25 @@ jobs:
           git add version.properties
           git commit -m "chore(release): v$NEW_VERSION"
           git tag -a "$TAG" -m "Release $TAG"
-          git push origin master
-          git push origin "$TAG"
+
+          # Retry-rebase loop: if another Release job beat us to master,
+          # fetch + rebase our version-bump commit on top and retry. The
+          # concurrency group above should already serialize runs, but this
+          # is a safety net for the short window between fetch and push.
+          for attempt in 1 2 3 4 5; do
+            if git push origin master && git push origin "$TAG"; then
+              echo "Push succeeded on attempt $attempt"
+              exit 0
+            fi
+            echo "Push attempt $attempt failed, rebasing onto origin/master..."
+            git fetch origin master
+            git rebase origin/master || {
+              echo "::error::Rebase conflict on version.properties — another release job ran concurrently. Aborting."
+              exit 1
+            }
+          done
+          echo "::error::Exhausted 5 push retries."
+          exit 1
 
       - name: Create GitHub Release
         if: steps.check_tag.outputs.exists == 'false'
