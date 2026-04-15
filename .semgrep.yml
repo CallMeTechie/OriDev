@@ -7,14 +7,12 @@ rules:
     message: >
       Feature modules must use Lucide vendored icons from
       dev.ori.core.ui.icons.lucide.*, not androidx.compose.material.icons.
-      NOTE: this rule is WARNING because Phase 11 P2 migration is still in
-      progress. The authoritative ERROR gate for NEW violations on the PR
-      diff lives in .github/ci/check-forbidden-imports.sh — that script
-      runs per-file against added lines only and blocks regressions. This
-      semgrep rule is a whole-tree tracker; once P2 migration finishes and
-      the finding count reaches zero, promote this rule to ERROR.
+      Phase 11 P2 migration is complete — this rule is an ERROR gate.
+      The complementary per-diff gate in .github/ci/check-forbidden-imports.sh
+      blocks new regressions on added lines; this semgrep rule is the
+      whole-tree enforcer and must stay at zero findings.
     languages: [kotlin]
-    severity: WARNING
+    severity: ERROR
     paths:
       include:
         - "feature-connections/src/main/**/*.kt"
@@ -56,20 +54,27 @@ rules:
   # Security: clipboard text writes that skip EXTRA_IS_SENSITIVE. On Android
   # 13+ this flag tells the OS preview overlay to redact the value.
   - id: oridev-clipboard-missing-sensitive-flag
-    pattern-either:
-      - pattern: $CM.setPrimaryClip(ClipData.newPlainText(...))
-      - pattern: $CM.setText(...)
+    pattern: $CM.setPrimaryClip(ClipData.newPlainText(...))
     message: >
       Clipboard writes must set EXTRA_IS_SENSITIVE on Android 13+ so the
-      preview overlay redacts the value. Use a helper from core-security.
+      preview overlay redacts the value. Route the call through
+      dev.ori.core.security.clipboard.OriClipboard.copy() instead of
+      calling ClipboardManager.setPrimaryClip() directly — OriClipboard
+      is the single authoritative writer and applies the sensitive flag
+      plus the auto-clear timer uniformly.
     languages: [kotlin]
-    severity: WARNING
+    severity: ERROR
     paths:
       include:
         - "**/*.kt"
       exclude:
         - "**/test/**"
         - "**/androidTest/**"
+        # The authoritative clipboard writer. SystemClipSink.write() sets
+        # EXTRA_IS_SENSITIVE via ClipDescription.extras before calling
+        # setPrimaryClip(). Every other caller in the codebase must go
+        # through OriClipboard.copy(), which routes through this file.
+        - "core/core-security/src/main/kotlin/dev/ori/core/security/clipboard/**"
 
   # Security: hardcoded credentials / tokens / API keys in Kotlin sources.
   - id: oridev-no-hardcoded-secrets

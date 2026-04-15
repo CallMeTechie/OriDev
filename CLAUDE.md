@@ -67,11 +67,29 @@ runs them on every PR and push to master. To run locally:
     semgrep --config .semgrep.yml --no-git-ignore --error .
 
 ERROR-severity findings block the PR; WARNING-severity findings are advisory
-and surfaced in the PR check log but don't fail CI. The current rules cover
-Material Icons leakage in feature modules (tracker, WARNING until Phase 11
-P2 finishes), `String` passwords in network/security/data, clipboard writes
-without `EXTRA_IS_SENSITIVE`, hardcoded secrets, and SSH `PromiscuousVerifier`
-(host-key bypass).
+and surfaced in the PR check log but don't fail CI.
+
+ERROR rules (hard CI gate):
+- `oridev-no-material-icons-in-features` — Material Icons imports in any
+  feature module or `wear/`. Use Lucide vendored icons from
+  `dev.ori.core.ui.icons.lucide.*` instead. Complements the per-diff
+  shell gate in `.github/ci/check-forbidden-imports.sh`.
+- `oridev-clipboard-missing-sensitive-flag` — direct calls to
+  `ClipboardManager.setPrimaryClip(ClipData.newPlainText(...))`. All
+  clipboard writes must go through
+  `dev.ori.core.security.clipboard.OriClipboard.copy()`, which is the
+  single authoritative writer and applies `EXTRA_IS_SENSITIVE` plus
+  the auto-clear timer. The `OriClipboard` file itself is the only
+  excluded path.
+- `oridev-ssh-strict-host-key-required` — no `PromiscuousVerifier()` in
+  `core-network` or `data/`. TOFU verification via `KnownHostRepository`.
+
+WARNING rules (advisory):
+- `oridev-password-must-be-char-array` — `String` passwords in network,
+  security, or data layers. Passwords must be `CharArray` so callers can
+  zero-fill them.
+- `oridev-no-hardcoded-secrets` — literal `password=`/`token=`/`api_key=`
+  values 16+ chars long anywhere in Kotlin sources.
 
 ## Build
 
