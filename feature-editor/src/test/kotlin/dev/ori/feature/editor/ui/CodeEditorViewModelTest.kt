@@ -4,9 +4,11 @@ import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import dev.ori.core.common.feature.FeatureGateManager
 import dev.ori.core.common.feature.PremiumFeature
+import dev.ori.domain.model.FileItem
 import dev.ori.domain.repository.FileSystemRepository
 import dev.ori.domain.repository.LineDiffProvider
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -203,6 +205,147 @@ class CodeEditorViewModelTest {
         val tab = vm.uiState.value.activeTab!!
         assertThat(tab.content).isEmpty()
         assertThat(tab.error).contains("Binary")
+    }
+
+    // --- Phase 11 P4.3 — remote file picker events ---
+
+    private fun fileItem(name: String, isDirectory: Boolean, parent: String = "/storage/emulated/0"): FileItem =
+        FileItem(name = name, path = "$parent/$name", isDirectory = isDirectory)
+
+    @Test
+    fun showPicker_localFileSystem_loadsEntriesFromLocalRepo() = runTest {
+        coEvery { localRepo.getFileContent(any()) } returns "x".toByteArray()
+        val entries = listOf(
+            fileItem("zeta", isDirectory = true),
+            fileItem("Alpha", isDirectory = true),
+            fileItem("readme.md", isDirectory = false),
+        )
+        coEvery { localRepo.listFiles("/storage/emulated/0") } returns entries
+
+        val vm = createViewModel()
+        vm.onEvent(CodeEditorEvent.ShowPicker(isRemote = false, startPath = "/storage/emulated/0"))
+
+        val picker = vm.uiState.value.pickerState
+        assertThat(picker).isNotNull()
+        assertThat(picker!!.isRemote).isFalse()
+        assertThat(picker.currentPath).isEqualTo("/storage/emulated/0")
+        assertThat(picker.entries).hasSize(3)
+        assertThat(picker.isLoading).isFalse()
+        assertThat(picker.error).isNull()
+        // Sorted: directories first, then case-insensitive alpha.
+        assertThat(picker.entries.map { it.name }).containsExactly("Alpha", "zeta", "readme.md").inOrder()
+    }
+
+    @Test
+    fun showPicker_remoteFileSystem_loadsFromRemoteRepo() = runTest {
+        coEvery { localRepo.getFileContent(any()) } returns "x".toByteArray()
+        val entries = listOf(
+            FileItem(name = "etc", path = "/etc", isDirectory = true),
+            FileItem(name = "var", path = "/var", isDirectory = true),
+            FileItem(name = "hosts", path = "/hosts", isDirectory = false),
+        )
+        coEvery { remoteRepo.listFiles("/") } returns entries
+
+        val vm = createViewModel()
+        vm.onEvent(CodeEditorEvent.ShowPicker(isRemote = true, startPath = "/"))
+
+        val picker = vm.uiState.value.pickerState
+        assertThat(picker).isNotNull()
+        assertThat(picker!!.isRemote).isTrue()
+        assertThat(picker.currentPath).isEqualTo("/")
+        assertThat(picker.entries).hasSize(3)
+        assertThat(picker.isLoading).isFalse()
+        assertThat(picker.error).isNull()
+        assertThat(picker.entries.map { it.name }).containsExactly("etc", "var", "hosts").inOrder()
+        coVerify { remoteRepo.listFiles("/") }
+    }
+
+    @Test
+    fun pickerNavigate_updatesPathAndReloadsEntries() = runTest {
+        coEvery { localRepo.getFileContent(any()) } returns "x".toByteArray()
+        coEvery { localRepo.listFiles("/storage/emulated/0") } returns listOf(
+            fileItem("Documents", isDirectory = true),
+        )
+        coEvery { localRepo.listFiles("/storage/emulated/0/Documents") } returns listOf(
+            FileItem("notes.txt", "/storage/emulated/0/Documents/notes.txt", isDirectory = false),
+            FileItem("work", "/storage/emulated/0/Documents/work", isDirectory = true),
+        )
+
+        val vm = createViewModel()
+        vm.onEvent(CodeEditorEvent.ShowPicker(isRemote = false, startPath = "/storage/emulated/0"))
+        vm.onEvent(CodeEditorEvent.PickerNavigate("/storage/emulated/0/Documents"))
+
+        val picker = vm.uiState.value.pickerState!!
+        assertThat(picker.currentPath).isEqualTo("/storage/emulated/0/Documents")
+        assertThat(picker.entries.map { it.name }).containsExactly("work", "notes.txt").inOrder()
+        assertThat(picker.isLoading).isFalse()
+    }
+
+    @Test
+    fun pickerSetRemote_togglesToRemoteWithRootPath() = runTest {
+        coEvery { localRepo.getFileContent(any()) } returns "x".toByteArray()
+        coEvery { localRepo.listFiles("/storage/emulated/0") } returns emptyList()
+        coEvery { remoteRepo.listFiles("/") } returns listOf(
+            FileItem("home", "/home", isDirectory = true),
+        )
+
+        val vm = createViewModel()
+        vm.onEvent(CodeEditorEvent.ShowPicker(isRemote = false, startPath = "/storage/emulated/0"))
+        vm.onEvent(CodeEditorEvent.PickerSetRemote(true))
+
+        val picker = vm.uiState.value.pickerState!!
+        assertThat(picker.isRemote).isTrue()
+        assertThat(picker.currentPath).isEqualTo("/")
+        assertThat(picker.entries.map { it.name }).containsExactly("home")
+        coVerify { remoteRepo.listFiles("/") }
+    }
+
+    @Test
+    fun pickerSetRemote_togglesToLocalWithDefaultPath() = runTest {
+        coEvery { localRepo.getFileContent(any()) } returns "x".toByteArray()
+        coEvery { remoteRepo.listFiles("/") } returns emptyList()
+        coEvery { localRepo.listFiles("/storage/emulated/0") } returns listOf(
+            fileItem("Downloads", isDirectory = true),
+        )
+
+        val vm = createViewModel()
+        vm.onEvent(CodeEditorEvent.ShowPicker(isRemote = true, startPath = "/"))
+        vm.onEvent(CodeEditorEvent.PickerSetRemote(false))
+
+        val picker = vm.uiState.value.pickerState!!
+        assertThat(picker.isRemote).isFalse()
+        assertThat(picker.currentPath).isEqualTo("/storage/emulated/0")
+        assertThat(picker.entries.map { it.name }).containsExactly("Downloads")
+        coVerify { localRepo.listFiles("/storage/emulated/0") }
+    }
+
+    @Test
+    fun hidePicker_clearsPickerState() = runTest {
+        coEvery { localRepo.getFileContent(any()) } returns "x".toByteArray()
+        coEvery { localRepo.listFiles(any()) } returns emptyList()
+
+        val vm = createViewModel()
+        vm.onEvent(CodeEditorEvent.ShowPicker(isRemote = false, startPath = "/storage/emulated/0"))
+        assertThat(vm.uiState.value.pickerState).isNotNull()
+
+        vm.onEvent(CodeEditorEvent.HidePicker)
+
+        assertThat(vm.uiState.value.pickerState).isNull()
+    }
+
+    @Test
+    fun showPicker_listFilesThrows_setsErrorInPickerState() = runTest {
+        coEvery { localRepo.getFileContent(any()) } returns "x".toByteArray()
+        coEvery { localRepo.listFiles("/storage/emulated/0") } throws RuntimeException("permission denied")
+
+        val vm = createViewModel()
+        vm.onEvent(CodeEditorEvent.ShowPicker(isRemote = false, startPath = "/storage/emulated/0"))
+
+        val picker = vm.uiState.value.pickerState!!
+        assertThat(picker.error).isNotNull()
+        assertThat(picker.error).contains("permission denied")
+        assertThat(picker.entries).isEmpty()
+        assertThat(picker.isLoading).isFalse()
     }
 
     @Test
