@@ -167,6 +167,7 @@ dependencies {
     implementation(libs.hilt.work)
     ksp(libs.hilt.compiler)
 
+    implementation(libs.play.services.ads)
     implementation(libs.play.services.wearable)
     implementation(libs.kotlinx.coroutines.play.services)
 
