@@ -35,6 +35,7 @@ tasks.withType<Test> {
 
 dependencies {
     implementation(project(":core:core-ui"))
+    implementation(project(":core-ads"))
     implementation(project(":core-billing"))
     implementation(project(":domain"))
 

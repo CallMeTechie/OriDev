@@ -165,6 +165,57 @@ run_grep \
     '^import[[:space:]]+androidx\.compose\.material3\.\*$' \
     'feature-*'
 
+# 5) Cross-feature imports — feature modules must not import from other feature
+#    modules EXCEPT the explicitly allowed symbols below:
+#      - dev.ori.feature.premium.ui.AdSlotHost  (ad placement host composable)
+#      - dev.ori.feature.premium.ui.PremiumGate  (premium gating composable)
+#    Any other dev.ori.feature.* import inside a feature-* source file is
+#    forbidden. We cannot use a negative lookahead in ERE, so we run a two-pass
+#    check: first find ALL cross-feature imports, then filter out the allowlist.
+
+CROSS_FEATURE_ALLOWLIST=(
+    'dev.ori.feature.premium.ui.AdSlotHost'
+    'dev.ori.feature.premium.ui.PremiumGate'
+)
+
+for f in "${scope_files[@]}"; do
+    [ -z "$f" ] && continue
+    # Only check feature-* source files
+    case "$f" in
+        feature-*) ;;
+        *) continue ;;
+    esac
+    # Self-test fixture bypass
+    if [ "$self_test" = "true" ]; then
+        case "$f" in
+            feature-*) ;;
+            *) continue ;;
+        esac
+    fi
+    local_content="${added_lines[$f]}"
+    [ -z "$local_content" ] && continue
+    # Find cross-feature imports (import dev.ori.feature.XXX.*)
+    cross_imports=$(printf '%s\n' "$local_content" \
+        | grep -E '^import[[:space:]]+dev\.ori\.feature\.[a-z]+\.' || true)
+    [ -z "$cross_imports" ] && continue
+    # Filter out self-imports: extract module name from file path (e.g.
+    # feature-transfers -> transfers) and skip imports from that module.
+    module_name=$(echo "$f" | sed 's|^feature-||; s|/.*||')
+    cross_imports=$(printf '%s\n' "$cross_imports" \
+        | grep -vE "^import[[:space:]]+dev\.ori\.feature\.${module_name}\." || true)
+    [ -z "$cross_imports" ] && continue
+    # Filter out allowlisted symbols
+    for allowed in "${CROSS_FEATURE_ALLOWLIST[@]}"; do
+        escaped=$(printf '%s' "$allowed" | sed 's/\./\\./g')
+        cross_imports=$(printf '%s\n' "$cross_imports" \
+            | grep -vE "^import[[:space:]]+${escaped}$" || true)
+    done
+    [ -z "$cross_imports" ] && continue
+    echo "::error::Cross-feature import detected. Feature modules may only import AdSlotHost and PremiumGate from feature-premium."
+    printf '%s\n' "$cross_imports" | sed "s|^|$f: |"
+    fail=1
+done
+
 # ---- Self-test verdict -------------------------------------------------------
 
 if [ "$self_test" = "true" ]; then

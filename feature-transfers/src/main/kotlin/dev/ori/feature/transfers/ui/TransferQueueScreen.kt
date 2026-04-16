@@ -42,8 +42,10 @@ import dev.ori.core.ui.icons.lucide.Pause
 import dev.ori.core.ui.icons.lucide.X
 import dev.ori.core.ui.theme.Gray500
 import dev.ori.core.ui.theme.Indigo500
+import dev.ori.domain.model.AdSlot
 import dev.ori.domain.model.ConflictRequest
 import dev.ori.domain.model.ConflictResolution
+import dev.ori.feature.premium.ui.AdSlotHost
 
 @Composable
 fun TransferQueueScreen(
@@ -138,6 +140,10 @@ fun TransferQueueScreen(
                     TransferList(
                         transfers = uiState.transfers,
                         onEvent = viewModel::onEvent,
+                    )
+                    AdSlotHost(
+                        slot = AdSlot.TRANSFER_QUEUE_INLINE,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
             }

@@ -57,8 +57,10 @@ import dev.ori.core.ui.icons.lucide.Plus
 import dev.ori.core.ui.icons.lucide.Search
 import dev.ori.core.ui.icons.lucide.Server
 import dev.ori.core.ui.icons.lucide.Star
+import dev.ori.domain.model.AdSlot
 import dev.ori.domain.model.ConnectionStatus
 import dev.ori.domain.model.ServerProfile
+import dev.ori.feature.premium.ui.AdSlotHost
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -239,24 +241,31 @@ fun ConnectionListScreen(
                             modifier = Modifier.fillMaxSize(),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            items(
-                                items = filteredProfiles,
-                                key = { it.id },
-                            ) { profile ->
-                                val isConnected = uiState.activeConnections.any {
-                                    it.profileId == profile.id &&
-                                        it.status == ConnectionStatus.CONNECTED
-                                }
-                                ServerProfileCard(
-                                    profile = profile,
-                                    isConnected = isConnected,
-                                    onClick = { selectedProfile = profile },
-                                    onToggleFavorite = {
-                                        viewModel.onEvent(
-                                            ConnectionListEvent.ToggleFavorite(profile),
+                            filteredProfiles.forEachIndexed { index, profile ->
+                                if (index == 3) {
+                                    item(key = "ad_native") {
+                                        AdSlotHost(
+                                            slot = AdSlot.CONNECTION_LIST_NATIVE,
+                                            modifier = Modifier.padding(horizontal = 16.dp),
                                         )
-                                    },
-                                )
+                                    }
+                                }
+                                item(key = profile.id) {
+                                    val isConnected = uiState.activeConnections.any {
+                                        it.profileId == profile.id &&
+                                            it.status == ConnectionStatus.CONNECTED
+                                    }
+                                    ServerProfileCard(
+                                        profile = profile,
+                                        isConnected = isConnected,
+                                        onClick = { selectedProfile = profile },
+                                        onToggleFavorite = {
+                                            viewModel.onEvent(
+                                                ConnectionListEvent.ToggleFavorite(profile),
+                                            )
+                                        },
+                                    )
+                                }
                             }
                         }
                     }
