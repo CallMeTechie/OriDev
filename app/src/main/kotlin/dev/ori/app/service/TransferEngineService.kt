@@ -56,11 +56,19 @@ internal class TransferEngineService : Service() {
     override fun onCreate() {
         super.onCreate()
         val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+        val wifiMode = if (android.os.Build.VERSION.SDK_INT >= 34) {
+            android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+        } else {
+            @Suppress("DEPRECATION")
+            android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
+        }
         wifiLock = wifiManager.createWifiLock(
-            if (android.os.Build.VERSION.SDK_INT >= 34) android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY
-            else @Suppress("DEPRECATION") android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF,
+            wifiMode,
             "oridev:transfers",
-        ).apply { setReferenceCounted(false); acquire() }
+        ).apply {
+            setReferenceCounted(false)
+            acquire()
+        }
         startForeground(
             TransferNotificationManager.NOTIFICATION_ID_SERVICE,
             transferNotificationManager.buildAggregateNotification(

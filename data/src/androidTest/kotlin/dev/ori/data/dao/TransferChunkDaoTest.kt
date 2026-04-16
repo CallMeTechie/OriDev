@@ -2,6 +2,7 @@ package dev.ori.data.dao
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import dev.ori.core.common.model.AuthMethod
 import dev.ori.core.common.model.Protocol
@@ -16,7 +17,6 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import androidx.test.ext.junit.runners.AndroidJUnit4
 
 @RunWith(AndroidJUnit4::class)
 class TransferChunkDaoTest {
@@ -69,8 +69,10 @@ class TransferChunkDaoTest {
     @Test
     fun upsertChunk_newRow_insertsAndReturnsId() = runTest {
         val chunk = TransferChunkEntity(
-            transferId = transferId, chunkIndex = 0,
-            offsetBytes = 0, lengthBytes = 64 * 1024 * 1024,
+            transferId = transferId,
+            chunkIndex = 0,
+            offsetBytes = 0,
+            lengthBytes = 64 * 1024 * 1024,
         )
         val id = dao.upsert(chunk)
         assertThat(id).isGreaterThan(0)
@@ -81,16 +83,44 @@ class TransferChunkDaoTest {
 
     @Test
     fun getByTransferId_multipleChunks_orderedByIndex() = runTest {
-        dao.upsert(TransferChunkEntity(transferId = transferId, chunkIndex = 2, offsetBytes = 128_000_000, lengthBytes = 64_000_000))
-        dao.upsert(TransferChunkEntity(transferId = transferId, chunkIndex = 0, offsetBytes = 0, lengthBytes = 64_000_000))
-        dao.upsert(TransferChunkEntity(transferId = transferId, chunkIndex = 1, offsetBytes = 64_000_000, lengthBytes = 64_000_000))
+        dao.upsert(
+            TransferChunkEntity(
+                transferId = transferId,
+                chunkIndex = 2,
+                offsetBytes = 128_000_000,
+                lengthBytes = 64_000_000,
+            ),
+        )
+        dao.upsert(
+            TransferChunkEntity(
+                transferId = transferId,
+                chunkIndex = 0,
+                offsetBytes = 0,
+                lengthBytes = 64_000_000,
+            ),
+        )
+        dao.upsert(
+            TransferChunkEntity(
+                transferId = transferId,
+                chunkIndex = 1,
+                offsetBytes = 64_000_000,
+                lengthBytes = 64_000_000,
+            ),
+        )
         val chunks = dao.getByTransferId(transferId)
         assertThat(chunks.map { it.chunkIndex }).isEqualTo(listOf(0, 1, 2))
     }
 
     @Test
     fun updateChunkStatus_updatesRow() = runTest {
-        val id = dao.upsert(TransferChunkEntity(transferId = transferId, chunkIndex = 0, offsetBytes = 0, lengthBytes = 100))
+        val id = dao.upsert(
+            TransferChunkEntity(
+                transferId = transferId,
+                chunkIndex = 0,
+                offsetBytes = 0,
+                lengthBytes = 100,
+            ),
+        )
         dao.updateStatus(id, "COMPLETED", null)
         val chunk = dao.getByTransferId(transferId).single()
         assertThat(chunk.status).isEqualTo("COMPLETED")
@@ -99,8 +129,22 @@ class TransferChunkDaoTest {
 
     @Test
     fun deleteByTransferId_removesAllRows() = runTest {
-        dao.upsert(TransferChunkEntity(transferId = transferId, chunkIndex = 0, offsetBytes = 0, lengthBytes = 100))
-        dao.upsert(TransferChunkEntity(transferId = transferId, chunkIndex = 1, offsetBytes = 100, lengthBytes = 100))
+        dao.upsert(
+            TransferChunkEntity(
+                transferId = transferId,
+                chunkIndex = 0,
+                offsetBytes = 0,
+                lengthBytes = 100,
+            ),
+        )
+        dao.upsert(
+            TransferChunkEntity(
+                transferId = transferId,
+                chunkIndex = 1,
+                offsetBytes = 100,
+                lengthBytes = 100,
+            ),
+        )
         dao.deleteByTransferId(transferId)
         assertThat(dao.getByTransferId(transferId)).isEmpty()
     }

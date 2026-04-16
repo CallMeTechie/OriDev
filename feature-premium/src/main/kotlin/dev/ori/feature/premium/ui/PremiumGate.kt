@@ -10,6 +10,9 @@ fun PremiumGate(
     onUpgradeTap: () -> Unit,
     content: @Composable () -> Unit,
 ) {
-    if (isPremium) content()
-    else PremiumUpsellCard(featureKey = featureKey, onUpgradeTap = onUpgradeTap)
+    if (isPremium) {
+        content()
+    } else {
+        PremiumUpsellCard(featureKey = featureKey, onUpgradeTap = onUpgradeTap)
+    }
 }

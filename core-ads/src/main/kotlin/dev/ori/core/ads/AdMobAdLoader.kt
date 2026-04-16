@@ -23,17 +23,16 @@ class AdMobAdLoader @Inject constructor(
     private val adViews = ConcurrentHashMap<AdSlot, AdView>()
     private val nativeAds = ConcurrentHashMap<AdSlot, NativeAd>()
 
-    private fun bannerUnitId(@Suppress("UNUSED_PARAMETER") slot: AdSlot): String =
-        "ca-app-pub-3940256099942544/6300978111" // Google test banner
-
-    private fun nativeUnitId(@Suppress("UNUSED_PARAMETER") slot: AdSlot): String =
-        "ca-app-pub-3940256099942544/2247696110" // Google test native
+    companion object {
+        private const val BANNER_UNIT_ID = "ca-app-pub-3940256099942544/6300978111" // Google test banner
+        private const val NATIVE_UNIT_ID = "ca-app-pub-3940256099942544/2247696110" // Google test native
+    }
 
     override suspend fun loadBanner(slot: AdSlot): AdLoadResult =
         suspendCancellableCoroutine { cont ->
             val adView = AdView(context).apply {
                 setAdSize(AdSize.BANNER)
-                adUnitId = bannerUnitId(slot)
+                adUnitId = BANNER_UNIT_ID
             }
             adView.adListener = object : AdListener() {
                 override fun onAdLoaded() {
@@ -43,11 +42,15 @@ class AdMobAdLoader @Inject constructor(
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
                     if (error.code == AdRequest.ERROR_CODE_NO_FILL) {
-                        if (cont.isActive) cont.resume(AdLoadResult.NoFill)
+                        if (cont.isActive) {
+                            cont.resume(AdLoadResult.NoFill)
+                        }
                     } else {
-                        if (cont.isActive) cont.resume(
-                            AdLoadResult.Failed(error.code, error.message),
-                        )
+                        if (cont.isActive) {
+                            cont.resume(
+                                AdLoadResult.Failed(error.code, error.message),
+                            )
+                        }
                     }
                 }
             }
@@ -62,18 +65,22 @@ class AdMobAdLoader @Inject constructor(
         suspendCancellableCoroutine { cont ->
             val loader = buildGmsNativeAdLoader(
                 context = context,
-                adUnitId = nativeUnitId(slot),
+                adUnitId = NATIVE_UNIT_ID,
                 onLoaded = { nativeAd ->
                     nativeAds[slot] = nativeAd
                     if (cont.isActive) cont.resume(AdLoadResult.Loaded(nativeAd))
                 },
                 onFailed = { error ->
                     if (error.code == AdRequest.ERROR_CODE_NO_FILL) {
-                        if (cont.isActive) cont.resume(AdLoadResult.NoFill)
+                        if (cont.isActive) {
+                            cont.resume(AdLoadResult.NoFill)
+                        }
                     } else {
-                        if (cont.isActive) cont.resume(
-                            AdLoadResult.Failed(error.code, error.message),
-                        )
+                        if (cont.isActive) {
+                            cont.resume(
+                                AdLoadResult.Failed(error.code, error.message),
+                            )
+                        }
                     }
                 },
             )

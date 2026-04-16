@@ -61,7 +61,16 @@ class TransferWorkerCoroutineTest {
         val prefs = prefs(overwrite = "overwrite", autoResume = false)
         val conflictRepo = mockk<TransferConflictRepository>(relaxed = true)
 
-        val worker = TransferWorkerCoroutine(transferId, repo, executor, conflictRepo, prefs, premiumRepo, chunkRepo, connectionRepo)
+        val worker = TransferWorkerCoroutine(
+            transferId,
+            repo,
+            executor,
+            conflictRepo,
+            prefs,
+            premiumRepo,
+            chunkRepo,
+            connectionRepo,
+        )
         worker.execute()
 
         coVerify { repo.updateStatus(transferId, TransferStatus.ACTIVE, null, null) }
@@ -99,7 +108,16 @@ class TransferWorkerCoroutineTest {
         val prefs = prefs(overwrite = "overwrite", autoResume = false)
         val conflictRepo = mockk<TransferConflictRepository>(relaxed = true)
 
-        val worker = TransferWorkerCoroutine(transferId, repo, executor, conflictRepo, prefs, premiumRepo, chunkRepo, connectionRepo)
+        val worker = TransferWorkerCoroutine(
+            transferId,
+            repo,
+            executor,
+            conflictRepo,
+            prefs,
+            premiumRepo,
+            chunkRepo,
+            connectionRepo,
+        )
         val job = async { worker.execute() }
         yield()
         job.cancel()
@@ -137,7 +155,16 @@ class TransferWorkerCoroutineTest {
         val prefs = prefs(overwrite = "overwrite", autoResume = true, maxRetryAttempts = 3)
         val conflictRepo = mockk<TransferConflictRepository>(relaxed = true)
 
-        val worker = TransferWorkerCoroutine(transferId, repo, executor, conflictRepo, prefs, premiumRepo, chunkRepo, connectionRepo)
+        val worker = TransferWorkerCoroutine(
+            transferId,
+            repo,
+            executor,
+            conflictRepo,
+            prefs,
+            premiumRepo,
+            chunkRepo,
+            connectionRepo,
+        )
         worker.execute()
 
         val nextRetrySlot = slot<Long>()
@@ -172,7 +199,16 @@ class TransferWorkerCoroutineTest {
         val prefs = prefs(overwrite = "overwrite", autoResume = false)
         val conflictRepo = mockk<TransferConflictRepository>(relaxed = true)
 
-        val worker = TransferWorkerCoroutine(transferId, repo, executor, conflictRepo, prefs, premiumRepo, chunkRepo, connectionRepo)
+        val worker = TransferWorkerCoroutine(
+            transferId,
+            repo,
+            executor,
+            conflictRepo,
+            prefs,
+            premiumRepo,
+            chunkRepo,
+            connectionRepo,
+        )
         worker.execute()
 
         coVerify { repo.updateStatus(transferId, TransferStatus.FAILED, any(), any()) }
@@ -190,7 +226,16 @@ class TransferWorkerCoroutineTest {
         val prefs = prefs(overwrite = "skip", autoResume = false)
         val conflictRepo = mockk<TransferConflictRepository>(relaxed = true)
 
-        val worker = TransferWorkerCoroutine(transferId, repo, executor, conflictRepo, prefs, premiumRepo, chunkRepo, connectionRepo)
+        val worker = TransferWorkerCoroutine(
+            transferId,
+            repo,
+            executor,
+            conflictRepo,
+            prefs,
+            premiumRepo,
+            chunkRepo,
+            connectionRepo,
+        )
         worker.execute()
 
         coVerify { repo.updateProgress(transferId, 0L, 0L) }

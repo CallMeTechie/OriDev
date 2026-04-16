@@ -47,7 +47,9 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
             """.trimIndent(),
         )
         db.execSQL(
-            "CREATE UNIQUE INDEX IF NOT EXISTS index_transfer_chunks_transferId_chunkIndex ON transfer_chunks(transferId, chunkIndex)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                "index_transfer_chunks_transferId_chunkIndex " +
+                "ON transfer_chunks(transferId, chunkIndex)",
         )
         db.execSQL(
             "CREATE INDEX IF NOT EXISTS idx_chunks_transfer_status ON transfer_chunks(transferId, status)",
