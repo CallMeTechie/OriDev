@@ -4,6 +4,9 @@ import com.google.common.truth.Truth.assertThat
 import dev.ori.core.common.model.TransferDirection
 import dev.ori.core.common.model.TransferStatus
 import dev.ori.domain.model.TransferRequest
+import dev.ori.domain.repository.ConnectionRepository
+import dev.ori.domain.repository.PremiumRepository
+import dev.ori.domain.repository.TransferChunkRepository
 import dev.ori.domain.repository.TransferConflictRepository
 import dev.ori.domain.repository.TransferRepository
 import dev.ori.feature.settings.data.AppPreferences
@@ -28,6 +31,14 @@ import org.junit.jupiter.api.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class TransferWorkerCoroutineTest {
 
+    private val premiumRepo = mockk<PremiumRepository>(relaxed = true) {
+        coEvery { getCachedEntitlement() } returns false
+    }
+    private val chunkRepo = mockk<TransferChunkRepository>(relaxed = true)
+    private val connectionRepo = mockk<ConnectionRepository>(relaxed = true) {
+        coEvery { getProfileById(any()) } returns null
+    }
+
     private val transferId = 7L
     private val baseTransfer = TransferRequest(
         id = transferId,
@@ -50,7 +61,16 @@ class TransferWorkerCoroutineTest {
         val prefs = prefs(overwrite = "overwrite", autoResume = false)
         val conflictRepo = mockk<TransferConflictRepository>(relaxed = true)
 
-        val worker = TransferWorkerCoroutine(transferId, repo, executor, conflictRepo, prefs)
+        val worker = TransferWorkerCoroutine(
+            transferId,
+            repo,
+            executor,
+            conflictRepo,
+            prefs,
+            premiumRepo,
+            chunkRepo,
+            connectionRepo,
+        )
         worker.execute()
 
         coVerify { repo.updateStatus(transferId, TransferStatus.ACTIVE, null, null) }
@@ -88,7 +108,16 @@ class TransferWorkerCoroutineTest {
         val prefs = prefs(overwrite = "overwrite", autoResume = false)
         val conflictRepo = mockk<TransferConflictRepository>(relaxed = true)
 
-        val worker = TransferWorkerCoroutine(transferId, repo, executor, conflictRepo, prefs)
+        val worker = TransferWorkerCoroutine(
+            transferId,
+            repo,
+            executor,
+            conflictRepo,
+            prefs,
+            premiumRepo,
+            chunkRepo,
+            connectionRepo,
+        )
         val job = async { worker.execute() }
         yield()
         job.cancel()
@@ -126,7 +155,16 @@ class TransferWorkerCoroutineTest {
         val prefs = prefs(overwrite = "overwrite", autoResume = true, maxRetryAttempts = 3)
         val conflictRepo = mockk<TransferConflictRepository>(relaxed = true)
 
-        val worker = TransferWorkerCoroutine(transferId, repo, executor, conflictRepo, prefs)
+        val worker = TransferWorkerCoroutine(
+            transferId,
+            repo,
+            executor,
+            conflictRepo,
+            prefs,
+            premiumRepo,
+            chunkRepo,
+            connectionRepo,
+        )
         worker.execute()
 
         val nextRetrySlot = slot<Long>()
@@ -161,7 +199,16 @@ class TransferWorkerCoroutineTest {
         val prefs = prefs(overwrite = "overwrite", autoResume = false)
         val conflictRepo = mockk<TransferConflictRepository>(relaxed = true)
 
-        val worker = TransferWorkerCoroutine(transferId, repo, executor, conflictRepo, prefs)
+        val worker = TransferWorkerCoroutine(
+            transferId,
+            repo,
+            executor,
+            conflictRepo,
+            prefs,
+            premiumRepo,
+            chunkRepo,
+            connectionRepo,
+        )
         worker.execute()
 
         coVerify { repo.updateStatus(transferId, TransferStatus.FAILED, any(), any()) }
@@ -179,7 +226,16 @@ class TransferWorkerCoroutineTest {
         val prefs = prefs(overwrite = "skip", autoResume = false)
         val conflictRepo = mockk<TransferConflictRepository>(relaxed = true)
 
-        val worker = TransferWorkerCoroutine(transferId, repo, executor, conflictRepo, prefs)
+        val worker = TransferWorkerCoroutine(
+            transferId,
+            repo,
+            executor,
+            conflictRepo,
+            prefs,
+            premiumRepo,
+            chunkRepo,
+            connectionRepo,
+        )
         worker.execute()
 
         coVerify { repo.updateProgress(transferId, 0L, 0L) }

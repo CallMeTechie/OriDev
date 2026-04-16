@@ -36,7 +36,9 @@ import dev.ori.core.ui.components.OriServiceIndicator
 import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.icons.lucide.LucideIcons
 import dev.ori.core.ui.icons.lucide.Trash2
+import dev.ori.domain.model.AdSlot
 import dev.ori.domain.model.FileItem
+import dev.ori.feature.premium.ui.AdSlotHost
 
 @Composable
 @Suppress("UnusedParameter")
@@ -161,6 +163,11 @@ fun FileManagerScreen(
                         }
                     }
                 }
+            } else {
+                AdSlotHost(
+                    slot = AdSlot.FILE_MANAGER_STICKY,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         },
     ) { padding ->

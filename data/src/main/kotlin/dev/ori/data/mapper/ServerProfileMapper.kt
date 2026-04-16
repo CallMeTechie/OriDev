@@ -23,6 +23,7 @@ fun ServerProfileEntity.toDomain(): ServerProfile =
         createdAt = createdAt,
         sortOrder = sortOrder,
         require2fa = require2fa,
+        maxBandwidthKbps = maxBandwidthKbps,
     )
 
 fun ServerProfile.toEntity(): ServerProfileEntity =
@@ -45,4 +46,5 @@ fun ServerProfile.toEntity(): ServerProfileEntity =
         createdAt = createdAt,
         sortOrder = sortOrder,
         require2fa = require2fa,
+        maxBandwidthKbps = maxBandwidthKbps,
     )

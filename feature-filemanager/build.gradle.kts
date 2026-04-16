@@ -38,6 +38,7 @@ dependencies {
     implementation(project(":core:core-ui"))
     implementation(project(":domain"))
     implementation(project(":feature-editor"))
+    implementation(project(":feature-premium"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

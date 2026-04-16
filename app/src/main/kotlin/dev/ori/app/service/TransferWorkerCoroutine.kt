@@ -2,9 +2,15 @@ package dev.ori.app.service
 
 import dev.ori.core.common.model.TransferDirection
 import dev.ori.core.common.model.TransferStatus
+import dev.ori.core.network.throttle.TokenBucket
+import dev.ori.domain.model.ChunkStatus
 import dev.ori.domain.model.ConflictRequest
 import dev.ori.domain.model.ConflictResolution
+import dev.ori.domain.model.TransferChunk
 import dev.ori.domain.model.TransferRequest
+import dev.ori.domain.repository.ConnectionRepository
+import dev.ori.domain.repository.PremiumRepository
+import dev.ori.domain.repository.TransferChunkRepository
 import dev.ori.domain.repository.TransferConflictRepository
 import dev.ori.domain.repository.TransferRepository
 import dev.ori.feature.settings.data.AppPreferences
@@ -17,6 +23,7 @@ import kotlinx.coroutines.withTimeout
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
+import kotlin.math.ceil
 
 /**
  * Phase 12 P12.4 — per-transfer coroutine that owns one row's lifecycle
@@ -33,6 +40,9 @@ internal class TransferWorkerCoroutine(
     private val executor: TransferExecutor,
     private val conflictRepo: TransferConflictRepository,
     private val prefs: AppPreferences,
+    private val premiumRepo: PremiumRepository,
+    private val chunkRepo: TransferChunkRepository,
+    private val connectionRepo: ConnectionRepository,
     private val nowProvider: () -> Long = { System.currentTimeMillis() },
     private val progressThrottleMs: Long = PROGRESS_THROTTLE_MS,
 ) {
@@ -194,16 +204,51 @@ internal class TransferWorkerCoroutine(
     // ---- transfer body -----------------------------------------------------
 
     private suspend fun runTransfer(transfer: TransferRequest) {
-        val sessionId = transfer.serverProfileId.toString()
-        val offset = transfer.transferredBytes
+        if (transfer.totalBytes >= CHUNK_THRESHOLD_BYTES && isPremium()) {
+            runChunkedTransfer(transfer)
+        } else {
+            runSingleShotTransfer(transfer)
+        }
+    }
+
+    private suspend fun isPremium(): Boolean =
+        premiumRepo.getCachedEntitlement()
+
+    /**
+     * Resolves the [TokenBucket] for the server profile owning this transfer,
+     * or `null` when bandwidth is unlimited / profile lookup fails.
+     */
+    private suspend fun resolveThrottle(serverProfileId: Long): TokenBucket? {
+        val profile = connectionRepo.getProfileById(serverProfileId) ?: return null
+        return TokenBucket.fromKbps(profile.maxBandwidthKbps)
+    }
+
+    /**
+     * Creates a progress callback that respects the throttle interval.
+     * When a [TokenBucket] is provided, each progress tick also consumes
+     * tokens so the effective transfer speed is capped.
+     */
+    private fun throttledProgress(
+        bucket: TokenBucket?,
+    ): suspend (Long, Long) -> Unit {
         var lastWriteAtMs = 0L
-        val onProgress: suspend (Long, Long) -> Unit = { sent, total ->
+        return { sent, total ->
+            // Throttle: consume tokens proportional to bytes reported.
+            // The bucket's consume() will delay if the rate is exceeded.
+            bucket?.consume(sent.toInt().coerceAtLeast(0))
             val now = nowProvider()
             if (now - lastWriteAtMs >= progressThrottleMs) {
                 lastWriteAtMs = now
                 repository.updateProgress(transferId, sent, total)
             }
         }
+    }
+
+    private suspend fun runSingleShotTransfer(transfer: TransferRequest) {
+        val sessionId = transfer.serverProfileId.toString()
+        val offset = transfer.transferredBytes
+        val bucket = resolveThrottle(transfer.serverProfileId)
+        val onProgress = throttledProgress(bucket)
         when (transfer.direction) {
             TransferDirection.UPLOAD -> executor.upload(
                 sessionId = sessionId,
@@ -224,6 +269,101 @@ internal class TransferWorkerCoroutine(
         // reported on its last progress tick (the 500 ms throttle may have
         // swallowed the last one).
         repository.updateProgress(transferId, transfer.totalBytes, transfer.totalBytes)
+    }
+
+    // ---- chunked transfer ---------------------------------------------------
+
+    private suspend fun runChunkedTransfer(transfer: TransferRequest) {
+        val sessionId = transfer.serverProfileId.toString()
+        val bucket = resolveThrottle(transfer.serverProfileId)
+
+        // 1. Seed or resume chunks
+        var chunks = chunkRepo.getChunksForTransfer(transferId)
+        if (chunks.isEmpty()) {
+            chunks = seedChunks(transfer)
+        }
+
+        // 2. Walk non-COMPLETED chunks in index order
+        val total = transfer.totalBytes
+        for (chunk in chunks.sortedBy { it.index }) {
+            if (chunk.status == ChunkStatus.COMPLETED) continue
+
+            chunkRepo.updateChunkStatus(chunk.id, ChunkStatus.ACTIVE)
+            try {
+                val onProgress = throttledProgress(bucket)
+                when (transfer.direction) {
+                    TransferDirection.UPLOAD -> executor.upload(
+                        sessionId = sessionId,
+                        localPath = transfer.sourcePath,
+                        remotePath = transfer.destinationPath,
+                        offsetBytes = chunk.offsetBytes,
+                        onProgress = { sent, _ ->
+                            // Map per-chunk progress to overall progress
+                            val overall = chunk.offsetBytes + sent
+                            onProgress(overall, total)
+                        },
+                    )
+                    TransferDirection.DOWNLOAD -> executor.download(
+                        sessionId = sessionId,
+                        remotePath = transfer.sourcePath,
+                        localPath = transfer.destinationPath,
+                        offsetBytes = chunk.offsetBytes,
+                        onProgress = { sent, _ ->
+                            val overall = chunk.offsetBytes + sent
+                            onProgress(overall, total)
+                        },
+                    )
+                }
+                chunkRepo.updateChunkStatus(chunk.id, ChunkStatus.COMPLETED)
+                repository.updateProgress(transferId, chunk.offsetBytes + chunk.lengthBytes, total)
+            } catch (ce: CancellationException) {
+                // Pause: revert to PENDING so the chunk is resumable later.
+                withContext(NonCancellable) {
+                    chunkRepo.updateChunkStatus(chunk.id, ChunkStatus.PENDING)
+                }
+                @Suppress("RethrowCaughtException")
+                throw ce
+            } catch (@Suppress("TooGenericExceptionCaught") t: Throwable) {
+                val newAttempts = chunk.attempts + 1
+                if (newAttempts < MAX_CHUNK_RETRY_ATTEMPTS) {
+                    chunkRepo.updateChunkStatus(
+                        chunk.id,
+                        ChunkStatus.PENDING,
+                        error = t.message,
+                    )
+                } else {
+                    chunkRepo.updateChunkStatus(
+                        chunk.id,
+                        ChunkStatus.FAILED,
+                        error = t.message,
+                    )
+                    throw t
+                }
+            }
+        }
+        // Final flush
+        repository.updateProgress(transferId, total, total)
+    }
+
+    private suspend fun seedChunks(transfer: TransferRequest): List<TransferChunk> {
+        val total = transfer.totalBytes
+        val count = ceil(total.toDouble() / CHUNK_SIZE_BYTES).toInt().coerceAtLeast(1)
+        val seeded = mutableListOf<TransferChunk>()
+        for (i in 0 until count) {
+            val offset = i.toLong() * CHUNK_SIZE_BYTES
+            val length = (total - offset).coerceAtMost(CHUNK_SIZE_BYTES)
+            val chunk = TransferChunk(
+                transferId = transferId,
+                index = i,
+                offsetBytes = offset,
+                lengthBytes = length,
+                sha256Expected = null,
+                status = ChunkStatus.PENDING,
+            )
+            val id = chunkRepo.upsertChunk(chunk)
+            seeded.add(chunk.copy(id = id))
+        }
+        return seeded
     }
 
     // ---- retry / failure ---------------------------------------------------
@@ -262,6 +402,15 @@ internal class TransferWorkerCoroutine(
 
         /** Minimum interval between `repository.updateProgress` writes. */
         internal const val PROGRESS_THROTTLE_MS: Long = 500L
+
+        /** Chunk size for chunked (premium) transfers — 64 MiB. */
+        internal const val CHUNK_SIZE_BYTES: Long = 64L * 1024 * 1024
+
+        /** Files at or above this threshold use chunked transfer when premium. */
+        internal const val CHUNK_THRESHOLD_BYTES: Long = 256L * 1024 * 1024
+
+        /** Per-chunk retry ceiling before the chunk is marked FAILED. */
+        internal const val MAX_CHUNK_RETRY_ATTEMPTS = 3
     }
 }
 
@@ -274,6 +423,9 @@ internal class TransferWorkerCoroutineFactory @Inject constructor(
     private val executor: TransferExecutor,
     private val conflictRepo: TransferConflictRepository,
     private val prefs: AppPreferences,
+    private val premiumRepo: PremiumRepository,
+    private val chunkRepo: TransferChunkRepository,
+    private val connectionRepo: ConnectionRepository,
 ) {
     fun create(transferId: Long): TransferWorkerCoroutine =
         TransferWorkerCoroutine(
@@ -282,5 +434,8 @@ internal class TransferWorkerCoroutineFactory @Inject constructor(
             executor = executor,
             conflictRepo = conflictRepo,
             prefs = prefs,
+            premiumRepo = premiumRepo,
+            chunkRepo = chunkRepo,
+            connectionRepo = connectionRepo,
         )
 }

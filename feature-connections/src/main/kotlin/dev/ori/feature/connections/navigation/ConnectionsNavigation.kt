@@ -32,15 +32,22 @@ fun NavGraphBuilder.connectionsScreen(
     }
 }
 
-fun NavGraphBuilder.addConnectionScreen(navController: NavController) {
+fun NavGraphBuilder.addConnectionScreen(
+    navController: NavController,
+    onNavigateToPaywall: () -> Unit = {},
+) {
     composable(route = ADD_CONNECTION_ROUTE) {
         AddEditConnectionScreen(
             onNavigateBack = { navController.popBackStack() },
+            onNavigateToPaywall = onNavigateToPaywall,
         )
     }
 }
 
-fun NavGraphBuilder.editConnectionScreen(navController: NavController) {
+fun NavGraphBuilder.editConnectionScreen(
+    navController: NavController,
+    onNavigateToPaywall: () -> Unit = {},
+) {
     composable(
         route = EDIT_CONNECTION_ROUTE,
         arguments = listOf(
@@ -49,6 +56,7 @@ fun NavGraphBuilder.editConnectionScreen(navController: NavController) {
     ) {
         AddEditConnectionScreen(
             onNavigateBack = { navController.popBackStack() },
+            onNavigateToPaywall = onNavigateToPaywall,
         )
     }
 }

@@ -41,6 +41,8 @@ class OriDevApplication : Application(), Configuration.Provider {
         Trace.beginSection("OriDevApplication.onCreate")
         try {
             super.onCreate()
+            // Initialize Google Mobile Ads SDK (UMP consent handled automatically by GMA v23+)
+            com.google.android.gms.ads.MobileAds.initialize(this)
             wearDataSyncPublisher.start()
             applicationScope.launch(Dispatchers.IO) {
                 val enabled = crashReportingPreferences.enabled.first()

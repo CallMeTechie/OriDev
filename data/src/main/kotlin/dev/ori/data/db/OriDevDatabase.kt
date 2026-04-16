@@ -9,6 +9,7 @@ import dev.ori.data.dao.KnownHostDao
 import dev.ori.data.dao.ProxmoxNodeDao
 import dev.ori.data.dao.ServerProfileDao
 import dev.ori.data.dao.SessionLogDao
+import dev.ori.data.dao.TransferChunkDao
 import dev.ori.data.dao.TransferRecordDao
 import dev.ori.data.entity.BookmarkEntity
 import dev.ori.data.entity.CommandSnippetEntity
@@ -16,6 +17,7 @@ import dev.ori.data.entity.KnownHostEntity
 import dev.ori.data.entity.ProxmoxNodeEntity
 import dev.ori.data.entity.ServerProfileEntity
 import dev.ori.data.entity.SessionLogEntity
+import dev.ori.data.entity.TransferChunkEntity
 import dev.ori.data.entity.TransferRecordEntity
 
 @Database(
@@ -27,8 +29,9 @@ import dev.ori.data.entity.TransferRecordEntity
         SessionLogEntity::class,
         ProxmoxNodeEntity::class,
         KnownHostEntity::class,
+        TransferChunkEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -40,4 +43,5 @@ abstract class OriDevDatabase : RoomDatabase() {
     abstract fun sessionLogDao(): SessionLogDao
     abstract fun proxmoxNodeDao(): ProxmoxNodeDao
     abstract fun knownHostDao(): KnownHostDao
+    abstract fun transferChunkDao(): TransferChunkDao
 }

@@ -41,6 +41,7 @@ dependencies {
     implementation(project(":core:core-network"))
     implementation(project(":core:core-security"))
     implementation(project(":core:core-ai"))
+    implementation(project(":core-billing"))
     implementation(project(":domain"))
 
     implementation(libs.room.runtime)

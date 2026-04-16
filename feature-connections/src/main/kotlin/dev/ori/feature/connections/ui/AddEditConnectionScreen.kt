@@ -57,14 +57,17 @@ import dev.ori.core.ui.icons.lucide.ChevronUp
 import dev.ori.core.ui.icons.lucide.Eye
 import dev.ori.core.ui.icons.lucide.EyeOff
 import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.feature.premium.ui.BandwidthThrottleSlider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditConnectionScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToPaywall: () -> Unit = {},
     viewModel: AddEditConnectionViewModel = hiltViewModel(),
 ) {
     val formState by viewModel.formState.collectAsStateWithLifecycle()
+    val isPremium by viewModel.isPremium.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
@@ -285,6 +288,15 @@ fun AddEditConnectionScreen(
                         },
                         label = "Project Directory",
                         placeholder = "/home/user/project",
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    BandwidthThrottleSlider(
+                        currentKbps = formState.maxBandwidthKbps,
+                        isPremium = isPremium,
+                        onValueChange = {
+                            viewModel.onEvent(AddEditEvent.MaxBandwidthKbpsChanged(it))
+                        },
+                        onUpgradeTap = onNavigateToPaywall,
                     )
                 }
             }

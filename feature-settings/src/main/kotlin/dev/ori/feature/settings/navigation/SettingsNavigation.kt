@@ -7,9 +7,9 @@ import dev.ori.feature.settings.ui.SettingsScreen
 
 const val SETTINGS_ROUTE: String = "settings"
 
-fun NavGraphBuilder.settingsScreen() {
+fun NavGraphBuilder.settingsScreen(onNavigateToPaywall: () -> Unit = {}) {
     composable(SETTINGS_ROUTE) {
-        SettingsScreen()
+        SettingsScreen(onNavigateToPaywall = onNavigateToPaywall)
     }
 }
 

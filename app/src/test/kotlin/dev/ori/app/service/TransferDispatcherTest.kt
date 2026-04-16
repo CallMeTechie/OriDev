@@ -11,6 +11,9 @@ import dev.ori.data.entity.TransferRecordEntity
 import dev.ori.domain.model.ConflictRequest
 import dev.ori.domain.model.ConflictResolution
 import dev.ori.domain.model.TransferRequest
+import dev.ori.domain.repository.ConnectionRepository
+import dev.ori.domain.repository.PremiumRepository
+import dev.ori.domain.repository.TransferChunkRepository
 import dev.ori.domain.repository.TransferConflictRepository
 import dev.ori.domain.repository.TransferRepository
 import dev.ori.feature.settings.data.AppPreferences
@@ -52,6 +55,9 @@ class TransferDispatcherTest {
             executor,
             NoOpConflictRepo,
             prefs,
+            NoOpPremiumRepo,
+            NoOpChunkRepo,
+            NoOpConnectionRepo,
         )
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
         val dispatcher = TransferDispatcher(dao, prefs, scope, factory)
@@ -77,6 +83,9 @@ class TransferDispatcherTest {
             executor,
             NoOpConflictRepo,
             prefs,
+            NoOpPremiumRepo,
+            NoOpChunkRepo,
+            NoOpConnectionRepo,
         )
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
         val dispatcher = TransferDispatcher(dao, prefs, scope, factory)
@@ -110,6 +119,9 @@ class TransferDispatcherTest {
             executor,
             NoOpConflictRepo,
             prefs,
+            NoOpPremiumRepo,
+            NoOpChunkRepo,
+            NoOpConnectionRepo,
         )
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
         val dispatcher = TransferDispatcher(dao, prefs, scope, factory)
@@ -146,6 +158,9 @@ class TransferDispatcherTest {
             executor,
             NoOpConflictRepo,
             prefs,
+            NoOpPremiumRepo,
+            NoOpChunkRepo,
+            NoOpConnectionRepo,
         )
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
         val dispatcher = TransferDispatcher(dao, prefs, scope, factory)
@@ -174,6 +189,9 @@ class TransferDispatcherTest {
             executor,
             NoOpConflictRepo,
             prefs,
+            NoOpPremiumRepo,
+            NoOpChunkRepo,
+            NoOpConnectionRepo,
         )
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
         val dispatcher = TransferDispatcher(dao, prefs, scope, factory)
@@ -207,6 +225,9 @@ class TransferDispatcherTest {
             executor,
             NoOpConflictRepo,
             prefs,
+            NoOpPremiumRepo,
+            NoOpChunkRepo,
+            NoOpConnectionRepo,
         )
         val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
         val dispatcher = TransferDispatcher(dao, prefs, scope, factory)
@@ -400,6 +421,35 @@ internal object NoOpConflictRepo : TransferConflictRepository {
     override fun emitConflict(request: ConflictRequest) { _flow.tryEmit(request) }
     override suspend fun awaitResolution(conflictId: String): ConflictResolution = ConflictResolution.SKIP
     override fun resolve(conflictId: String, resolution: ConflictResolution) { /* no-op */ }
+}
+
+internal object NoOpPremiumRepo : PremiumRepository {
+    override val isPremium: Flow<Boolean> = flowOf(false)
+    override suspend fun refreshEntitlement() = Unit
+    override suspend fun cacheEntitlement(value: Boolean) = Unit
+    override suspend fun getCachedEntitlement(): Boolean = false
+    override suspend fun getLastRefreshedAt(): Long? = null
+}
+
+internal object NoOpChunkRepo : TransferChunkRepository {
+    override suspend fun upsertChunk(chunk: dev.ori.domain.model.TransferChunk): Long = 0L
+    override suspend fun getChunksForTransfer(transferId: Long): List<dev.ori.domain.model.TransferChunk> = emptyList()
+    override suspend fun updateChunkStatus(id: Long, status: dev.ori.domain.model.ChunkStatus, error: String?) = Unit
+    override suspend fun deleteChunksForTransfer(transferId: Long) = Unit
+}
+
+internal object NoOpConnectionRepo : ConnectionRepository {
+    override fun getAllProfiles() = flowOf(emptyList<dev.ori.domain.model.ServerProfile>())
+    override fun getFavoriteProfiles() = flowOf(emptyList<dev.ori.domain.model.ServerProfile>())
+    override suspend fun getProfileById(id: Long) = null
+    override suspend fun getProfileCount() = 0
+    override suspend fun saveProfile(profile: dev.ori.domain.model.ServerProfile): Long = 0L
+    override suspend fun updateProfile(profile: dev.ori.domain.model.ServerProfile) = Unit
+    override suspend fun deleteProfile(profile: dev.ori.domain.model.ServerProfile) = Unit
+    override suspend fun connect(profileId: Long) = throw UnsupportedOperationException()
+    override suspend fun disconnect(profileId: Long) = Unit
+    override fun getActiveConnections() = flowOf(emptyList<dev.ori.domain.model.Connection>())
+    override suspend fun getActiveSessionId(profileId: Long): String? = null
 }
 
 /**

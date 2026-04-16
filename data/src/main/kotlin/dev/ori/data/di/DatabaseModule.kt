@@ -13,9 +13,11 @@ import dev.ori.data.dao.KnownHostDao
 import dev.ori.data.dao.ProxmoxNodeDao
 import dev.ori.data.dao.ServerProfileDao
 import dev.ori.data.dao.SessionLogDao
+import dev.ori.data.dao.TransferChunkDao
 import dev.ori.data.dao.TransferRecordDao
 import dev.ori.data.db.MIGRATION_1_2
 import dev.ori.data.db.MIGRATION_2_3
+import dev.ori.data.db.MIGRATION_3_4
 import dev.ori.data.db.OriDevDatabase
 import javax.inject.Singleton
 
@@ -31,7 +33,7 @@ object DatabaseModule {
             OriDevDatabase::class.java,
             "oridev.db",
         )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
 
     @Provides
@@ -54,4 +56,7 @@ object DatabaseModule {
 
     @Provides
     fun provideKnownHostDao(db: OriDevDatabase): KnownHostDao = db.knownHostDao()
+
+    @Provides
+    fun provideTransferChunkDao(db: OriDevDatabase): TransferChunkDao = db.transferChunkDao()
 }

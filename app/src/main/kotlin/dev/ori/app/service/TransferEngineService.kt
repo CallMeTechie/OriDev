@@ -1,6 +1,7 @@
 package dev.ori.app.service
 
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
@@ -46,6 +47,7 @@ internal class TransferEngineService : Service() {
 
     @Inject lateinit var scope: CoroutineScope
 
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
     private var watcherJob: Job? = null
     private var dispatcherStarted = false
 
@@ -53,6 +55,20 @@ internal class TransferEngineService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+        val wifiMode = if (android.os.Build.VERSION.SDK_INT >= 34) {
+            android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+        } else {
+            @Suppress("DEPRECATION")
+            android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
+        }
+        wifiLock = wifiManager.createWifiLock(
+            wifiMode,
+            "oridev:transfers",
+        ).apply {
+            setReferenceCounted(false)
+            acquire()
+        }
         startForeground(
             TransferNotificationManager.NOTIFICATION_ID_SERVICE,
             transferNotificationManager.buildAggregateNotification(
@@ -96,6 +112,8 @@ internal class TransferEngineService : Service() {
     }
 
     override fun onDestroy() {
+        if (wifiLock?.isHeld == true) wifiLock?.release()
+        wifiLock = null
         watcherJob?.cancel()
         watcherJob = null
         super.onDestroy()

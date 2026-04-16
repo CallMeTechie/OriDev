@@ -36,6 +36,7 @@ dependencies {
     // connection-tap → credential-fetch. See ConnectionListViewModel.
     implementation(project(":core:core-security"))
     implementation(project(":domain"))
+    implementation(project(":feature-premium"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

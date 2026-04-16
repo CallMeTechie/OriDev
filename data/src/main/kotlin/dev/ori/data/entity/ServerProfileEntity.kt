@@ -1,5 +1,6 @@
 package dev.ori.data.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import dev.ori.core.common.model.AuthMethod
@@ -26,4 +27,6 @@ data class ServerProfileEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val sortOrder: Int = 0,
     val require2fa: Boolean = false,
+    @ColumnInfo(defaultValue = "NULL")
+    val maxBandwidthKbps: Int? = null,
 )
