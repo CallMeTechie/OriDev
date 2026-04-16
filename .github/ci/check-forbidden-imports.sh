@@ -176,6 +176,7 @@ run_grep \
 CROSS_FEATURE_ALLOWLIST=(
     'dev.ori.feature.premium.ui.AdSlotHost'
     'dev.ori.feature.premium.ui.PremiumGate'
+    'dev.ori.feature.premium.ui.BandwidthThrottleSlider'
 )
 
 for f in "${scope_files[@]}"; do
