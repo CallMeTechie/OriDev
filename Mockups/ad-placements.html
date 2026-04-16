@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ori:Dev — Ad Placements (Free Tier)</title>
+<style>
+  :root {
+    --accent: #6366F1;
+    --accent-light: #EEF2FF;
+    --accent-hover: #4F46E5;
+    --accent-subtle: rgba(99, 102, 241, 0.06);
+    --gradient-start: #6366F1;
+    --gradient-end: #8B5CF6;
+    --premium-gold: #F59E0B;
+    --premium-gold-soft: #FEF3C7;
+    --bg: #FAFAFA;
+    --surface: #FFFFFF;
+    --text-primary: #111827;
+    --text-secondary: #374151;
+    --text-tertiary: #6B7280;
+    --text-muted: #9CA3AF;
+    --border: #E5E7EB;
+    --border-hover: #D1D5DB;
+    --border-light: #F3F4F6;
+    --ad-bg: #FFFBEB;
+    --ad-border: #FDE68A;
+    --ad-label: #92400E;
+    --success: #10B981;
+    --warning: #F59E0B;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-xs: 6px;
+    --radius-pill: 9999px;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ── Header ─────────────────────────────────────── */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .header-back {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-xs);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .header-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .header-tag {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    padding: 4px 10px;
+    background: var(--premium-gold-soft);
+    color: var(--ad-label);
+    border: 1px solid var(--ad-border);
+    border-radius: var(--radius-pill);
+  }
+
+  /* ── Layout ─────────────────────────────────────── */
+  .content {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+
+  .intro {
+    max-width: 720px;
+    margin: 0 auto 40px;
+    text-align: center;
+  }
+
+  .intro-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+
+  .intro-subtitle {
+    font-size: 14px;
+    color: var(--text-tertiary);
+    line-height: 1.6;
+  }
+
+  .placement-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 24px;
+  }
+
+  /* ── Placement Card (wraps each preview) ─────────── */
+  .placement {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .placement-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .placement-head-text { min-width: 0; }
+
+  .placement-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-tertiary);
+    margin-bottom: 2px;
+  }
+
+  .placement-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+  }
+
+  .placement-pill {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    background: var(--accent-subtle);
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  .placement-body {
+    background: var(--bg);
+    padding: 16px;
+  }
+
+  /* ── Ad styling (shared) ────────────────────────── */
+  .ad {
+    position: relative;
+    background: var(--ad-bg);
+    border: 1px solid var(--ad-border);
+    border-radius: var(--radius-sm);
+  }
+
+  .ad::before {
+    content: 'Ad';
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--ad-label);
+    padding: 2px 6px;
+    background: rgba(255,255,255,0.6);
+    border-radius: 4px;
+  }
+
+  .ad-remove {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--accent);
+    cursor: pointer;
+    padding: 3px 8px;
+    background: var(--accent-subtle);
+    border: 1px solid transparent;
+    border-radius: var(--radius-pill);
+  }
+
+  .ad-remove svg {
+    width: 11px;
+    height: 11px;
+    stroke-width: 2.5;
+  }
+
+  /* ── Phone Frame (mock device) ──────────────────── */
+  .phone-frame {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+  }
+
+  .phone-topbar {
+    height: 44px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface);
+  }
+
+  .phone-topbar-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+  }
+
+  .phone-topbar-icon {
+    width: 22px;
+    height: 22px;
+    color: var(--text-tertiary);
+  }
+
+  .phone-topbar-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke-width: 2;
+  }
+
+  .phone-content {
+    padding: 12px;
+    background: var(--bg);
+    min-height: 220px;
+  }
+
+  /* ── Placement A: Banner in Transfer Queue ──────── */
+  .tq-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+  }
+
+  .tq-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: var(--accent-subtle);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tq-icon svg { width: 14px; height: 14px; stroke-width: 2; }
+
+  .tq-body { flex: 1; min-width: 0; }
+
+  .tq-name {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tq-meta {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tq-bar {
+    height: 3px;
+    background: var(--border-light);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+
+  .tq-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  .ad-banner {
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+  }
+
+  .ad-banner-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+    color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .ad-banner-text { flex: 1; min-width: 0; }
+
+  .ad-banner-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ad-banner-desc {
+    font-size: 10.5px;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ad-banner-cta {
+    flex-shrink: 0;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #FFFFFF;
+    background: var(--accent);
+    padding: 5px 12px;
+    border-radius: var(--radius-pill);
+  }
+
+  /* ── Placement B: Native card in connection list ── */
+  .conn-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+  }
+
+  .conn-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    flex-shrink: 0;
+  }
+
+  .conn-name {
+    flex: 1;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .conn-meta {
+    font-size: 10.5px;
+    color: var(--text-tertiary);
+  }
+
+  .ad-native {
+    padding: 14px;
+    margin: 8px 0;
+  }
+
+  .ad-native-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .ad-native-logo {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #10B981, #059669);
+    color: #FFFFFF;
+    font-size: 9px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .ad-native-brand {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .ad-native-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.35;
+    margin-bottom: 4px;
+  }
+
+  .ad-native-body {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    line-height: 1.45;
+    margin-bottom: 10px;
+  }
+
+  .ad-native-cta {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 4px 12px;
+    border-radius: var(--radius-pill);
+  }
+
+  /* ── Placement C: Bottom sticky banner ──────────── */
+  .fm-column {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    margin-bottom: 8px;
+  }
+
+  .fm-bread {
+    font-size: 10.5px;
+    color: var(--text-tertiary);
+    margin-bottom: 6px;
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+
+  .fm-file {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 4px;
+    font-size: 11.5px;
+    color: var(--text-primary);
+  }
+
+  .fm-file-icon {
+    width: 14px;
+    height: 14px;
+    color: var(--text-tertiary);
+  }
+
+  .fm-file-icon svg { width: 100%; height: 100%; stroke-width: 2; }
+
+  .ad-sticky {
+    position: sticky;
+    bottom: 0;
+    margin: 8px -12px -12px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+  }
+
+  .ad-sticky .ad-banner-icon {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* ── Placement D: Premium upsell card (house ad) ── */
+  .upsell {
+    position: relative;
+    background: linear-gradient(135deg, #EEF2FF 0%, #EDE9FE 100%);
+    border: 1px solid var(--accent-light);
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    overflow: hidden;
+  }
+
+  .upsell::before {
+    content: '';
+    position: absolute;
+    right: -40px;
+    top: -40px;
+    width: 120px;
+    height: 120px;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.15), transparent 70%);
+    pointer-events: none;
+  }
+
+  .upsell-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    position: relative;
+  }
+
+  .upsell-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+    border: 1px solid var(--premium-gold);
+    color: #B45309;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .upsell-icon svg { width: 18px; height: 18px; stroke-width: 2; }
+
+  .upsell-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+  }
+
+  .upsell-desc {
+    font-size: 10.5px;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    margin-bottom: 10px;
+  }
+
+  .upsell-cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #FFFFFF;
+    background: var(--accent);
+    padding: 5px 12px;
+    border-radius: var(--radius-pill);
+  }
+
+  .upsell-cta svg {
+    width: 11px;
+    height: 11px;
+    stroke-width: 2.5;
+  }
+
+  /* ── Placement E: Locked throttle slider ────────── */
+  .throttle-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    position: relative;
+  }
+
+  .throttle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+
+  .throttle-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .throttle-badge {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 3px 8px;
+    border-radius: var(--radius-pill);
+    background: var(--premium-gold-soft);
+    color: var(--ad-label);
+    border: 1px solid var(--ad-border);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .throttle-badge svg {
+    width: 10px;
+    height: 10px;
+    stroke-width: 2.5;
+  }
+
+  .throttle-slider-wrap {
+    position: relative;
+    padding: 6px 2px;
+  }
+
+  .throttle-track {
+    height: 4px;
+    background: var(--border-light);
+    border-radius: 2px;
+    position: relative;
+  }
+
+  .throttle-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 40%;
+    background: var(--text-tertiary);
+    border-radius: 2px;
+  }
+
+  .throttle-thumb {
+    position: absolute;
+    top: 50%;
+    left: 40%;
+    transform: translate(-50%, -50%);
+    width: 14px;
+    height: 14px;
+    background: var(--text-tertiary);
+    border: 2px solid var(--surface);
+    border-radius: 50%;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .throttle-value {
+    font-size: 10.5px;
+    color: var(--text-tertiary);
+    margin-top: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .throttle-scrim {
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(1px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+  }
+
+  .throttle-unlock {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #FFFFFF;
+    background: var(--accent);
+    padding: 6px 14px;
+    border-radius: var(--radius-pill);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  }
+
+  .throttle-unlock svg {
+    width: 12px;
+    height: 12px;
+    stroke-width: 2.5;
+  }
+
+  /* ── Placement F: Interstitial ──────────────────── */
+  .interstitial {
+    background: linear-gradient(135deg, #1F2937, #0F172A);
+    border: 1px solid #1F2937;
+    border-radius: var(--radius);
+    padding: 24px 20px;
+    text-align: center;
+    color: #FFFFFF;
+    position: relative;
+  }
+
+  .interstitial::before {
+    content: 'Ad';
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #FDE68A;
+    padding: 2px 6px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 4px;
+  }
+
+  .interstitial-close {
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  .interstitial-hero {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 6px;
+    margin-top: 12px;
+  }
+
+  .interstitial-sub {
+    font-size: 11.5px;
+    color: #CBD5E1;
+    line-height: 1.5;
+    margin-bottom: 16px;
+  }
+
+  .interstitial-cta {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    color: #111827;
+    background: #FBBF24;
+    padding: 10px 20px;
+    border-radius: var(--radius-pill);
+  }
+
+  .interstitial-remove {
+    font-size: 10px;
+    color: #CBD5E1;
+    margin-top: 14px;
+    text-decoration: underline;
+  }
+
+  /* ── Description note ──────────────────────────── */
+  .placement-note {
+    font-size: 11.5px;
+    color: var(--text-tertiary);
+    padding: 12px 18px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    line-height: 1.55;
+  }
+
+  .placement-note strong {
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header class="header">
+  <div class="header-left">
+    <button class="header-back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    </button>
+    <div class="header-title">Ad Placements</div>
+  </div>
+  <div class="header-tag">Free Tier</div>
+</header>
+
+<main class="content">
+
+  <section class="intro">
+    <h1 class="intro-title">Ad Placements for Free Users</h1>
+    <p class="intro-subtitle">
+      Six placement slots. Each is inventoried to feel native, never blocks a critical workflow, and always shows a single‑tap "Remove ads" upgrade path.
+    </p>
+  </section>
+
+  <div class="placement-grid">
+
+    <!-- ═══ A: Transfer Queue inline banner ═══ -->
+    <div class="placement">
+      <div class="placement-head">
+        <div class="placement-head-text">
+          <div class="placement-label">Placement A</div>
+          <div class="placement-title">Transfer Queue — inline banner</div>
+        </div>
+        <div class="placement-pill">Adaptive Banner</div>
+      </div>
+      <div class="placement-body">
+        <div class="phone-frame">
+          <div class="phone-topbar">
+            <div class="phone-topbar-title">Transfers</div>
+            <div class="phone-topbar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+            </div>
+          </div>
+          <div class="phone-content">
+            <div class="tq-row">
+              <div class="tq-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+              <div class="tq-body">
+                <div class="tq-name">ubuntu-22.04-server.iso</div>
+                <div class="tq-meta">842 MB / 1.4 GB · 2.1 MB/s</div>
+                <div class="tq-bar"><div class="tq-bar-fill" style="width:60%;"></div></div>
+              </div>
+            </div>
+            <div class="tq-row">
+              <div class="tq-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              </div>
+              <div class="tq-body">
+                <div class="tq-name">backup-2026-04.tar.gz</div>
+                <div class="tq-meta">Queued · 4 in queue</div>
+                <div class="tq-bar"><div class="tq-bar-fill" style="width:0%;"></div></div>
+              </div>
+            </div>
+
+            <div class="ad ad-banner">
+              <div class="ad-banner-icon">DO</div>
+              <div class="ad-banner-text">
+                <div class="ad-banner-title">DigitalOcean Droplets</div>
+                <div class="ad-banner-desc">Spin up a VPS in 55 seconds. $200 free.</div>
+              </div>
+              <div class="ad-banner-cta">Try free</div>
+            </div>
+
+            <div class="tq-row">
+              <div class="tq-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <div class="tq-body">
+                <div class="tq-name">deploy.sh</div>
+                <div class="tq-meta">12 KB · Complete</div>
+                <div class="tq-bar"><div class="tq-bar-fill" style="width:100%;background:var(--success);"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="placement-note">
+        <strong>Rules:</strong> one banner max, never between an active transfer and its controls. Fades out while a transfer is in the conflict-resolution modal.
+      </div>
+    </div>
+
+    <!-- ═══ B: Connection list native card ═══ -->
+    <div class="placement">
+      <div class="placement-head">
+        <div class="placement-head-text">
+          <div class="placement-label">Placement B</div>
+          <div class="placement-title">Connection list — native card</div>
+        </div>
+        <div class="placement-pill">Native Template</div>
+      </div>
+      <div class="placement-body">
+        <div class="phone-frame">
+          <div class="phone-topbar">
+            <div class="phone-topbar-title">Connections</div>
+            <div class="phone-topbar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </div>
+          </div>
+          <div class="phone-content">
+            <div class="conn-row">
+              <div class="conn-dot"></div>
+              <div class="conn-name">prod-web-01</div>
+              <div class="conn-meta">SSH · 22</div>
+            </div>
+            <div class="conn-row">
+              <div class="conn-dot" style="background:var(--text-muted);"></div>
+              <div class="conn-name">staging-db</div>
+              <div class="conn-meta">SFTP · 2222</div>
+            </div>
+
+            <div class="ad ad-native">
+              <div class="ad-native-head">
+                <div class="ad-native-logo">TS</div>
+                <div class="ad-native-brand">Tailscale · Sponsored</div>
+              </div>
+              <div class="ad-native-title">Connect to your servers without opening a single port.</div>
+              <div class="ad-native-body">Zero‑config mesh VPN. Works on Android, Pixel Fold, and Wear OS.</div>
+              <div class="ad-native-cta">Install →</div>
+            </div>
+
+            <div class="conn-row">
+              <div class="conn-dot"></div>
+              <div class="conn-name">home-nas</div>
+              <div class="conn-meta">FTP · 21</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="placement-note">
+        <strong>Rules:</strong> native ad is styled as a connection row with a "Sponsored" label. Slot 3 only (never first or last). Hidden during add/edit flows.
+      </div>
+    </div>
+
+    <!-- ═══ C: File Manager bottom sticky ═══ -->
+    <div class="placement">
+      <div class="placement-head">
+        <div class="placement-head-text">
+          <div class="placement-label">Placement C</div>
+          <div class="placement-title">File Manager — bottom sticky</div>
+        </div>
+        <div class="placement-pill">Adaptive Banner</div>
+      </div>
+      <div class="placement-body">
+        <div class="phone-frame">
+          <div class="phone-topbar">
+            <div class="phone-topbar-title">/home/jesse</div>
+            <div class="phone-topbar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </div>
+          </div>
+          <div class="phone-content" style="padding-bottom:0;">
+            <div class="fm-column">
+              <div class="fm-bread">~ / projects / oridev</div>
+              <div class="fm-file">
+                <div class="fm-file-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                app/
+              </div>
+              <div class="fm-file">
+                <div class="fm-file-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                domain/
+              </div>
+              <div class="fm-file">
+                <div class="fm-file-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+                README.md
+              </div>
+              <div class="fm-file">
+                <div class="fm-file-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                </div>
+                build.gradle.kts
+              </div>
+
+              <div class="ad ad-banner ad-sticky">
+                <div class="ad-banner-icon">BW</div>
+                <div class="ad-banner-text">
+                  <div class="ad-banner-title">Backblaze B2 Cloud Storage</div>
+                  <div class="ad-banner-desc">$6/TB. No egress fees.</div>
+                </div>
+                <div class="ad-banner-cta">Learn</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="placement-note">
+        <strong>Rules:</strong> sticks to bottom of file list only when the column is scrolled. Disappears during multi-select and drag-and-drop.
+      </div>
+    </div>
+
+    <!-- ═══ D: Premium upsell (house ad) ═══ -->
+    <div class="placement">
+      <div class="placement-head">
+        <div class="placement-head-text">
+          <div class="placement-label">Placement D</div>
+          <div class="placement-title">Settings → Account — house ad</div>
+        </div>
+        <div class="placement-pill">House · First-Party</div>
+      </div>
+      <div class="placement-body">
+        <div class="phone-frame">
+          <div class="phone-topbar">
+            <div class="phone-topbar-title">Settings</div>
+            <div class="phone-topbar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+          </div>
+          <div class="phone-content">
+            <div class="upsell">
+              <div class="upsell-row">
+                <div class="upsell-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 20h20"/>
+                    <path d="M5 20V9l4 3 3-6 3 6 4-3v11"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="upsell-title">Upgrade to Ori:Dev Premium</div>
+                  <div class="upsell-desc">Ad-free, bandwidth throttling, chunked transfers for files &gt; 256 MiB.</div>
+                  <div class="upsell-cta">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    See plans
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="placement-note">
+        <strong>Rules:</strong> persistent, first-party. Not counted against the "one ad per screen" limit. Dismissible for 7 days.
+      </div>
+    </div>
+
+    <!-- ═══ E: Locked throttle slider ═══ -->
+    <div class="placement">
+      <div class="placement-head">
+        <div class="placement-head-text">
+          <div class="placement-label">Placement E</div>
+          <div class="placement-title">Add Connection → locked throttle slider</div>
+        </div>
+        <div class="placement-pill">Premium Gate</div>
+      </div>
+      <div class="placement-body">
+        <div class="phone-frame">
+          <div class="phone-topbar">
+            <div class="phone-topbar-title">Edit Connection</div>
+            <div class="phone-topbar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+          </div>
+          <div class="phone-content">
+            <div class="throttle-card">
+              <div class="throttle-row">
+                <div class="throttle-label">Bandwidth limit</div>
+                <div class="throttle-badge">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Premium
+                </div>
+              </div>
+              <div class="throttle-slider-wrap">
+                <div class="throttle-track">
+                  <div class="throttle-fill"></div>
+                  <div class="throttle-thumb"></div>
+                </div>
+                <div class="throttle-value">1024 kbps (1 MB/s)</div>
+              </div>
+              <div class="throttle-scrim">
+                <div class="throttle-unlock">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Unlock with Premium
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="placement-note">
+        <strong>Rules:</strong> locked area still shows the slider value for education. Tap anywhere on the scrim → PaywallScreen with <code>PremiumFeatureKey.BANDWIDTH_THROTTLE</code>.
+      </div>
+    </div>
+
+    <!-- ═══ F: Interstitial on large transfer ═══ -->
+    <div class="placement">
+      <div class="placement-head">
+        <div class="placement-head-text">
+          <div class="placement-label">Placement F</div>
+          <div class="placement-title">Post-completion interstitial</div>
+        </div>
+        <div class="placement-pill">Interstitial · Rewarded</div>
+      </div>
+      <div class="placement-body">
+        <div class="phone-frame">
+          <div class="phone-topbar">
+            <div class="phone-topbar-title">Transfer complete</div>
+          </div>
+          <div class="phone-content">
+            <div class="interstitial">
+              <div class="interstitial-close">×</div>
+              <div class="interstitial-hero">Transfer complete</div>
+              <div class="interstitial-sub">
+                1.4 GB uploaded in 8m 12s. Watch a short ad to skip the<br>next one, or go Premium for a permanent ad-free experience.
+              </div>
+              <div class="interstitial-cta">Watch ad · Skip next</div>
+              <div class="interstitial-remove">or remove ads forever — Upgrade</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="placement-note">
+        <strong>Rules:</strong> max one interstitial per 30 minutes. Never while a transfer is active. Fully dismissible within 3 seconds. Rewarded variant skips the next eligible ad.
+      </div>
+    </div>
+
+  </div>
+
+</main>
+
+</body>
+</html>
