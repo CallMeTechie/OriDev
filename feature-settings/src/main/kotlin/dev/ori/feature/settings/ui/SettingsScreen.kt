@@ -50,11 +50,13 @@ import dev.ori.feature.settings.sections.TransfersSection
 @Composable
 public fun SettingsScreen(
     modifier: Modifier = Modifier,
+    onNavigateToPaywall: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     SettingsContent(
         state = state,
+        onNavigateToPaywall = onNavigateToPaywall,
         onCrashReportingChanged = viewModel::setCrashReportingEnabled,
         onHardwareKeyboardChanged = viewModel::setHardwareKeyboard,
         onKeyboardToolbarChanged = viewModel::setKeyboardToolbar,
@@ -73,6 +75,7 @@ public fun SettingsScreen(
 @Composable
 internal fun SettingsContent(
     state: SettingsState,
+    onNavigateToPaywall: () -> Unit = {},
     onCrashReportingChanged: (Boolean) -> Unit,
     onHardwareKeyboardChanged: (Boolean) -> Unit = {},
     onKeyboardToolbarChanged: (Boolean) -> Unit = {},
@@ -110,7 +113,10 @@ internal fun SettingsContent(
                     .padding(horizontal = 16.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(24.dp),
             ) {
-                AccountPremiumSection()
+                AccountPremiumSection(
+                    premiumStatus = state.premiumStatus,
+                    onNavigateToPaywall = onNavigateToPaywall,
+                )
                 AppearanceSection(prefs = state.preferences)
                 TerminalSection(
                     prefs = state.preferences,

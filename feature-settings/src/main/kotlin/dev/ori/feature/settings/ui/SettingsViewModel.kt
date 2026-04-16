@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.ori.core.security.preferences.CrashReportingPreferences
+import dev.ori.domain.usecase.CheckPremiumUseCase
 import dev.ori.feature.settings.data.AppPreferences
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -18,6 +19,7 @@ public class SettingsViewModel @Inject constructor(
     application: Application,
     private val crashReportingPreferences: CrashReportingPreferences,
     private val appPreferences: AppPreferences,
+    checkPremiumUseCase: CheckPremiumUseCase,
 ) : ViewModel() {
 
     private val versionName: String = runCatching {
@@ -31,12 +33,13 @@ public class SettingsViewModel @Inject constructor(
     public val state: StateFlow<SettingsState> = combine(
         crashReportingPreferences.enabled,
         appPreferences.all,
-    ) { crashReporting, prefs ->
+        checkPremiumUseCase(),
+    ) { crashReporting, prefs, isPremium ->
         SettingsState(
             crashReportingEnabled = crashReporting,
             versionName = versionName,
             preferences = prefs,
-            premiumStatus = PremiumStatus.Free,
+            premiumStatus = if (isPremium) PremiumStatus.Premium else PremiumStatus.Free,
         )
     }.stateIn(
         scope = viewModelScope,

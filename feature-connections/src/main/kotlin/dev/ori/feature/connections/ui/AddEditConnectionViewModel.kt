@@ -9,13 +9,16 @@ import dev.ori.core.common.model.Protocol
 import dev.ori.core.common.result.getAppError
 import dev.ori.domain.model.ServerProfile
 import dev.ori.domain.repository.ConnectionRepository
+import dev.ori.domain.usecase.CheckPremiumUseCase
 import dev.ori.domain.usecase.SaveProfileUseCase
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -30,6 +33,7 @@ data class AddEditFormState(
     val credential: String = "",
     val startupCommand: String = "",
     val projectDirectory: String = "",
+    val maxBandwidthKbps: Int? = null,
     val isAdvancedExpanded: Boolean = false,
     val isSaving: Boolean = false,
     val isLoading: Boolean = false,
@@ -54,6 +58,7 @@ sealed class AddEditEvent {
     data class CredentialChanged(val value: String) : AddEditEvent()
     data class StartupCommandChanged(val value: String) : AddEditEvent()
     data class ProjectDirectoryChanged(val value: String) : AddEditEvent()
+    data class MaxBandwidthKbpsChanged(val kbps: Int?) : AddEditEvent()
     data object ToggleAdvanced : AddEditEvent()
     data object Save : AddEditEvent()
 }
@@ -89,12 +94,16 @@ class AddEditConnectionViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val saveProfileUseCase: SaveProfileUseCase,
     private val connectionRepository: ConnectionRepository,
+    checkPremiumUseCase: CheckPremiumUseCase,
 ) : ViewModel() {
 
     private val profileId: Long = savedStateHandle["profileId"] ?: 0L
 
     private val _formState = MutableStateFlow(AddEditFormState())
     val formState: StateFlow<AddEditFormState> = _formState.asStateFlow()
+
+    val isPremium: StateFlow<Boolean> = checkPremiumUseCase()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), false)
 
     private val _effect = MutableSharedFlow<AddEditEffect>()
     val effect: SharedFlow<AddEditEffect> = _effect.asSharedFlow()
@@ -130,6 +139,7 @@ class AddEditConnectionViewModel @Inject constructor(
                             credential = profile.credentialRef,
                             startupCommand = profile.startupCommand ?: "",
                             projectDirectory = profile.projectDirectory ?: "",
+                            maxBandwidthKbps = profile.maxBandwidthKbps,
                             isEditMode = true,
                             profileId = profile.id,
                             isLoading = false,
@@ -177,6 +187,9 @@ class AddEditConnectionViewModel @Inject constructor(
             }
             is AddEditEvent.ProjectDirectoryChanged -> _formState.update {
                 it.copy(projectDirectory = event.value)
+            }
+            is AddEditEvent.MaxBandwidthKbpsChanged -> _formState.update {
+                it.copy(maxBandwidthKbps = event.kbps)
             }
             is AddEditEvent.ToggleAdvanced -> _formState.update {
                 it.copy(isAdvancedExpanded = !it.isAdvancedExpanded)
@@ -228,6 +241,7 @@ class AddEditConnectionViewModel @Inject constructor(
                 credentialRef = state.credential,
                 startupCommand = state.startupCommand.ifBlank { null },
                 projectDirectory = state.projectDirectory.ifBlank { null },
+                maxBandwidthKbps = state.maxBandwidthKbps,
             )
 
             val result = saveProfileUseCase(profile)
