@@ -1,10 +1,16 @@
 name: Release
 
-# Manual-only trigger. Branch protection blocks the release bot's direct
-# push of its chore(release) commit (GH006 protected-branch hook), so
-# auto-release-on-master-push is infeasible without admin bypass.
-# Releases now ship via either a workflow_dispatch with a bump selection
-# or by pushing a v*.*.* tag after a manual version.properties bump.
+# Trigger strategy:
+#   - push to master   -> bump inferred from HEAD commit message
+#                         (feat: -> minor, fix: -> patch, BREAKING CHANGE / feat!: -> major,
+#                         everything else is skipped in the "Determine version" step)
+#   - workflow_dispatch -> maintainer picks the bump explicitly
+#   - push v*.*.* tag  -> the tag IS the new version (no bump)
+#
+# Branch protection blocks direct pushes of the chore(release) commit, so the
+# workflow pushes the tag (tag refs are unprotected) and opens a PR with the
+# version.properties bump. The PR is marked for auto-merge and merges itself
+# once the required status checks pass.
 on:
   workflow_dispatch:
     inputs:
@@ -15,8 +21,13 @@ on:
         type: choice
         options: [patch, minor, major]
   push:
-    tags:
-      - 'v*.*.*'
+    branches: [master]
+    tags: ['v*.*.*']
+    paths-ignore:
+      - 'version.properties'
+      - 'RELEASE.md'
+      - 'docs/**'
+      - '**.md'
 
 # Serialize release jobs so that concurrent master pushes (e.g. a burst of
 # Dependabot merges) do not race each other for the final git push at the
@@ -102,50 +113,75 @@ jobs:
         shell: bash
         env:
           BUMP_INPUT: ${{ inputs.bump }}
+          GITHUB_REF: ${{ github.ref }}
           REF_NAME: ${{ github.ref_name }}
           EVENT_NAME: ${{ github.event_name }}
+          HEAD_MSG: ${{ github.event.head_commit.message }}
         run: |
           set -e
           source version.properties
           CURRENT="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
 
-          if [ "$EVENT_NAME" = "push" ]; then
-            # Tag push path: the tag IS the new version. Do not bump.
-            # REF_NAME will be something like "v1.2.3".
+          # Resolve the requested bump type from event context.
+          #   tag-push         -> "tag"   (use tag as-is, no commit)
+          #   workflow_dispatch -> user-selected patch/minor/major
+          #   branch-push      -> parsed from HEAD commit subject:
+          #       feat!: / BREAKING CHANGE / fix!: -> major
+          #       feat:                            -> minor
+          #       fix:                             -> patch
+          #       anything else                    -> skip (no release)
+          #   chore(release):  -> skip (loop guard, should already be filtered
+          #                       by paths-ignore but kept as belt+braces)
+          SKIP="false"
+          if [ "$EVENT_NAME" = "push" ] && [[ "$GITHUB_REF" == refs/tags/* ]]; then
             NEW="${REF_NAME#v}"
             IFS='.' read -r NEW_MAJOR NEW_MINOR NEW_PATCH <<< "$NEW"
             NEW_CODE=$((VERSION_CODE + 1))
             BUMP="tag"
             TAG="$REF_NAME"
             NEEDS_COMMIT="false"
-          else
-            # workflow_dispatch path: apply the selected bump to current.
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             BUMP="$BUMP_INPUT"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            SUBJECT="$(printf '%s' "$HEAD_MSG" | head -n1)"
+            echo "HEAD subject: $SUBJECT"
+            if [[ "$SUBJECT" == chore\(release\):* ]]; then
+              echo "::notice::Skipping release — commit is a chore(release) bump."
+              SKIP="true"
+              BUMP="skip"
+            elif [[ "$HEAD_MSG" == *"BREAKING CHANGE"* ]] || [[ "$SUBJECT" =~ ^(feat|fix)(\([^)]+\))?!: ]]; then
+              BUMP="major"
+            elif [[ "$SUBJECT" =~ ^feat(\([^)]+\))?: ]]; then
+              BUMP="minor"
+            elif [[ "$SUBJECT" =~ ^fix(\([^)]+\))?: ]]; then
+              BUMP="patch"
+            else
+              echo "::notice::Skipping release — HEAD commit is not a feat/fix/breaking change."
+              SKIP="true"
+              BUMP="skip"
+            fi
+          else
+            echo "::error::Unsupported event: $EVENT_NAME"
+            exit 1
+          fi
+
+          if [ "$SKIP" = "false" ] && [ "$BUMP" != "tag" ]; then
             case "$BUMP" in
-              major)
-                NEW_MAJOR=$((VERSION_MAJOR + 1))
-                NEW_MINOR=0
-                NEW_PATCH=0
-                ;;
-              minor)
-                NEW_MAJOR=$VERSION_MAJOR
-                NEW_MINOR=$((VERSION_MINOR + 1))
-                NEW_PATCH=0
-                ;;
-              patch)
-                NEW_MAJOR=$VERSION_MAJOR
-                NEW_MINOR=$VERSION_MINOR
-                NEW_PATCH=$((VERSION_PATCH + 1))
-                ;;
-              *)
-                echo "::error::Invalid bump input: $BUMP"
-                exit 1
-                ;;
+              major) NEW_MAJOR=$((VERSION_MAJOR + 1)); NEW_MINOR=0; NEW_PATCH=0 ;;
+              minor) NEW_MAJOR=$VERSION_MAJOR; NEW_MINOR=$((VERSION_MINOR + 1)); NEW_PATCH=0 ;;
+              patch) NEW_MAJOR=$VERSION_MAJOR; NEW_MINOR=$VERSION_MINOR; NEW_PATCH=$((VERSION_PATCH + 1)) ;;
+              *) echo "::error::Invalid bump: $BUMP"; exit 1 ;;
             esac
             NEW_CODE=$((VERSION_CODE + 1))
             NEW="${NEW_MAJOR}.${NEW_MINOR}.${NEW_PATCH}"
             TAG="v$NEW"
             NEEDS_COMMIT="true"
+          fi
+
+          echo "skip=$SKIP" >> "$GITHUB_OUTPUT"
+          if [ "$SKIP" = "true" ]; then
+            echo "Release skipped (bump=$BUMP)."
+            exit 0
           fi
 
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
@@ -164,8 +200,14 @@ jobs:
         shell: bash
         env:
           TAG: ${{ steps.bump.outputs.tag }}
+          SKIP: ${{ steps.bump.outputs.skip }}
         run: |
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
+          if [ "$SKIP" = "true" ]; then
+            # Determine-version decided this push is not a release trigger.
+            # Mark as "exists" so every downstream guard short-circuits.
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Release skipped by determine-version — downstream steps will short-circuit."
+          elif git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
             echo "::warning::Tag $TAG already exists — skipping release."
           else
@@ -354,12 +396,16 @@ jobs:
             BUMP_BRANCH="release/$TAG"
             git checkout -b "$BUMP_BRANCH"
             git push origin "$BUMP_BRANCH"
-            gh pr create \
+            PR_URL=$(gh pr create \
               --base master \
               --head "$BUMP_BRANCH" \
               --title "chore(release): $TAG" \
-              --body "Automated version bump created by the Release workflow. Merge after the release artifacts are verified."
-            echo "::notice::Version bump PR opened for $TAG — merge manually."
+              --body "Automated version bump created by the Release workflow. Auto-merged once required checks pass.")
+            echo "::notice::Version bump PR opened for $TAG: $PR_URL"
+            # Enable auto-merge (squash). Requires repo setting allow_auto_merge=true
+            # and passing required status checks; merges itself once CI is green.
+            gh pr merge --squash --auto --delete-branch "$PR_URL" || \
+              echo "::warning::Could not enable auto-merge on $PR_URL — merge manually."
           else
             # Tag push path: the tag is already on origin; we just need to
             # tag the current commit locally so subsequent steps see it.
