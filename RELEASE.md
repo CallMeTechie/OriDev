@@ -6,29 +6,41 @@ For one-time setup of GitHub secrets (keystore, Play Store service account,
 ACRA backend) see **[docs/SECRETS_SETUP.md](docs/SECRETS_SETUP.md)**. That
 guide is the single source of truth for everything CI needs.
 
-## Release Flow (fully automatic)
+## Release Flow
 
-The pipeline is driven by **Conventional Commits** — no manual version bumps.
+Three entry points, all handled by `.github/workflows/release.yml`:
+
+1. **Master push (automatic)** — bump inferred from the HEAD commit subject.
+   `feat:` → minor, `fix:` → patch, `feat!:` / `BREAKING CHANGE:` → major.
+   Any other prefix is silently skipped (no release).
+2. **`workflow_dispatch`** — maintainer picks `patch`/`minor`/`major`
+   explicitly via Actions → Release → Run workflow.
+3. **`v*.*.*` tag push** — the tag IS the version, no bump applied.
 
 ```
 feat/fix commit -> master
         |
         v
-  Build & Test (CI)   --green-->  Auto Tag workflow
-                                       |
-                                       v
-                                 version.properties bumped
-                                 chore(release): vX.Y.Z commit
-                                 annotated tag vX.Y.Z pushed
-                                       |
-                                       v
-                                 Release workflow
-                                       |
-                                       v
-                          signed AAB/APK (phone + wear)
-                          GitHub Release created
-                          Play Store Internal (DRAFT)
+   Release workflow (push: branches:[master])
+        |
+        v
+   verify (detekt, lint, test)
+        |
+        v
+   build signed AAB/APK (phone + wear, R8 minified)
+        |
+        v
+   push tag vX.Y.Z + open release/vX.Y.Z PR (auto-merged)
+        |
+        v
+   GitHub Release with assets + Play Store Internal (if secret set)
 ```
+
+The `chore(release): vX.Y.Z` bump for `version.properties` ships as a PR
+because branch protection blocks direct pushes to master. The workflow
+enables auto-merge on that PR, so it merges itself once CI goes green.
+`version.properties` and `**.md` are in `paths-ignore`, preventing the
+bump from re-triggering the workflow (infinite-loop guard).
 
 ## Versioning — Conventional Commits
 
@@ -54,12 +66,12 @@ VERSION_CODE=1
 ```
 
 Both `app/build.gradle.kts` and `wear/build.gradle.kts` read from this file
-at configuration time. **Never edit by hand** — `.github/workflows/auto-tag.yml`
-overwrites it.
+at configuration time. **Never edit by hand** — `.github/workflows/release.yml`
+overwrites it via the auto-merged `chore(release)` PR.
 
 ## What the Release workflow does
 
-Triggered only on `v*` tag push (which `auto-tag.yml` creates):
+Same 9 steps regardless of entry point:
 
 1. **Pre-Release Verification** — detekt, Android Lint, full unit test suite.
 2. **Check signing secrets** — fails fast if any KEYSTORE_* secret missing.
@@ -67,25 +79,39 @@ Triggered only on `v*` tag push (which `auto-tag.yml` creates):
 4. **Build** signed AAB + APK for `:app` and `:wear` (R8 minified, baseline profile).
 5. **Verify** `apksigner verify --min-sdk-version=34` with v2/v3 scheme check.
 6. **Changelog** grouped by Conventional Commits type, from previous tag.
-7. **GitHub Release** with phone AAB/APK, wear AAB/APK, mapping.txt, seeds.txt, usage.txt.
-8. **Play Store Internal** upload as DRAFT via gradle-play-publisher plugin.
-9. **Cleanup** keystore and secrets from the runner regardless of outcome.
+7. **Tag + version bump PR** — push `vX.Y.Z` tag, open auto-merging
+   `release/vX.Y.Z` PR with `version.properties` bumped.
+8. **GitHub Release** with phone AAB/APK, wear AAB/APK, mapping.txt, seeds.txt, usage.txt.
+9. **Play Store Internal** upload as DRAFT via gradle-play-publisher plugin.
+10. **Cleanup** keystore and secrets from the runner regardless of outcome.
 
 > The workflow has **no step-level skipping**: if any secret is missing, the
 > job fails immediately with a pointer to `docs/SECRETS_SETUP.md`. This is
 > intentional — proper releases must be complete.
 
+## Required repo settings
+
+The auto-release flow assumes the following are set on the repository
+(admin-only, one-time):
+
+- Actions → General → Workflow permissions → **Allow GitHub Actions to create and approve pull requests** (✓)
+- General → Pull Requests → **Allow auto-merge** (✓)
+- General → Pull Requests → **Automatically delete head branches** (✓)
+
+Without these, the `release/vX.Y.Z` bump PR can't be opened or can't
+auto-merge.
+
 ## Manual trigger (if needed)
 
-Only if the auto-tag workflow is somehow bypassed:
+If a commit with a non-release prefix (e.g. `chore:`) needs to ship, or
+you want to force a specific bump:
+
+- Actions → Release → Run workflow → pick `patch`/`minor`/`major`.
+
+Or push a tag directly:
 
 ```bash
-# Edit version.properties by hand
-vim version.properties
-git add version.properties
-git commit -m "chore(release): v0.3.0"
 git tag -a v0.3.0 -m "Release v0.3.0"
-git push origin master
 git push origin v0.3.0
 ```
 
@@ -97,7 +123,7 @@ confuses Play Store consumers who already downloaded the broken build.
 
 ```bash
 # Fix the bug, commit as fix: ..., push to master.
-# Auto-tag will create v0.3.1 automatically.
+# The master-push trigger on release.yml will cut v0.3.1 automatically.
 ```
 
 If you must delete a tag:
