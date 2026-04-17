@@ -145,7 +145,7 @@ jobs:
           elif [ "$EVENT_NAME" = "push" ]; then
             SUBJECT="$(printf '%s' "$HEAD_MSG" | head -n1)"
             echo "HEAD subject: $SUBJECT"
-            if [[ "$SUBJECT" == chore\(release\):* ]]; then
+            if [[ "$SUBJECT" == "chore(release):"* ]]; then
               echo "::notice::Skipping release — commit is a chore(release) bump."
               SKIP="true"
               BUMP="skip"
