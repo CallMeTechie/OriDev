@@ -145,15 +145,20 @@ jobs:
           elif [ "$EVENT_NAME" = "push" ]; then
             SUBJECT="$(printf '%s' "$HEAD_MSG" | head -n1)"
             echo "HEAD subject: $SUBJECT"
+            # Regexes must live in variables — bash's parser mishandles
+            # grouping parentheses inside an inline `=~` expression.
+            breaking_re='^(feat|fix)(\([^)]+\))?!:'
+            feat_re='^feat(\([^)]+\))?:'
+            fix_re='^fix(\([^)]+\))?:'
             if [[ "$SUBJECT" == "chore(release):"* ]]; then
               echo "::notice::Skipping release — commit is a chore(release) bump."
               SKIP="true"
               BUMP="skip"
-            elif [[ "$HEAD_MSG" == *"BREAKING CHANGE"* ]] || [[ "$SUBJECT" =~ ^(feat|fix)(\([^)]+\))?!: ]]; then
+            elif [[ "$HEAD_MSG" == *"BREAKING CHANGE"* ]] || [[ "$SUBJECT" =~ $breaking_re ]]; then
               BUMP="major"
-            elif [[ "$SUBJECT" =~ ^feat(\([^)]+\))?: ]]; then
+            elif [[ "$SUBJECT" =~ $feat_re ]]; then
               BUMP="minor"
-            elif [[ "$SUBJECT" =~ ^fix(\([^)]+\))?: ]]; then
+            elif [[ "$SUBJECT" =~ $fix_re ]]; then
               BUMP="patch"
             else
               echo "::notice::Skipping release — HEAD commit is not a feat/fix/breaking change."
