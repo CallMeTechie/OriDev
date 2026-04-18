@@ -1,6 +1,7 @@
 package dev.ori.feature.terminal.ui
 
 import dev.ori.domain.model.CommandSnippet
+import dev.ori.domain.model.KeyboardMode
 import dev.ori.domain.model.ServerProfile
 
 data class TerminalTabState(
@@ -65,6 +66,14 @@ data class TerminalUiState(
     val showCodeBlocksSheet: Boolean = false,
     val codeBlockSnackbar: String? = null,
     val modifierState: ModifierState = ModifierState(),
+    /**
+     * Phase 14 Task 14.5 — which keyboard surface the terminal pane
+     * renders. Mirrors `KeyboardPreferences.keyboardModeFlow` collected
+     * in [TerminalViewModel.init]. Defaults to [KeyboardMode.CUSTOM] so
+     * users see the familiar built-in keyboard until the DataStore
+     * first emits (which is ~instant on subsequent launches).
+     */
+    val keyboardMode: KeyboardMode = KeyboardMode.CUSTOM,
 )
 
 sealed class TerminalEvent {

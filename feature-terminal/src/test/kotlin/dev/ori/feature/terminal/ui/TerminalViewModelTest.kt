@@ -9,7 +9,9 @@ import dev.ori.core.network.ssh.SshClient
 import dev.ori.core.network.ssh.SshSession
 import dev.ori.core.security.clipboard.OriClipboard
 import dev.ori.domain.model.CommandSnippet
+import dev.ori.domain.model.KeyboardMode
 import dev.ori.domain.model.SessionRecording
+import dev.ori.domain.preferences.KeyboardPreferences
 import dev.ori.domain.repository.ClaudeRepository
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRecordingRepository
@@ -64,6 +66,9 @@ class TerminalViewModelTest {
     }
     private val sendToClaudeUseCase = SendToClaudeUseCase(claudeRepository)
     private val oriClipboard = mockk<OriClipboard>(relaxed = true)
+    private val keyboardPreferences = mockk<KeyboardPreferences>(relaxed = true) {
+        every { keyboardModeFlow } returns flowOf(KeyboardMode.CUSTOM)
+    }
     private val context = mockk<Context>(relaxed = true)
 
     @BeforeEach
@@ -93,6 +98,7 @@ class TerminalViewModelTest {
             exportSessionRecordingUseCase = exportSessionRecordingUseCase,
             sendToClaudeUseCase = sendToClaudeUseCase,
             oriClipboard = oriClipboard,
+            keyboardPreferences = keyboardPreferences,
             context = context,
         )
     }

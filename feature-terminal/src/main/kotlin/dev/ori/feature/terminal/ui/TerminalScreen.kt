@@ -1,6 +1,7 @@
 package dev.ori.feature.terminal.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,8 +30,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -52,6 +55,7 @@ import dev.ori.core.ui.icons.lucide.Zap
 import dev.ori.core.ui.theme.OriTypography
 import dev.ori.core.ui.theme.TerminalBackground
 import dev.ori.core.ui.theme.TerminalText
+import dev.ori.domain.model.KeyboardMode
 import org.connectbot.terminal.Terminal
 import org.connectbot.terminal.TerminalEmulator
 
@@ -68,6 +72,19 @@ fun TerminalScreen(
     val isWideScreen = configuration.screenWidthDp >= 600
 
     var showClipboardHistory by remember { mutableStateOf(false) }
+
+    // Phase 14 Task 14.5 — ONE FocusRequester hoisted to the screen
+    // level so the single TerminalImeAnchor in KeyboardHost keeps its
+    // focus grip across tab switches, orientation changes, and the
+    // keyboard-icon toggle. See KeyboardHost KDoc "Invariants".
+    val imeFocusRequester = remember { FocusRequester() }
+    val softwareKeyboardController = LocalSoftwareKeyboardController.current
+
+    // In HYBRID / SYSTEM_ONLY the drag-divider between terminal and
+    // keyboard is meaningless (the IME owns its own height). We hide
+    // it and lift the terminal to weight(1f). splitRatio stays in
+    // state but is only applied in CUSTOM.
+    val isCustomMode = uiState.keyboardMode == KeyboardMode.CUSTOM
 
     // Show error as snackbar
     LaunchedEffect(uiState.error) {
@@ -101,6 +118,19 @@ fun TerminalScreen(
                         onShowClipboardHistoryChange = { showClipboardHistory = it },
                         onPasteFromSystem = {
                             viewModel.onEvent(TerminalEvent.PasteFromSystem)
+                        },
+                        onToggleKeyboard = {
+                            // Phase 14 Task 14.5 — in HYBRID/SYSTEM_ONLY the
+                            // "hide keyboard" button must also dismiss the
+                            // system IME. isKeyboardVisible toggles the
+                            // visibility of our extra-keys row; the IME
+                            // needs SoftwareKeyboardController.hide().
+                            if (uiState.isKeyboardVisible &&
+                                uiState.keyboardMode != KeyboardMode.CUSTOM
+                            ) {
+                                softwareKeyboardController?.hide()
+                            }
+                            viewModel.onEvent(TerminalEvent.ToggleKeyboard)
                         },
                         onEvent = viewModel::onEvent,
                     )
@@ -144,41 +174,55 @@ fun TerminalScreen(
             )
 
             if (isWideScreen) {
-                // Landscape/unfolded: terminal + keyboard side-by-side vertically with split
+                // Landscape/unfolded: terminal + keyboard side-by-side vertically with split.
+                // In HYBRID / SYSTEM_ONLY the split-weight logic no longer makes sense because
+                // the system IME provides its own height — the terminal gets weight(1f) and
+                // the KeyboardHost is inserted after with its own imePadding().
                 Column(modifier = Modifier.fillMaxSize()) {
                     // Terminal content area
                     TerminalContentArea(
                         emulator = activeEmulator,
                         fontSize = uiState.terminalFontSize,
+                        onTap = { imeFocusRequester.requestFocus() },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(uiState.splitRatio),
+                            .weight(if (isCustomMode) uiState.splitRatio else 1f),
                     )
 
-                    // Draggable divider
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .pointerInput(Unit) {
-                                detectVerticalDragGestures { _, dragAmount ->
-                                    val delta = dragAmount / size.height.toFloat()
-                                    viewModel.onEvent(
-                                        TerminalEvent.UpdateSplitRatio(uiState.splitRatio + delta),
-                                    )
-                                }
-                            },
-                    )
-
-                    // Keyboard
-                    if (uiState.isKeyboardVisible) {
-                        CustomKeyboard(
-                            modifierState = uiState.modifierState,
-                            onEvent = viewModel::onEvent,
+                    // Draggable divider — only meaningful in CUSTOM where both halves are ours.
+                    if (isCustomMode) {
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f - uiState.splitRatio),
+                                .height(6.dp)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures { _, dragAmount ->
+                                        val delta = dragAmount / size.height.toFloat()
+                                        viewModel.onEvent(
+                                            TerminalEvent.UpdateSplitRatio(uiState.splitRatio + delta),
+                                        )
+                                    }
+                                },
+                        )
+                    }
+
+                    // Keyboard host (3 modes) — only in CUSTOM is the weighted slice applied;
+                    // HYBRID / SYSTEM_ONLY size themselves via the system IME + imePadding().
+                    if (uiState.isKeyboardVisible) {
+                        KeyboardHost(
+                            mode = uiState.keyboardMode,
+                            modifierState = uiState.modifierState,
+                            imeFocusRequester = imeFocusRequester,
+                            onInput = { bytes -> viewModel.onEvent(TerminalEvent.SendInput(bytes)) },
+                            onEvent = viewModel::onEvent,
+                            modifier = if (isCustomMode) {
+                                Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f - uiState.splitRatio)
+                            } else {
+                                Modifier.fillMaxWidth()
+                            },
                         )
                     }
                 }
@@ -188,14 +232,18 @@ fun TerminalScreen(
                     TerminalContentArea(
                         emulator = activeEmulator,
                         fontSize = uiState.terminalFontSize,
+                        onTap = { imeFocusRequester.requestFocus() },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f),
                     )
 
                     if (uiState.isKeyboardVisible) {
-                        CustomKeyboard(
+                        KeyboardHost(
+                            mode = uiState.keyboardMode,
                             modifierState = uiState.modifierState,
+                            imeFocusRequester = imeFocusRequester,
+                            onInput = { bytes -> viewModel.onEvent(TerminalEvent.SendInput(bytes)) },
                             onEvent = viewModel::onEvent,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -300,6 +348,7 @@ private fun TerminalTopBarActions(
     showClipboardHistory: Boolean,
     onShowClipboardHistoryChange: (Boolean) -> Unit,
     onPasteFromSystem: () -> Unit,
+    onToggleKeyboard: () -> Unit,
     onEvent: (TerminalEvent) -> Unit,
 ) {
     // Clipboard history
@@ -345,7 +394,7 @@ private fun TerminalTopBarActions(
     }
 
     // Keyboard toggle
-    IconButton(onClick = { onEvent(TerminalEvent.ToggleKeyboard) }) {
+    IconButton(onClick = onToggleKeyboard) {
         Icon(
             imageVector = LucideIcons.Keyboard,
             contentDescription = if (uiState.isKeyboardVisible) {
@@ -403,13 +452,22 @@ private fun TerminalContentArea(
     emulator: TerminalEmulator?,
     fontSize: Float, // P2.1: now unused — placeholder text uses OriTypography.terminalBody
     modifier: Modifier = Modifier,
+    onTap: () -> Unit = {},
 ) {
+    // Phase 14 Task 14.5 — a tap anywhere in the terminal pane should
+    // summon the IME in HYBRID/SYSTEM_ONLY modes by re-focusing the
+    // TerminalImeAnchor. In CUSTOM mode the focus-request is a no-op
+    // (the anchor is not rendered).
+    val tapModifier = Modifier.pointerInput(Unit) {
+        detectTapGestures(onTap = { onTap() })
+    }
     if (emulator != null) {
         val lineCount = emulator.dimensions.rows
         Terminal(
             terminalEmulator = emulator,
             modifier = modifier
                 .background(TerminalBackground)
+                .then(tapModifier)
                 .semantics {
                     contentDescription = "Terminal, $lineCount Zeilen Ausgabe"
                 },
@@ -418,6 +476,7 @@ private fun TerminalContentArea(
         Box(
             modifier = modifier
                 .background(TerminalBackground)
+                .then(tapModifier)
                 .semantics {
                     contentDescription = "Terminal, keine aktive Sitzung"
                 }
