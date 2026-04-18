@@ -40,7 +40,7 @@ data class TerminalUiState(
     val tabs: List<TerminalTabState> = emptyList(),
     val activeTabIndex: Int = 0,
     val isKeyboardVisible: Boolean = true,
-    val splitRatio: Float = 0.6f,
+    val splitRatio: Float = 0.5f,
     val clipboardHistory: List<String> = emptyList(),
     val showSnippets: Boolean = false,
     val snippets: List<CommandSnippet> = emptyList(),
