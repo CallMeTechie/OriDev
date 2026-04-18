@@ -116,6 +116,15 @@ class TerminalViewModel @Inject constructor(
             }
             is TerminalEvent.ClearCodeBlocks -> _uiState.update { it.copy(detectedCodeBlocks = emptyList()) }
             is TerminalEvent.ClearCodeBlockSnackbar -> _uiState.update { it.copy(codeBlockSnackbar = null) }
+            is TerminalEvent.ToggleCtrl -> _uiState.update {
+                it.copy(modifierState = it.modifierState.copy(ctrl = !it.modifierState.ctrl))
+            }
+            is TerminalEvent.ToggleAlt -> _uiState.update {
+                it.copy(modifierState = it.modifierState.copy(alt = !it.modifierState.alt))
+            }
+            is TerminalEvent.ToggleStickyModifier -> _uiState.update {
+                it.copy(modifierState = it.modifierState.copy(sticky = !it.modifierState.sticky))
+            }
         }
     }
 
@@ -265,7 +274,16 @@ class TerminalViewModel @Inject constructor(
     }
 
     private fun sendText(text: String) {
-        sendInput(text.toByteArray())
+        val modifier = _uiState.value.modifierState
+        val translated = translateForModifiers(text, modifier)
+        sendInput(translated)
+        // Clear the latched Ctrl/Alt after a single emit unless the user
+        // long-pressed to stick them. Sticky is preserved either way.
+        if (!modifier.sticky && (modifier.ctrl || modifier.alt)) {
+            _uiState.update {
+                it.copy(modifierState = it.modifierState.copy(ctrl = false, alt = false))
+            }
+        }
     }
 
     private fun paste(text: String) {
@@ -330,7 +348,15 @@ class TerminalViewModel @Inject constructor(
     }
 
     private fun switchTab(index: Int) {
-        _uiState.update { it.copy(activeTabIndex = index) }
+        // Phase 14 Task 14.3 — clear modifiers on tab switch so a latched
+        // Ctrl/Alt on tab A does not bleed into tab B. Sticky is preserved
+        // (it is a user preference, not per-tab state).
+        _uiState.update {
+            it.copy(
+                activeTabIndex = index,
+                modifierState = it.modifierState.copy(ctrl = false, alt = false),
+            )
+        }
     }
 
     private fun toggleKeyboard() {
@@ -545,5 +571,89 @@ class TerminalViewModel @Inject constructor(
         private const val DEFAULT_ROWS = 24
         private const val DEFAULT_COLS = 80
         private const val MAX_CODE_BLOCKS = 20
+    }
+}
+
+/**
+ * Phase 14 Task 14.3 — pure modifier translator. Extracted as a
+ * top-level `internal` function so the 8 ctrl-letter + 8
+ * ctrl-non-letter + Alt-prefix rows can be round-tripped in plain
+ * JUnit 5 tests without spinning up a ViewModel.
+ *
+ * Ctrl mapping (first byte of [text], if [ModifierState.ctrl]):
+ * - a-z / A-Z  → `c.code and 0x1F` (Ctrl+C → 0x03)
+ * - '@' or ' ' → 0x00 (NUL, tmux-prefix)
+ * - '['        → 0x1B (ESC)
+ * - '\'        → 0x1C (FS / SIGQUIT)
+ * - ']'        → 0x1D (GS / telnet-escape)
+ * - '^'        → 0x1E (RS / readline undo)
+ * - '_'        → 0x1F (US / readline incremental)
+ * - '?'        → 0x7F (DEL, bash ^? alt)
+ * - anything else → pass-through as UTF-8, latch was a no-op
+ *
+ * Alt mapping (applied *after* Ctrl): if [ModifierState.alt] is set,
+ * prepend a single ESC (0x1B) byte to the result. This follows the
+ * xterm/ANSI convention for Meta keys.
+ *
+ * [text] normally has length 1 from the on-screen keyboard, but we
+ * accept longer strings for robustness (arrow-key escape sequences,
+ * pastes from extra-keys row). For multi-char text the Ctrl
+ * translation only applies to the first character; the rest pass
+ * through unchanged. The Alt prefix is still prepended once.
+ */
+internal fun translateForModifiers(text: String, modifierState: ModifierState): ByteArray {
+    // Empty input + Alt latched: still emit ESC. Some extra-keys callers
+    // (Task 14.4) use Alt with the next-key affordance independent of
+    // any text payload, and the xterm Meta convention is "ESC then char";
+    // emitting a lone ESC keeps that path live.
+    if (text.isEmpty()) {
+        return if (modifierState.alt) byteArrayOf(ESC_BYTE) else ByteArray(0)
+    }
+
+    val ctrlApplied: ByteArray = if (modifierState.ctrl) {
+        applyCtrl(text)
+    } else {
+        text.toByteArray()
+    }
+
+    return if (modifierState.alt) {
+        byteArrayOf(ESC_BYTE) + ctrlApplied
+    } else {
+        ctrlApplied
+    }
+}
+
+private const val ESC_BYTE: Byte = 0x1B
+private const val CTRL_MASK = 0x1F
+
+@Suppress("MagicNumber")
+private fun applyCtrl(text: String): ByteArray {
+    val first = text[0]
+    val mapped: Byte? = when {
+        first in 'a'..'z' || first in 'A'..'Z' -> (first.code and CTRL_MASK).toByte()
+        first == '@' || first == ' ' -> 0x00
+        first == '[' -> 0x1B
+        first == '\\' -> 0x1C
+        first == ']' -> 0x1D
+        first == '^' -> 0x1E
+        first == '_' -> 0x1F
+        first == '?' -> 0x7F
+        else -> null
+    }
+
+    return if (mapped != null) {
+        // Translated: prepend the control byte, then the rest of the
+        // string as-is (normally empty for single-char input).
+        if (text.length == 1) {
+            byteArrayOf(mapped)
+        } else {
+            byteArrayOf(mapped) + text.substring(1).toByteArray()
+        }
+    } else {
+        // Pass-through: Ctrl + unsupported char is a no-op latch; bytes
+        // are the UTF-8 of the unchanged text. The latch is cleared by
+        // the caller (TerminalViewModel.sendText) because a non-sticky
+        // modifier always clears after any SendText.
+        text.toByteArray()
     }
 }
