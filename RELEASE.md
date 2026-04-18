@@ -101,6 +101,30 @@ The auto-release flow assumes the following are set on the repository
 Without these, the `release/vX.Y.Z` bump PR can't be opened or can't
 auto-merge.
 
+### Required secret: `RELEASE_PAT`
+
+GitHub deliberately does **not** run workflows on pushes authenticated
+with the repo's `GITHUB_TOKEN` (anti-loop safety). The `release/vX.Y.Z`
+bump PR therefore comes into the world with *no* status checks attached
+and its auto-merge stalls in `BLOCKED` forever. To fix this, the release
+workflow pushes the bump branch with a maintainer-owned PAT when the
+`RELEASE_PAT` secret is set.
+
+One-time setup:
+
+1. GitHub → Settings → Developer settings → Personal access tokens →
+   Fine-grained tokens → **Generate new token**.
+2. Repository access: **Only select repositories → CallMeTechie/OriDev**.
+3. Permissions: **Contents: Read and write**, **Pull requests: Read and write**.
+4. Expiration: 1 year (calendar reminder to rotate).
+5. Copy the token. In the repo: Settings → Secrets and variables →
+   Actions → **New repository secret** → name `RELEASE_PAT`, paste the
+   token.
+
+Without `RELEASE_PAT` the workflow falls back to `GITHUB_TOKEN` and
+emits a warning; you'll then need a manual empty commit on the bump
+branch to kick off CI before auto-merge can proceed.
+
 ## Manual trigger (if needed)
 
 If a commit with a non-release prefix (e.g. `chore:`) needs to ship, or
