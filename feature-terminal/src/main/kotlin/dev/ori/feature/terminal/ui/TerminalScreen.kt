@@ -174,7 +174,8 @@ fun TerminalScreen(
                     // Keyboard
                     if (uiState.isKeyboardVisible) {
                         CustomKeyboard(
-                            onInput = { viewModel.onEvent(TerminalEvent.SendInput(it)) },
+                            modifierState = uiState.modifierState,
+                            onEvent = viewModel::onEvent,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f - uiState.splitRatio),
@@ -194,7 +195,8 @@ fun TerminalScreen(
 
                     if (uiState.isKeyboardVisible) {
                         CustomKeyboard(
-                            onInput = { viewModel.onEvent(TerminalEvent.SendInput(it)) },
+                            modifierState = uiState.modifierState,
+                            onEvent = viewModel::onEvent,
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
