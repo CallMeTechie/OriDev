@@ -116,6 +116,7 @@ work-testing = { module = "androidx.work:work-testing", version.ref = "work" }
 
 # DataStore
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
+datastore-preferences-core = { module = "androidx.datastore:datastore-preferences-core", version.ref = "datastore" }
 
 # Security
 biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
