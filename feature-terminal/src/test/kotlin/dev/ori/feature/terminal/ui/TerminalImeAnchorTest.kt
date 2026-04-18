@@ -29,21 +29,23 @@ class TerminalImeAnchorTest {
         val previous = TextFieldValue(text = "")
         val current = TextFieldValue(text = "a")
 
-        val delta = committedDelta(previous, current)
+        val result = committedDelta(previous, current)
 
-        assertThat(delta).isEqualTo("a")
-        assertThat(delta!!.toByteArray(Charsets.UTF_8)).isEqualTo(byteArrayOf(0x61))
+        assertThat(result).isInstanceOf(CommitResult.Insert::class.java)
+        val insert = result as CommitResult.Insert
+        assertThat(insert.text).isEqualTo("a")
+        assertThat(insert.text.toByteArray(Charsets.UTF_8)).isEqualTo(byteArrayOf(0x61))
     }
 
     @Test
-    fun committedDelta_compositionActive_returnsNull() {
+    fun committedDelta_compositionActive_returnsNoOp() {
         // IME is mid-swipe: "he" is shown with the composing underline.
         val previous = TextFieldValue(text = "")
         val composingH = TextFieldValue(text = "h", composition = TextRange(0, 1))
         val composingHe = TextFieldValue(text = "he", composition = TextRange(0, 2))
 
-        assertThat(committedDelta(previous, composingH)).isNull()
-        assertThat(committedDelta(composingH, composingHe)).isNull()
+        assertThat(committedDelta(previous, composingH)).isEqualTo(CommitResult.NoOp)
+        assertThat(committedDelta(composingH, composingHe)).isEqualTo(CommitResult.NoOp)
     }
 
     @Test
@@ -52,12 +54,14 @@ class TerminalImeAnchorTest {
         val composingHe = TextFieldValue(text = "he", composition = TextRange(0, 2))
         val committed = TextFieldValue(text = "he ", composition = null)
 
-        val delta = committedDelta(composingHe, committed)
+        val result = committedDelta(composingHe, committed)
 
         // The previous's committed-portion was "" (everything was composing),
         // so the whole of current is the new committed delta.
-        assertThat(delta).isEqualTo("he ")
-        assertThat(delta!!.toByteArray(Charsets.UTF_8)).hasLength(3)
+        assertThat(result).isInstanceOf(CommitResult.Insert::class.java)
+        val insert = result as CommitResult.Insert
+        assertThat(insert.text).isEqualTo("he ")
+        assertThat(insert.text.toByteArray(Charsets.UTF_8)).hasLength(3)
     }
 
     @Test
@@ -80,15 +84,15 @@ class TerminalImeAnchorTest {
         val emitted = mutableListOf<ByteArray>()
         var previous = frames[0]
         for (i in 1 until frames.size) {
-            val delta = committedDelta(previous, frames[i])
-            if (delta != null && delta.isNotEmpty()) {
-                emitted.add(delta.toByteArray(Charsets.UTF_8))
+            val result = committedDelta(previous, frames[i])
+            if (result is CommitResult.Insert && result.text.isNotEmpty()) {
+                emitted.add(result.text.toByteArray(Charsets.UTF_8))
             }
             previous = frames[i]
         }
-        val finalDelta = committedDelta(previous, committed)
-        if (finalDelta != null && finalDelta.isNotEmpty()) {
-            emitted.add(finalDelta.toByteArray(Charsets.UTF_8))
+        val finalResult = committedDelta(previous, committed)
+        if (finalResult is CommitResult.Insert && finalResult.text.isNotEmpty()) {
+            emitted.add(finalResult.text.toByteArray(Charsets.UTF_8))
         }
 
         // Exactly ONE emit, exactly 5 bytes ("hello").
@@ -103,12 +107,111 @@ class TerminalImeAnchorTest {
         val previous = TextFieldValue(text = "")
         val current = TextFieldValue(text = "ö")
 
-        val delta = committedDelta(previous, current)
+        val result = committedDelta(previous, current)
 
-        assertThat(delta).isEqualTo("ö")
-        val bytes = delta!!.toByteArray(Charsets.UTF_8)
+        assertThat(result).isInstanceOf(CommitResult.Insert::class.java)
+        val insert = result as CommitResult.Insert
+        assertThat(insert.text).isEqualTo("ö")
+        val bytes = insert.text.toByteArray(Charsets.UTF_8)
         assertThat(bytes).isEqualTo(byteArrayOf(0xC3.toByte(), 0xB6.toByte()))
         assertThat(bytes).hasLength(2)
+    }
+
+    @Test
+    fun committedDelta_selectionReplacedEntirely_returnsFullCurrentText() {
+        // Exercises the DEFENSIVE FALLBACK branch in committedDelta: when
+        // currentText does not start with previousCommitted AND is not a pure
+        // shrink. In production this branch is unreachable because the anchor
+        // resets state to "" after every emit, but a future refactor or an
+        // odd IME could hit it — we want to over-send rather than drop input.
+        val previous = TextFieldValue(text = "foo", composition = null)
+        val current = TextFieldValue(text = "xxx", composition = null)
+
+        val result = committedDelta(previous, current)
+
+        assertThat(result).isInstanceOf(CommitResult.Insert::class.java)
+        val insert = result as CommitResult.Insert
+        assertThat(insert.text).isEqualTo("xxx")
+    }
+
+    // endregion
+
+    // region committedDelta — soft-keyboard Backspace (text-shrink) detection
+
+    @Test
+    fun committedDelta_textShrinksByOne_returnsDeleteOne() {
+        // Gboard: user typed "abc" (now in the committed portion), then tapped
+        // the on-screen Backspace key. Gboard routes that as a text-change
+        // from "abc" → "ab", NOT as a KeyEvent. We must detect it here.
+        val previous = TextFieldValue(text = "abc", composition = null)
+        val current = TextFieldValue(text = "ab", composition = null)
+
+        val result = committedDelta(previous, current)
+
+        assertThat(result).isEqualTo(CommitResult.Delete(count = 1))
+    }
+
+    @Test
+    fun committedDelta_textClearedFromNonEmpty_returnsDeleteAllChars() {
+        // User held Backspace or the IME nuked the whole field in one frame.
+        val previous = TextFieldValue(text = "hello", composition = null)
+        val current = TextFieldValue(text = "", composition = null)
+
+        val result = committedDelta(previous, current)
+
+        assertThat(result).isEqualTo(CommitResult.Delete(count = 5))
+    }
+
+    @Test
+    fun committedDelta_typeAbcThenThreeBackspaces_emitsExpectedByteSequence() {
+        // Integration-style: simulate the real onValueChange loop that the
+        // composable runs. Anchor resets to "" after every emit (Insert OR
+        // Delete), so each Backspace step sees previous="X"/current="".
+
+        // Step 1: type "a" (committed, no composition).
+        // Step 2: anchor reset → type "b".
+        // Step 3: anchor reset → type "c".
+        // Step 4: soft Backspace — field showed "" (post-reset) briefly,
+        //         but for Backspace-after-emit we model the case where the
+        //         field held the typed char and then shrank. Concretely:
+        //         simulate previous="c", current="" (length shrink).
+        // Steps 5/6: another two Backspaces, modelled the same way.
+        val emitted = mutableListOf<Byte>()
+        fun drive(previous: TextFieldValue, current: TextFieldValue): TextFieldValue {
+            return when (val r = committedDelta(previous, current)) {
+                CommitResult.NoOp -> current
+                is CommitResult.Insert -> {
+                    emitted += r.text.toByteArray(Charsets.UTF_8).toList()
+                    TextFieldValue("")
+                }
+                is CommitResult.Delete -> {
+                    repeat(r.count) { emitted += 0x7F.toByte() }
+                    TextFieldValue("")
+                }
+            }
+        }
+
+        var state = TextFieldValue("")
+        state = drive(state, TextFieldValue("a"))
+        state = drive(state, TextFieldValue("b"))
+        state = drive(state, TextFieldValue("c"))
+        // Now simulate three soft-Backspaces. After each Insert the field was
+        // reset to "", so to model a real shrink we pretend the user typed a
+        // char and then backspaced before the next state observation. In the
+        // canonical flow described by the issue, each Backspace path goes:
+        //   previous holds 1 char → current is "".
+        state = drive(TextFieldValue("a"), TextFieldValue(""))
+        state = drive(TextFieldValue("a"), TextFieldValue(""))
+        state = drive(TextFieldValue("a"), TextFieldValue(""))
+
+        assertThat(emitted).containsExactly(
+            0x61.toByte(), // 'a'
+            0x62.toByte(), // 'b'
+            0x63.toByte(), // 'c'
+            0x7F.toByte(), // DEL
+            0x7F.toByte(), // DEL
+            0x7F.toByte(), // DEL
+        ).inOrder()
     }
 
     // endregion
