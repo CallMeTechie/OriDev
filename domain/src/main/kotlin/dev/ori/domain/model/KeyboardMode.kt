@@ -2,7 +2,7 @@ package dev.ori.domain.model
 
 /**
  * Selects which keyboard surface the terminal pane renders under the shell
- * view. Persisted by `KeyboardPreferences` in `core-common`; consumed by
+ * view. Persisted by `KeyboardPreferences` in `:domain`; consumed by
  * `KeyboardHost` in `feature-terminal` (Phase 14).
  *
  * Values:

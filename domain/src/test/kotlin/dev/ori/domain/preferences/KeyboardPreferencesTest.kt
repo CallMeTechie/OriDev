@@ -48,7 +48,7 @@ class KeyboardPreferencesTest {
     }
 
     @Test
-    fun defaultMode_constant_isCustomForExistingUserMuscleMemory() {
+    fun defaultMode_afterFreshInstall_isCustom() {
         // Sanity guard: do NOT change this without updating the Phase 14
         // plan + release notes. Existing users rely on CUSTOM on upgrade.
         assertThat(KeyboardPreferences.DEFAULT_MODE).isEqualTo(KeyboardMode.CUSTOM)
@@ -123,7 +123,7 @@ class KeyboardPreferencesTest {
     }
 
     @Test
-    fun datastoreName_constant_isOriKeyboard() {
+    fun datastoreName_value_equalsOriKeyboard() {
         // Guard against accidental rename — the downstream Hilt provider
         // passes this to `context.preferencesDataStoreFile(...)` and
         // changing it silently would lose user preferences on upgrade.
