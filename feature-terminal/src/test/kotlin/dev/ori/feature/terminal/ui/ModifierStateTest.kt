@@ -135,12 +135,13 @@ class ModifierStateTest {
     }
 
     @Test
-    fun translateForModifiers_emptyStringWithAlt_emitsEmptyArray() {
-        // Edge: if there's no character to prefix, no ESC is emitted.
-        // Callers never send empty SendText in practice, but the
-        // translator must not crash.
+    fun translateForModifiers_emptyStringWithAlt_emitsLoneEsc() {
+        // Empty input + Alt latched: still emit the ESC byte. Phase 14
+        // Task 14.4's TerminalExtraKeys uses Alt as a next-key prefix
+        // independent of any payload from the IME path; emitting a lone
+        // ESC keeps that affordance live.
         val result = translateForModifiers("", alt)
-        assertThat(result).isEmpty()
+        assertThat(result).isEqualTo(byteArrayOf(0x1B.toByte()))
     }
 
     // endregion
@@ -156,11 +157,11 @@ class ModifierStateTest {
     }
 
     @Test
-    fun modifierState_copyWithCtrlTrue_onlyChangesCtrl() {
-        val state = ModifierState().copy(ctrl = true)
-        assertThat(state.ctrl).isTrue()
-        assertThat(state.alt).isFalse()
-        assertThat(state.sticky).isFalse()
+    fun translateForModifiers_singleCtrlNoAlt_doesNotPrependEsc() {
+        // Regression guard: Ctrl alone must not introduce an ESC byte.
+        // Only the Alt latch produces the ESC prefix.
+        val result = translateForModifiers("c", ctrl)
+        assertThat(result).isEqualTo(byteArrayOf(0x03.toByte()))
     }
 
     // endregion

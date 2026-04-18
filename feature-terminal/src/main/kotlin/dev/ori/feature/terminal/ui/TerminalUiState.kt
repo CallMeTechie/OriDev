@@ -24,7 +24,11 @@ data class TerminalTabState(
  * - [alt]: next emitted bytes are prefixed with ESC (0x1B). Cleared
  *   after emit unless [sticky] is true.
  * - [sticky]: when true, neither [ctrl] nor [alt] auto-clear after
- *   an emit. Long-press UX on the Ctrl/Alt key toggles this.
+ *   an emit. The [TerminalEvent.ToggleStickyModifier] event is fired
+ *   from the long-press handler on the Ctrl/Alt buttons in the
+ *   `TerminalExtraKeys` row (Task 14.4). The CUSTOM-mode keyboard
+ *   intentionally has no long-press affordance — Phase 14 Task 14.3
+ *   restricts itself to "no behaviour change" for CustomKeyboard.
  */
 data class ModifierState(
     val ctrl: Boolean = false,

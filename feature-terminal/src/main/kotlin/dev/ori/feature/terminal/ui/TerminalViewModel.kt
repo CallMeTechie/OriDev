@@ -602,7 +602,13 @@ class TerminalViewModel @Inject constructor(
  * through unchanged. The Alt prefix is still prepended once.
  */
 internal fun translateForModifiers(text: String, modifierState: ModifierState): ByteArray {
-    if (text.isEmpty()) return ByteArray(0)
+    // Empty input + Alt latched: still emit ESC. Some extra-keys callers
+    // (Task 14.4) use Alt with the next-key affordance independent of
+    // any text payload, and the xterm Meta convention is "ESC then char";
+    // emitting a lone ESC keeps that path live.
+    if (text.isEmpty()) {
+        return if (modifierState.alt) byteArrayOf(ESC_BYTE) else ByteArray(0)
+    }
 
     val ctrlApplied: ByteArray = if (modifierState.ctrl) {
         applyCtrl(text)
