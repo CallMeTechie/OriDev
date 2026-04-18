@@ -12,6 +12,30 @@ data class TerminalTabState(
     val outputVersion: Long = 0,
 )
 
+/**
+ * Phase 14 Task 14.3 — single source of truth for terminal keyboard
+ * modifier state. Both [CustomKeyboard] and the upcoming
+ * TerminalExtraKeys (Task 14.4) read and write this flag, so a
+ * latched Ctrl survives a mode switch between CUSTOM and HYBRID
+ * keyboards without drifting.
+ *
+ * - [ctrl]: next printable char is translated via the Ctrl table in
+ *   [TerminalViewModel]. Cleared after emit unless [sticky] is true.
+ * - [alt]: next emitted bytes are prefixed with ESC (0x1B). Cleared
+ *   after emit unless [sticky] is true.
+ * - [sticky]: when true, neither [ctrl] nor [alt] auto-clear after
+ *   an emit. The [TerminalEvent.ToggleStickyModifier] event is fired
+ *   from the long-press handler on the Ctrl/Alt buttons in the
+ *   `TerminalExtraKeys` row (Task 14.4). The CUSTOM-mode keyboard
+ *   intentionally has no long-press affordance — Phase 14 Task 14.3
+ *   restricts itself to "no behaviour change" for CustomKeyboard.
+ */
+data class ModifierState(
+    val ctrl: Boolean = false,
+    val alt: Boolean = false,
+    val sticky: Boolean = false,
+)
+
 data class TerminalUiState(
     val tabs: List<TerminalTabState> = emptyList(),
     val activeTabIndex: Int = 0,
@@ -40,6 +64,7 @@ data class TerminalUiState(
     val detectedCodeBlocks: List<DetectedCodeBlock> = emptyList(),
     val showCodeBlocksSheet: Boolean = false,
     val codeBlockSnackbar: String? = null,
+    val modifierState: ModifierState = ModifierState(),
 )
 
 sealed class TerminalEvent {
@@ -86,4 +111,10 @@ sealed class TerminalEvent {
     data class OpenCodeBlockInEditor(val blockId: String) : TerminalEvent()
     data object ClearCodeBlocks : TerminalEvent()
     data object ClearCodeBlockSnackbar : TerminalEvent()
+
+    // Phase 14 Task 14.3 — modifier state events (single source of truth
+    // consumed by CustomKeyboard and the upcoming TerminalExtraKeys).
+    data object ToggleCtrl : TerminalEvent()
+    data object ToggleAlt : TerminalEvent()
+    data object ToggleStickyModifier : TerminalEvent()
 }

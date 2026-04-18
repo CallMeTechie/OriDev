@@ -75,39 +75,34 @@ private fun keyDescription(label: String): String = when (label) {
 
 @Composable
 fun CustomKeyboard(
-    onInput: (ByteArray) -> Unit,
+    modifierState: ModifierState,
+    onEvent: (TerminalEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var ctrlActive by remember { mutableStateOf(false) }
-    var altActive by remember { mutableStateOf(false) }
+    // Phase 14 Task 14.3 — Ctrl/Alt are now in TerminalUiState so the
+    // latch survives keyboard-mode switches and is shared with the
+    // upcoming TerminalExtraKeys row. Shift is still local: it is
+    // keyboard-UI only (label casing on soft keys), irrelevant to the
+    // ViewModel's byte stream.
+    val ctrlActive = modifierState.ctrl
+    val altActive = modifierState.alt
     var shiftActive by remember { mutableStateOf(false) }
     var showFunctionRow by remember { mutableStateOf(false) }
 
+    // Character keys go through SendText so the ViewModel applies its
+    // Ctrl/Alt translation table. No local Ctrl mapping here — that
+    // was the old two-sources-of-truth design.
     fun sendKey(text: String) {
-        val bytes = when {
-            ctrlActive && text.length == 1 -> {
-                val ch = text.uppercase()[0]
-                if (ch in 'A'..'Z') {
-                    byteArrayOf((ch - 'A' + 1).toByte())
-                } else {
-                    text.toByteArray()
-                }
-            }
-            altActive && text.length == 1 -> {
-                (ESC + text).toByteArray()
-            }
-            else -> text.toByteArray()
-        }
-        onInput(bytes)
-        if (ctrlActive) ctrlActive = false
-        if (altActive) altActive = false
+        onEvent(TerminalEvent.SendText(text))
         if (shiftActive) shiftActive = false
     }
 
+    // Raw bytes (arrow keys, function keys, Esc, Tab char, backspace)
+    // bypass the translator — they already are the final bytes the
+    // terminal expects. Still clear shift so the next letter key
+    // renders lowercase again.
     fun sendRaw(bytes: ByteArray) {
-        onInput(bytes)
-        if (ctrlActive) ctrlActive = false
-        if (altActive) altActive = false
+        onEvent(TerminalEvent.SendInput(bytes))
         if (shiftActive) shiftActive = false
     }
 
@@ -199,7 +194,7 @@ fun CustomKeyboard(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            ToggleKeyButton("Ctrl", ctrlActive) { ctrlActive = !ctrlActive }
+            ToggleKeyButton("Ctrl", ctrlActive) { onEvent(TerminalEvent.ToggleCtrl) }
             for (c in "asdfghjkl") {
                 val label = if (shiftActive) c.uppercase() else c.toString()
                 KeyButton(label) { sendKey(label) }
@@ -242,7 +237,7 @@ fun CustomKeyboard(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            ToggleKeyButton("Alt", altActive) { altActive = !altActive }
+            ToggleKeyButton("Alt", altActive) { onEvent(TerminalEvent.ToggleAlt) }
             KeyButton("~") { sendKey("~") }
             KeyButton("`") { sendKey("`") }
             KeyButton("|") { sendKey("|") }
