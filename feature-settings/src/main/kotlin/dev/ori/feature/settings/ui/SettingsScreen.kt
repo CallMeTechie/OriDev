@@ -22,6 +22,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.components.OriTopBarDefaults
+import dev.ori.domain.model.KeyboardMode
 import dev.ori.feature.settings.sections.AboutSection
 import dev.ori.feature.settings.sections.AccountPremiumSection
 import dev.ori.feature.settings.sections.AppearanceSection
@@ -60,6 +61,7 @@ public fun SettingsScreen(
         onCrashReportingChanged = viewModel::setCrashReportingEnabled,
         onHardwareKeyboardChanged = viewModel::setHardwareKeyboard,
         onKeyboardToolbarChanged = viewModel::setKeyboardToolbar,
+        onKeyboardModeChanged = viewModel::setKeyboardMode,
         onAutoResumeChanged = viewModel::setAutoResume,
         onMaxRetryAttemptsChanged = viewModel::setMaxRetryAttempts,
         onRetryBackoffSecondsChanged = viewModel::setRetryBackoffSeconds,
@@ -79,6 +81,7 @@ internal fun SettingsContent(
     onCrashReportingChanged: (Boolean) -> Unit,
     onHardwareKeyboardChanged: (Boolean) -> Unit = {},
     onKeyboardToolbarChanged: (Boolean) -> Unit = {},
+    onKeyboardModeChanged: (KeyboardMode) -> Unit = {},
     onAutoResumeChanged: (Boolean) -> Unit = {},
     onMaxRetryAttemptsChanged: (Int) -> Unit = {},
     onRetryBackoffSecondsChanged: (Int) -> Unit = {},
@@ -120,8 +123,10 @@ internal fun SettingsContent(
                 AppearanceSection(prefs = state.preferences)
                 TerminalSection(
                     prefs = state.preferences,
+                    keyboardMode = state.keyboardMode,
                     onHardwareKeyboardChanged = onHardwareKeyboardChanged,
                     onKeyboardToolbarChanged = onKeyboardToolbarChanged,
+                    onKeyboardModeChanged = onKeyboardModeChanged,
                 )
                 TransfersSection(
                     prefs = state.preferences,
