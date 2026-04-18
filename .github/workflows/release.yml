@@ -382,17 +382,25 @@ jobs:
           TAG: ${{ steps.bump.outputs.tag }}
           NEW_VERSION: ${{ steps.bump.outputs.new }}
           NEEDS_COMMIT: ${{ steps.bump.outputs.needs_commit }}
+          # RELEASE_PAT: maintainer-owned PAT used to push the bump-PR branch
+          # so GitHub actually runs the required status checks. A push
+          # authenticated with GITHUB_TOKEN does not trigger downstream
+          # workflows (GitHub's anti-loop safety) — without a PAT the
+          # bump-PR stays BLOCKED because no checks ever arrive. Setup in
+          # RELEASE.md §"Required repo settings". When the secret is absent
+          # the workflow falls back to GITHUB_TOKEN and emits a warning.
+          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           if [ "$NEEDS_COMMIT" = "true" ]; then
-            # workflow_dispatch path: we changed version.properties above.
-            # Branch protection blocks direct pushes of chore(release)
-            # commits, so we open a PR against master with the bump
-            # instead of pushing directly. The tag is created locally and
-            # pushed separately (tag refs are not protected).
+            # workflow_dispatch / master-push path: we changed version.properties
+            # above. Branch protection blocks direct pushes of chore(release)
+            # commits, so we open a PR against master with the bump instead
+            # of pushing directly. The tag is created locally and pushed
+            # separately (tag refs are not protected).
             git add version.properties
             git commit -m "chore(release): $TAG"
             git tag -a "$TAG" -m "Release $TAG"
@@ -400,8 +408,22 @@ jobs:
 
             BUMP_BRANCH="release/$TAG"
             git checkout -b "$BUMP_BRANCH"
-            git push origin "$BUMP_BRANCH"
-            PR_URL=$(gh pr create \
+
+            # Pick the token that actually triggers downstream CI runs. A PAT
+            # (maintainer-owned) pushes as a human, so pull_request checks
+            # fire. GITHUB_TOKEN silently skips them. We keep GITHUB_TOKEN as
+            # a fallback so the job still opens the PR — maintainer will just
+            # need a manual empty commit to kick CI.
+            if [ -n "$RELEASE_PAT" ]; then
+              PUSH_TOKEN="$RELEASE_PAT"
+              echo "Pushing bump branch with RELEASE_PAT — CI will trigger."
+            else
+              PUSH_TOKEN="$GH_TOKEN"
+              echo "::warning::RELEASE_PAT secret not set — bump PR will not auto-trigger CI. Add an empty commit to $BUMP_BRANCH to unblock auto-merge. See RELEASE.md."
+            fi
+            git push "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$BUMP_BRANCH"
+
+            PR_URL=$(GH_TOKEN="$PUSH_TOKEN" gh pr create \
               --base master \
               --head "$BUMP_BRANCH" \
               --title "chore(release): $TAG" \
