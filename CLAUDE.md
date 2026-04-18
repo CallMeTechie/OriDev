@@ -105,3 +105,33 @@ WARNING rules (advisory):
 - Terminal: ConnectBot termlib (Apache 2.0, org.connectbot:termlib)
 - Editor: Sora-Editor (io.github.Rosemoe.sora-editor)
 - Proxmox API: OkHttp + Moshi
+
+## Terminal Keyboard Modes (Phase 14)
+
+The terminal can render its on-screen keyboard in one of three modes,
+selected via Settings → Terminal → Keyboard style. The choice is stored
+in `KeyboardPreferences` (`:domain`, backed by a standalone `ori_keyboard`
+DataStore) and read into `TerminalUiState.keyboardMode`.
+
+- **CUSTOM** *(default for existing installs; recommended for password
+  entry)* — the in-app `CustomKeyboard` composable is rendered in the
+  bottom slot. Nothing is routed through the system IME, so no dictionary
+  learning or cloud sync can leak typed text.
+- **HYBRID** — the Android system IME (Gboard, SwiftKey, …) is used for
+  text input, plus a sticky `TerminalExtraKeys` row pinned above it
+  (Esc/Tab/Ctrl/Alt/arrows/Fn/`|`/`/`/`~`/backtick/Home/End/PgUp/PgDn).
+  IME dictionary learning is suppressed by `KeyboardType.Password +
+  autoCorrect=false` on the invisible `TerminalImeAnchor`. Switching to
+  this mode shows an explicit IME-learning warning dialog.
+- **SYSTEM_ONLY** — the system IME alone, no extra-keys row. Power-user
+  escape hatch.
+
+A single `TerminalImeAnchor` lives at the top of `KeyboardHost` (not
+per tab) so IME focus survives `SwitchTab`. `ResizeTerminal` events
+are debounced 200 ms and dropped below a 5-row floor so that emoji-sheet
+toggles and IME-layout switches don't spam SSH `window-change` packets.
+
+The Ctrl/Alt modifier state is centralised in `TerminalUiState.ModifierState`
+and shared by both `CustomKeyboard` and `TerminalExtraKeys`. Long-press on
+a Ctrl/Alt key in the extra-keys row toggles `sticky` so the modifier
+persists across multiple keystrokes.
