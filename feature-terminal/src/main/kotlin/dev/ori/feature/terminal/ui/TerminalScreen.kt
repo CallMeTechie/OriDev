@@ -101,6 +101,23 @@ fun TerminalScreen(
         }
     }
 
+    // Phase 14 Task 14.5 — in HYBRID/SYSTEM_ONLY the KeyboardHost is
+    // rendered unconditionally so the single TerminalImeAnchor never
+    // unmounts. The keyboard-toggle therefore has to control the system
+    // IME imperatively: hide it when toggling off, re-focus the anchor
+    // (which summons the IME) when toggling on. In CUSTOM the toggle
+    // still just governs composable visibility, so this block is a
+    // no-op for that mode.
+    LaunchedEffect(uiState.isKeyboardVisible, uiState.keyboardMode) {
+        if (uiState.keyboardMode != KeyboardMode.CUSTOM) {
+            if (uiState.isKeyboardVisible) {
+                runCatching { imeFocusRequester.requestFocus() }
+            } else {
+                softwareKeyboardController?.hide()
+            }
+        }
+    }
+
     val activeTab = uiState.tabs.getOrNull(uiState.activeTabIndex)
     val activeEmulator = activeTab?.let { viewModel.getEmulator(it.id) }
 
@@ -121,15 +138,18 @@ fun TerminalScreen(
                         },
                         onToggleKeyboard = {
                             // Phase 14 Task 14.5 — in HYBRID/SYSTEM_ONLY the
-                            // "hide keyboard" button must also dismiss the
-                            // system IME. isKeyboardVisible toggles the
-                            // visibility of our extra-keys row; the IME
-                            // needs SoftwareKeyboardController.hide().
-                            if (uiState.isKeyboardVisible &&
-                                uiState.keyboardMode != KeyboardMode.CUSTOM
-                            ) {
-                                softwareKeyboardController?.hide()
-                            }
+                            // KeyboardHost (and therefore TerminalImeAnchor)
+                            // stays mounted across this toggle — otherwise
+                            // re-enabling the keyboard would build a fresh
+                            // anchor with no focus, and the IME would not
+                            // reappear. Instead we drive the IME directly:
+                            // hide() when the user toggles off, and
+                            // requestFocus() to summon it when toggling on.
+                            // See LaunchedEffect below which reacts to the
+                            // isKeyboardVisible / keyboardMode pair so we
+                            // cover both the show and the hide path (and
+                            // handle the case where the mode changes while
+                            // already visible).
                             viewModel.onEvent(TerminalEvent.ToggleKeyboard)
                         },
                         onEvent = viewModel::onEvent,
@@ -209,22 +229,15 @@ fun TerminalScreen(
 
                     // Keyboard host (3 modes) — only in CUSTOM is the weighted slice applied;
                     // HYBRID / SYSTEM_ONLY size themselves via the system IME + imePadding().
-                    if (uiState.isKeyboardVisible) {
-                        KeyboardHost(
-                            mode = uiState.keyboardMode,
-                            modifierState = uiState.modifierState,
-                            imeFocusRequester = imeFocusRequester,
-                            onInput = { bytes -> viewModel.onEvent(TerminalEvent.SendInput(bytes)) },
-                            onEvent = viewModel::onEvent,
-                            modifier = if (isCustomMode) {
-                                Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f - uiState.splitRatio)
-                            } else {
-                                Modifier.fillMaxWidth()
-                            },
-                        )
-                    }
+                    // See [TerminalKeyboardHostSlot] for the anchor-persistence invariant.
+                    TerminalKeyboardHostSlot(
+                        uiState = uiState,
+                        imeFocusRequester = imeFocusRequester,
+                        viewModel = viewModel,
+                        customModeModifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f - uiState.splitRatio),
+                    )
                 }
             } else {
                 // Portrait: terminal fullscreen, keyboard as bottom section
@@ -238,16 +251,12 @@ fun TerminalScreen(
                             .weight(1f),
                     )
 
-                    if (uiState.isKeyboardVisible) {
-                        KeyboardHost(
-                            mode = uiState.keyboardMode,
-                            modifierState = uiState.modifierState,
-                            imeFocusRequester = imeFocusRequester,
-                            onInput = { bytes -> viewModel.onEvent(TerminalEvent.SendInput(bytes)) },
-                            onEvent = viewModel::onEvent,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
+                    TerminalKeyboardHostSlot(
+                        uiState = uiState,
+                        imeFocusRequester = imeFocusRequester,
+                        viewModel = viewModel,
+                        customModeModifier = Modifier.fillMaxWidth(),
+                    )
                 }
             }
         }
@@ -338,6 +347,54 @@ fun TerminalScreen(
             onFontSizeChange = { viewModel.onEvent(TerminalEvent.SetFontSize(it)) },
             onDismiss = { viewModel.onEvent(TerminalEvent.TogglePreferences) },
         )
+    }
+}
+
+/**
+ * Phase 14 Task 14.5 review fix — HYBRID/SYSTEM_ONLY must keep
+ * [KeyboardHost] mounted even when `isKeyboardVisible = false` so the
+ * single [TerminalImeAnchor] stays alive across the keyboard-toggle.
+ * Unmounting it would drop focus and the IME would not reopen when the
+ * user flips the toggle back on. The toggle instead drives the IME
+ * imperatively via [LocalSoftwareKeyboardController] (see the
+ * `LaunchedEffect(uiState.isKeyboardVisible, uiState.keyboardMode)`
+ * in [TerminalScreen]). In CUSTOM mode the previous visibility-gated
+ * behaviour is preserved (no anchor, no IME interaction).
+ *
+ * Extracted into its own composable so the landscape + portrait branches
+ * stay symmetric and [TerminalScreen] stays under the detekt LongMethod
+ * threshold.
+ */
+@Composable
+private fun TerminalKeyboardHostSlot(
+    uiState: TerminalUiState,
+    imeFocusRequester: FocusRequester,
+    viewModel: TerminalViewModel,
+    customModeModifier: Modifier,
+) {
+    val isCustomMode = uiState.keyboardMode == KeyboardMode.CUSTOM
+    when {
+        isCustomMode && uiState.isKeyboardVisible -> {
+            KeyboardHost(
+                mode = KeyboardMode.CUSTOM,
+                modifierState = uiState.modifierState,
+                imeFocusRequester = imeFocusRequester,
+                onInput = { bytes -> viewModel.onEvent(TerminalEvent.SendInput(bytes)) },
+                onEvent = viewModel::onEvent,
+                modifier = customModeModifier,
+            )
+        }
+        !isCustomMode -> {
+            KeyboardHost(
+                mode = uiState.keyboardMode,
+                modifierState = uiState.modifierState,
+                imeFocusRequester = imeFocusRequester,
+                onInput = { bytes -> viewModel.onEvent(TerminalEvent.SendInput(bytes)) },
+                onEvent = viewModel::onEvent,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        // CUSTOM + isKeyboardVisible=false → render nothing.
     }
 }
 

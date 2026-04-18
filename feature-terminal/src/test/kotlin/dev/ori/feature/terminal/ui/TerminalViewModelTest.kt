@@ -519,6 +519,21 @@ class TerminalViewModelTest {
     }
 
     @Test
+    fun `keyboardModeFlow emission updates uiState keyboardMode`() = runTest {
+        // Re-stub so the mode-flow emits HYBRID instead of the default CUSTOM.
+        // Asserts the init-time flow → state pipe set up in TerminalViewModel
+        // actually propagates — the default-stub `every { keyboardModeFlow }`
+        // in the @BeforeEach block previously emitted CUSTOM but was never
+        // verified end-to-end.
+        every { keyboardPreferences.keyboardModeFlow } returns flowOf(KeyboardMode.HYBRID)
+
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.keyboardMode).isEqualTo(KeyboardMode.HYBRID)
+    }
+
+    @Test
     fun `clearError clears error`() = runTest {
         coEvery { connectionRepository.getProfileById(any()) } returns null
 

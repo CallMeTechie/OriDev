@@ -5,8 +5,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.tooling.preview.Preview
 import dev.ori.domain.model.KeyboardMode
 
 /**
@@ -101,18 +103,29 @@ fun KeyboardHost(
         KeyboardMode.SYSTEM_ONLY -> {
             // No extra-keys row; the user gets the raw system IME
             // real estate. Anchor still has to exist (something has
-            // to own focus), but is invisible.
-            Column(
+            // to own focus), but is invisible — so we drop the
+            // redundant Column wrapper and pass imePadding() straight
+            // to the anchor.
+            TerminalImeAnchor(
+                focusRequester = imeFocusRequester,
+                onInput = onInput,
                 modifier = modifier
                     .fillMaxWidth()
                     .imePadding(),
-                verticalArrangement = Arrangement.Bottom,
-            ) {
-                TerminalImeAnchor(
-                    focusRequester = imeFocusRequester,
-                    onInput = onInput,
-                )
-            }
+            )
         }
     }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun KeyboardHostHybridPreview() {
+    val focusRequester = remember { FocusRequester() }
+    KeyboardHost(
+        mode = KeyboardMode.HYBRID,
+        modifierState = ModifierState(),
+        imeFocusRequester = focusRequester,
+        onInput = {},
+        onEvent = {},
+    )
 }
