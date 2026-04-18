@@ -129,9 +129,12 @@ internal fun TerminalSection(
                 pendingMode = null
             },
             onDismiss = {
-                // Decline → fall back to CUSTOM (the safe default),
-                // not the previous value. Matches the task spec.
-                onKeyboardModeChanged(KeyboardMode.CUSTOM)
+                // Decline → no DataStore write, leave the persisted mode
+                // untouched. The user is shown the warning *before* anything
+                // is committed, so cancelling here MUST be a no-op rather
+                // than a destructive downgrade. (A user on HYBRID who taps
+                // SYSTEM_ONLY then back-presses the warning would otherwise
+                // be silently demoted to CUSTOM.)
                 pendingMode = null
             },
         )
