@@ -15,6 +15,7 @@ import dev.ori.core.security.clipboard.OriClipboard
 import dev.ori.core.ui.theme.TerminalBackground
 import dev.ori.core.ui.theme.TerminalText
 import dev.ori.domain.model.CommandSnippet
+import dev.ori.domain.preferences.KeyboardPreferences
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRecordingRepository
 import dev.ori.domain.usecase.AddSnippetUseCase
@@ -26,9 +27,14 @@ import dev.ori.domain.usecase.StartSessionRecordingUseCase
 import dev.ori.domain.usecase.StopSessionRecordingUseCase
 import dev.ori.domain.usecase.UpdateSnippetUseCase
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.connectbot.terminal.TerminalEmulator
@@ -36,9 +42,10 @@ import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.milliseconds
 
 @HiltViewModel
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LongParameterList")
 class TerminalViewModel @Inject constructor(
     private val sshClient: SshClient,
     private val connectionRepository: ConnectionRepository,
@@ -53,6 +60,7 @@ class TerminalViewModel @Inject constructor(
     private val exportSessionRecordingUseCase: ExportSessionRecordingUseCase,
     private val sendToClaudeUseCase: SendToClaudeUseCase,
     private val oriClipboard: OriClipboard,
+    private val keyboardPreferences: KeyboardPreferences,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -64,8 +72,19 @@ class TerminalViewModel @Inject constructor(
     private val codeBlockDetectors = ConcurrentHashMap<String, CodeBlockDetector>()
     private var serviceStarted = false
 
+    /**
+     * Phase 14 Task 14.5 — incoming [TerminalEvent.ResizeTerminal]
+     * dimensions are funneled through this [MutableSharedFlow] and
+     * debounced before dispatch. See [debouncedResizes] for the
+     * debounce rationale (emoji-sheet wobble, IME layout switches,
+     * voice input).
+     */
+    private val resizeRequests = MutableSharedFlow<Pair<Int, Int>>(extraBufferCapacity = BUFFER_CAPACITY)
+
     init {
         loadSnippets()
+        collectKeyboardMode()
+        collectDebouncedResizes()
     }
 
     fun onEvent(event: TerminalEvent) {
@@ -93,7 +112,7 @@ class TerminalViewModel @Inject constructor(
             is TerminalEvent.SetSnippetSearchQuery -> _uiState.update { it.copy(snippetSearchQuery = event.query) }
             is TerminalEvent.TogglePreferences -> togglePreferences()
             is TerminalEvent.SetFontSize -> setFontSize(event.size)
-            is TerminalEvent.ResizeTerminal -> resizeTerminal(event.cols, event.rows)
+            is TerminalEvent.ResizeTerminal -> onResizeRequested(event.cols, event.rows)
             is TerminalEvent.ClearError -> clearError()
             is TerminalEvent.ToggleServerPicker -> toggleServerPicker()
             is TerminalEvent.SelectServer -> selectServer(event.profileId, event.serverName)
@@ -425,10 +444,38 @@ class TerminalViewModel @Inject constructor(
         _uiState.update { it.copy(terminalFontSize = size.coerceIn(10f, 24f)) }
     }
 
+    /**
+     * Phase 14 Task 14.5 — drop resize requests onto the debounced
+     * flow instead of calling [resizeTerminal] synchronously. Every
+     * emoji-sheet open, IME layout switch, and voice-input pop-in
+     * would otherwise fire a `window-change` SSH packet and flicker
+     * running TUIs on slow links.
+     */
+    private fun onResizeRequested(cols: Int, rows: Int) {
+        resizeRequests.tryEmit(cols to rows)
+    }
+
     private fun resizeTerminal(cols: Int, rows: Int) {
         val activeTab = getActiveTab() ?: return
         terminalEmulators[activeTab.id]?.resize(cols, rows)
         // The emulator's onResize callback will propagate to shellHandle.onResize
+    }
+
+    private fun collectKeyboardMode() {
+        viewModelScope.launch {
+            keyboardPreferences.keyboardModeFlow.collect { mode ->
+                _uiState.update { it.copy(keyboardMode = mode) }
+            }
+        }
+    }
+
+    @OptIn(FlowPreview::class)
+    private fun collectDebouncedResizes() {
+        viewModelScope.launch {
+            debouncedResizes(resizeRequests).collect { (cols, rows) ->
+                resizeTerminal(cols, rows)
+            }
+        }
     }
 
     private fun clearError() {
@@ -571,8 +618,44 @@ class TerminalViewModel @Inject constructor(
         private const val DEFAULT_ROWS = 24
         private const val DEFAULT_COLS = 80
         private const val MAX_CODE_BLOCKS = 20
+
+        /**
+         * Phase 14 Task 14.5 — ring-buffer for resize events between the
+         * Compose onSizeChanged callback and the debounce collector.
+         * Small but non-zero so rapid IME-open/close bursts do not drop
+         * the tail event before the debounce window closes.
+         */
+        internal const val BUFFER_CAPACITY = 16
     }
 }
+
+/**
+ * Phase 14 Task 14.5 — pure, testable resize-debounce pipeline.
+ *
+ * Extracted as a top-level `internal` function so [ResizeDebounceTest]
+ * can exercise it without instantiating a [TerminalViewModel] (which
+ * needs 12+ mocked collaborators). The contract:
+ *
+ * 1. Debounce by [DEBOUNCE_MILLIS] of stability. If five height
+ *    changes land within 100 ms, only the last pair reaches the
+ *    downstream collector after the window closes.
+ * 2. Drop resizes whose `rows < [MIN_ROWS_FLOOR]`. A 2-row resize
+ *    would clobber a running TUI worse than not resizing — better to
+ *    let the shell keep its last-known dimensions until the IME
+ *    settles.
+ *
+ * Order of operations matters: filter BEFORE debounce so a trailing
+ * "tiny" resize does not win the debounce race and swallow a
+ * preceding healthy resize.
+ */
+@OptIn(FlowPreview::class)
+internal fun debouncedResizes(input: Flow<Pair<Int, Int>>): Flow<Pair<Int, Int>> =
+    input
+        .filter { (_, rows) -> rows >= MIN_ROWS_FLOOR }
+        .debounce(DEBOUNCE_MILLIS.milliseconds)
+
+internal const val DEBOUNCE_MILLIS = 200L
+internal const val MIN_ROWS_FLOOR = 5
 
 /**
  * Phase 14 Task 14.3 — pure modifier translator. Extracted as a
