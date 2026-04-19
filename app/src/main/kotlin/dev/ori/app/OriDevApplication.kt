@@ -8,6 +8,7 @@ import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import dev.ori.app.crash.AcraConfig
 import dev.ori.app.wear.WearDataSyncPublisher
+import dev.ori.core.security.crash.LocalCrashLogger
 import dev.ori.core.security.preferences.CrashReportingPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +36,10 @@ class OriDevApplication : Application(), Configuration.Provider {
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)
         AcraConfig.initIfEnabled(this)
+        // Install AFTER ACRA so our handler captures ACRA's handler as its
+        // chain target — ours fires first (writes Downloads/oridev-crash-*.txt),
+        // then ACRA fires, then the OS kills the process.
+        LocalCrashLogger.install(this)
     }
 
     override fun onCreate() {
