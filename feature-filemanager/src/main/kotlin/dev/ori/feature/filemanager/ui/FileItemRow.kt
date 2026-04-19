@@ -87,7 +87,11 @@ fun FileItemRow(
                     onDrag = { change, _ -> change.consume() },
                 )
             }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            // Phase 15 Task 15.5 — vertical padding 8dp → 4dp brings the
+            // row from ~64dp down to ~48dp so power users see more
+            // entries at once. Touch target stays ≥48dp via the
+            // Checkbox's own min-touch-size + the row's icon area.
+            .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(
