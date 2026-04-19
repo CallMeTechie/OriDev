@@ -14,7 +14,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,7 +51,6 @@ import dev.ori.core.ui.icons.lucide.LucideIcons
 import dev.ori.core.ui.icons.lucide.Play
 import dev.ori.core.ui.icons.lucide.Settings
 import dev.ori.core.ui.icons.lucide.Share2
-import dev.ori.core.ui.icons.lucide.Zap
 import dev.ori.core.ui.theme.OriTypography
 import dev.ori.core.ui.theme.TerminalBackground
 import dev.ori.core.ui.theme.TerminalText
@@ -158,20 +156,12 @@ fun TerminalScreen(
                 },
             )
         },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { viewModel.onEvent(TerminalEvent.ShowSendToClaude("")) },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                icon = {
-                    Icon(
-                        LucideIcons.Zap,
-                        contentDescription = "An Claude senden",
-                    )
-                },
-                text = { Text("Send to Claude") },
-            )
-        },
+        // Phase 15 Task 15.1 — the previous Send-to-Claude FAB
+        // permanently overlapped the keyboard area in HYBRID/SYSTEM_ONLY
+        // and was unclear in intent. The proper UX (toolbar action on
+        // selected terminal output) lands in a later phase. The
+        // ShowSendToClaude event itself stays wired (codeblock detector
+        // still triggers it).
         snackbarHost = {
             SnackbarHost(snackbarHostState) { data ->
                 Snackbar(snackbarData = data)
