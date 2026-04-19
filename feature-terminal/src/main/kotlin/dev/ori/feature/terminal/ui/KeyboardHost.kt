@@ -1,9 +1,10 @@
 package dev.ori.feature.terminal.ui
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -26,9 +27,13 @@ import dev.ori.domain.model.KeyboardMode
  *   `splitRatio` state.
  * - [KeyboardMode.HYBRID] — a vertical stack of [TerminalExtraKeys]
  *   (sticky row above the system IME) plus one [TerminalImeAnchor]
- *   (invisible 1×1 `BasicTextField` that consumes IME text). The
- *   whole column uses `Modifier.imePadding()` so the system IME
- *   pushes the row up off the bottom inset.
+ *   (invisible 1×1 `BasicTextField` that consumes IME text). The IME
+ *   push-up is owned by the [TerminalScreen] root (Task 15.2) — this
+ *   host just renders its 53dp content, which naturally sits flush
+ *   above the IME because the whole terminal stack above it is
+ *   lifted. The extra-keys row is gated on [WindowInsets.isImeVisible]
+ *   so it vanishes when the user dismisses Gboard via the back
+ *   gesture.
  * - [KeyboardMode.SYSTEM_ONLY] — just the anchor, no extra-keys row.
  *   Power-user escape hatch for folks who want their full system IME
  *   real-estate without any Ori chrome.
@@ -60,6 +65,7 @@ import dev.ori.domain.model.KeyboardMode
  * @param onEvent Standard ViewModel event dispatch for
  *   [CustomKeyboard] / [TerminalExtraKeys] key presses.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun KeyboardHost(
     mode: KeyboardMode,
@@ -78,22 +84,29 @@ fun KeyboardHost(
             )
         }
         KeyboardMode.HYBRID -> {
-            // imePadding() on the outer column so the whole stack
-            // (extra-keys row + anchor) lifts with the system IME.
-            // The anchor itself is 1×1 / alpha 0, so in practice the
-            // user sees only the TerminalExtraKeys row sitting on top
-            // of Gboard/SwiftKey.
+            // Phase 15 Task 15.2 — imePadding() was MOVED UP to the
+            // TerminalScreen root Column; applying it here caused the
+            // 53dp content to float at the bottom of a tall
+            // (content + IME-height) column, leaving a large gap
+            // above the system IME. Now the whole terminal stack
+            // lifts uniformly when the IME opens, and this host just
+            // renders its content directly above it.
+            //
+            // The extra-keys row is gated on isImeVisible so that
+            // dismissing Gboard via the back-gesture also hides the
+            // row (bug #4 in Task 15.2). The TerminalImeAnchor is
+            // NOT gated — something has to own focus so re-tapping
+            // the terminal pane can summon the IME again.
             Column(
-                modifier = modifier
-                    .fillMaxWidth()
-                    .imePadding(),
-                verticalArrangement = Arrangement.Bottom,
+                modifier = modifier.fillMaxWidth(),
             ) {
-                TerminalExtraKeys(
-                    modifierState = modifierState,
-                    onEvent = onEvent,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (WindowInsets.isImeVisible) {
+                    TerminalExtraKeys(
+                        modifierState = modifierState,
+                        onEvent = onEvent,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 TerminalImeAnchor(
                     focusRequester = imeFocusRequester,
                     onInput = onInput,
@@ -103,15 +116,14 @@ fun KeyboardHost(
         KeyboardMode.SYSTEM_ONLY -> {
             // No extra-keys row; the user gets the raw system IME
             // real estate. Anchor still has to exist (something has
-            // to own focus), but is invisible — so we drop the
-            // redundant Column wrapper and pass imePadding() straight
-            // to the anchor.
+            // to own focus), but is invisible. Phase 15 Task 15.2 —
+            // imePadding() + fillMaxWidth() stripped from here; the
+            // parent-supplied modifier is passed through as-is and
+            // the IME push-up is owned by the TerminalScreen root.
             TerminalImeAnchor(
                 focusRequester = imeFocusRequester,
                 onInput = onInput,
-                modifier = modifier
-                    .fillMaxWidth()
-                    .imePadding(),
+                modifier = modifier,
             )
         }
     }
