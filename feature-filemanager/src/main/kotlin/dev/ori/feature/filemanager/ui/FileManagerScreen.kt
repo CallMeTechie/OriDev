@@ -1,10 +1,15 @@
 package dev.ori.feature.filemanager.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
@@ -29,11 +34,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.ui.components.OriServiceIndicator
 import dev.ori.core.ui.components.OriTopBar
+import dev.ori.core.ui.icons.lucide.FolderOpen
 import dev.ori.core.ui.icons.lucide.LucideIcons
 import dev.ori.core.ui.icons.lucide.Trash2
 import dev.ori.domain.model.AdSlot
@@ -74,6 +81,17 @@ fun FileManagerScreen(
 
     LaunchedEffect(isFolded) {
         viewModel.onEvent(FileManagerEvent.SetFoldState(isFolded))
+    }
+
+    // Phase 15 Task 15.6 — SAF launcher. `OpenDocumentTree` returns null
+    // when the user backs out without picking, so the event is only
+    // dispatched for a non-null URI.
+    val safLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree(),
+    ) { treeUri ->
+        if (treeUri != null) {
+            viewModel.onEvent(FileManagerEvent.GrantTree(treeUri.toString()))
+        }
     }
 
     // Show transfer snackbar
@@ -199,6 +217,7 @@ fun FileManagerScreen(
                     uiState = uiState,
                     onEvent = viewModel::onEvent,
                     dialogCallbacks = dialogCallbacks,
+                    onPickFolder = { safLauncher.launch(null) },
                 )
             } else {
                 // Dual pane layout
@@ -207,6 +226,7 @@ fun FileManagerScreen(
                     onEvent = viewModel::onEvent,
                     viewModel = viewModel,
                     dialogCallbacks = dialogCallbacks,
+                    onPickFolder = { safLauncher.launch(null) },
                 )
             }
         }
@@ -312,6 +332,7 @@ private fun FoldedContent(
     uiState: FileManagerUiState,
     onEvent: (FileManagerEvent) -> Unit,
     dialogCallbacks: FileOpCallbacks,
+    onPickFolder: () -> Unit,
 ) {
     val selectedTabIndex = if (uiState.activePane == ActivePane.LEFT) 0 else 1
 
@@ -335,12 +356,16 @@ private fun FoldedContent(
     val pane = uiState.activePane
     val paneState = if (pane == ActivePane.LEFT) uiState.leftPane else uiState.rightPane
 
-    PaneContent(
-        paneState = paneState,
-        pane = pane,
-        onEvent = onEvent,
-        dialogCallbacks = dialogCallbacks,
-    )
+    if (pane == ActivePane.LEFT && uiState.grantedTrees.isEmpty()) {
+        StorageAccessEmptyState(onPickFolder = onPickFolder)
+    } else {
+        PaneContent(
+            paneState = paneState,
+            pane = pane,
+            onEvent = onEvent,
+            dialogCallbacks = dialogCallbacks,
+        )
+    }
 }
 
 @Composable
@@ -349,19 +374,24 @@ private fun UnfoldedContent(
     onEvent: (FileManagerEvent) -> Unit,
     viewModel: FileManagerViewModel,
     dialogCallbacks: FileOpCallbacks,
+    onPickFolder: () -> Unit,
 ) {
     DualPaneLayout(
         splitRatio = uiState.splitRatio,
         onSplitRatioChange = { onEvent(FileManagerEvent.UpdateSplitRatio(it)) },
         dragState = uiState.dragState,
         leftPane = {
-            PaneContent(
-                paneState = uiState.leftPane,
-                pane = ActivePane.LEFT,
-                onEvent = onEvent,
-                viewModel = viewModel,
-                dialogCallbacks = dialogCallbacks,
-            )
+            if (uiState.grantedTrees.isEmpty()) {
+                StorageAccessEmptyState(onPickFolder = onPickFolder)
+            } else {
+                PaneContent(
+                    paneState = uiState.leftPane,
+                    pane = ActivePane.LEFT,
+                    onEvent = onEvent,
+                    viewModel = viewModel,
+                    dialogCallbacks = dialogCallbacks,
+                )
+            }
         },
         rightPane = {
             PaneContent(
@@ -373,6 +403,51 @@ private fun UnfoldedContent(
             )
         },
     )
+}
+
+/**
+ * Phase 15 Task 15.6 — first-time / revoked-grant empty state for the
+ * local (LEFT) pane. Prompts the user to pick a folder with the system
+ * SAF picker. Without this, a fresh install (or one where the user
+ * revoked all grants in System Settings) would just show an empty list
+ * and leave the user wondering what went wrong.
+ */
+@Composable
+private fun StorageAccessEmptyState(onPickFolder: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                imageVector = LucideIcons.FolderOpen,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+            Text(
+                text = "Keinen Ordner freigegeben",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "Ori:Dev braucht deine Erlaubnis für einen Ordner, " +
+                    "bevor lokale Dateien angezeigt werden können.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(4.dp))
+            Button(onClick = onPickFolder) {
+                Text("Ordner auswählen")
+            }
+        }
+    }
 }
 
 @Composable

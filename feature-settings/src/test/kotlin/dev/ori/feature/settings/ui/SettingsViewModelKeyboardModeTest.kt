@@ -4,8 +4,10 @@ import android.app.Application
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import dev.ori.core.security.preferences.CrashReportingPreferences
+import dev.ori.domain.model.GrantedTree
 import dev.ori.domain.model.KeyboardMode
 import dev.ori.domain.preferences.KeyboardPreferences
+import dev.ori.domain.repository.StorageAccessRepository
 import dev.ori.domain.usecase.CheckPremiumUseCase
 import dev.ori.feature.settings.data.AppPreferences
 import io.mockk.coEvery
@@ -57,12 +59,16 @@ class SettingsViewModelKeyboardModeTest {
         }
         val checkPremiumUseCase = mockk<CheckPremiumUseCase>(relaxed = true)
         every { checkPremiumUseCase() } returns flowOf(false)
+        val storageAccessRepository = mockk<StorageAccessRepository>(relaxed = true) {
+            every { grantedTrees } returns flowOf(emptyList<GrantedTree>())
+        }
 
         viewModel = SettingsViewModel(
             application = mockk<Application>(relaxed = true),
             crashReportingPreferences = crashReporting,
             appPreferences = appPreferences,
             keyboardPreferences = keyboardPreferences,
+            storageAccessRepository = storageAccessRepository,
             checkPremiumUseCase = checkPremiumUseCase,
         )
     }

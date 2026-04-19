@@ -1,9 +1,11 @@
 package dev.ori.data.di
 
+import android.content.Context
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.data.repository.BookmarkRepositoryImpl
@@ -24,13 +26,18 @@ abstract class FileSystemModule {
     abstract fun bindBookmarkRepository(impl: BookmarkRepositoryImpl): BookmarkRepository
 
     companion object {
+        // Phase 15 Task 15.6 — LocalFileSystemRepository is now SAF-backed
+        // (DocumentFile + ContentResolver) instead of java.io.File.
+        // GitStatusParser is no longer wired here because SAF document
+        // URIs have no POSIX path → git on the shell has nothing to run
+        // against. Remote (SSH) git status is unaffected.
         @Provides
         @Singleton
         @LocalFileSystem
         fun provideLocalFileSystemRepository(
-            gitStatusParser: dev.ori.data.repository.GitStatusParser,
+            @ApplicationContext context: Context,
         ): FileSystemRepository =
-            LocalFileSystemRepository(gitStatusParser)
+            LocalFileSystemRepository(context)
 
         @Provides
         @RemoteFileSystem

@@ -14,6 +14,7 @@ window = "1.5.1"
 room = "2.8.4"
 work = "2.11.2"
 datastore = "1.2.1"
+documentfile = "1.1.0"
 biometric = "1.1.0"
 security-crypto = "1.1.0-alpha07"
 splashscreen = "1.2.0"
@@ -117,6 +118,9 @@ work-testing = { module = "androidx.work:work-testing", version.ref = "work" }
 # DataStore
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 datastore-preferences-core = { module = "androidx.datastore:datastore-preferences-core", version.ref = "datastore" }
+
+# Storage Access Framework — DocumentFile wrapper for tree URIs (Phase 15 Task 15.6).
+documentfile = { module = "androidx.documentfile:documentfile", version.ref = "documentfile" }
 
 # Security
 biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }

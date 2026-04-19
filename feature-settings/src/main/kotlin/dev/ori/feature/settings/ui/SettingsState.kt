@@ -1,5 +1,6 @@
 package dev.ori.feature.settings.ui
 
+import dev.ori.domain.model.GrantedTree
 import dev.ori.domain.model.KeyboardMode
 import dev.ori.domain.preferences.KeyboardPreferences
 import dev.ori.feature.settings.data.AppPreferencesSnapshot
@@ -27,6 +28,9 @@ public data class SettingsState(
     val preferences: AppPreferencesSnapshot = DEFAULT_PREFERENCES,
     val premiumStatus: PremiumStatus = PremiumStatus.Free,
     val keyboardMode: KeyboardMode = KeyboardPreferences.DEFAULT_MODE,
+    // Phase 15 Task 15.6 — SAF-granted trees surfaced in the Storage
+    // Access section. Empty list → only the "Add folder" button renders.
+    val grantedTrees: List<GrantedTree> = emptyList(),
 )
 
 public enum class PremiumStatus { Free, Premium }

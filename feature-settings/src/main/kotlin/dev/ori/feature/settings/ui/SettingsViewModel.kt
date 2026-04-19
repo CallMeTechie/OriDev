@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.ori.core.security.preferences.CrashReportingPreferences
 import dev.ori.domain.model.KeyboardMode
 import dev.ori.domain.preferences.KeyboardPreferences
+import dev.ori.domain.repository.StorageAccessRepository
 import dev.ori.domain.usecase.CheckPremiumUseCase
 import dev.ori.feature.settings.data.AppPreferences
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,6 +23,7 @@ public class SettingsViewModel @Inject constructor(
     private val crashReportingPreferences: CrashReportingPreferences,
     private val appPreferences: AppPreferences,
     private val keyboardPreferences: KeyboardPreferences,
+    private val storageAccessRepository: StorageAccessRepository,
     checkPremiumUseCase: CheckPremiumUseCase,
 ) : ViewModel() {
 
@@ -38,13 +40,15 @@ public class SettingsViewModel @Inject constructor(
         appPreferences.all,
         checkPremiumUseCase(),
         keyboardPreferences.keyboardModeFlow,
-    ) { crashReporting, prefs, isPremium, keyboardMode ->
+        storageAccessRepository.grantedTrees,
+    ) { crashReporting, prefs, isPremium, keyboardMode, grantedTrees ->
         SettingsState(
             crashReportingEnabled = crashReporting,
             versionName = versionName,
             preferences = prefs,
             premiumStatus = if (isPremium) PremiumStatus.Premium else PremiumStatus.Free,
             keyboardMode = keyboardMode,
+            grantedTrees = grantedTrees,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -127,6 +131,25 @@ public class SettingsViewModel @Inject constructor(
     }
     public fun setClipboardClearSeconds(value: Int) {
         viewModelScope.launch { appPreferences.setClipboardClearSeconds(value) }
+    }
+
+    // ---- Storage Access (Phase 15 Task 15.6) -------------------------------
+
+    /**
+     * Persist a newly-picked SAF tree. Called from the Settings
+     * "Add folder…" flow whose `rememberLauncherForActivityResult`
+     * passes the tree URI string through to the ViewModel.
+     */
+    public fun grantStorageTree(uri: String) {
+        viewModelScope.launch { storageAccessRepository.grant(uri) }
+    }
+
+    /**
+     * Release a persisted SAF grant. Called from the per-row
+     * "Remove" button in the Storage Access section.
+     */
+    public fun revokeStorageTree(uri: String) {
+        viewModelScope.launch { storageAccessRepository.revoke(uri) }
     }
 
     // ---- Notifications -----------------------------------------------------

@@ -2,11 +2,8 @@ package dev.ori.feature.onboarding.ui
 
 import android.Manifest
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
-import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +42,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.ui.components.OriCard
 import dev.ori.core.ui.icons.lucide.Bell
 import dev.ori.core.ui.icons.lucide.Check
@@ -54,37 +53,54 @@ import dev.ori.core.ui.icons.lucide.LucideIcons
 import dev.ori.core.ui.theme.Gray500
 import dev.ori.core.ui.theme.OriDevTheme
 import dev.ori.core.ui.theme.StatusConnected
+import dev.ori.feature.onboarding.OnboardingViewModel
 
 /**
- * Phase 11 P4.8 — expanded onboarding permissions screen.
+ * Phase 11 P4.8 / Phase 15 Task 15.6 — onboarding permissions screen.
  *
- * v0 only surfaced `POST_NOTIFICATIONS` in a single info blurb. The expanded
- * version renders a scrollable list of permission cards so the user sees
- * every sensitive capability Ori:Dev cares about before granting it:
+ * v0 only surfaced `POST_NOTIFICATIONS`. Phase 11 expanded it to a list of
+ * three cards (Notifications, Biometric, File access) but the file-access
+ * card was a dead-end "deep-link to app settings" placeholder — the user
+ * had no way to actually grant storage access from onboarding.
  *
- * 1. **Mitteilungen** (`POST_NOTIFICATIONS`, runtime on API 33+)
- *    — requested via [ActivityResultContracts.RequestMultiplePermissions].
- * 2. **Biometrie** (informational — no runtime prompt; resolved the first
- *    time the user enables biometric unlock in Settings).
- * 3. **Dateizugriff** (informational — Android 11+ uses SAF, no broad
- *    storage permission to request. Deep-link to system settings for users
- *    who need all-files access.)
+ * Phase 15 Task 15.6 replaces that placeholder with a real Storage Access
+ * Framework picker:
  *
- * Each card shows a Lucide icon, the permission name, a one-line rationale,
- * and a status chip (granted = green check, denied = "Erlauben" button). The
- * footer keeps the "Überspringen" fallback for users who want to defer
- * permission grants to later.
+ * 1. **Mitteilungen** (`POST_NOTIFICATIONS`, runtime on API 33+).
+ * 2. **Biometrie** (informational).
+ * 3. **Speicherordner** — SAF `ActivityResultContracts.OpenDocumentTree`
+ *    launcher. On success we persist the URI via
+ *    [OnboardingViewModel.grantStorageTree] (same code path as Settings
+ *    and the File Manager). Card flips to the green-check "granted"
+ *    state once at least one tree is recorded.
+ *
+ * The footer still keeps the "Überspringen" fallback for users who want
+ * to defer permission grants to later — they can always come back via
+ * Settings → Speicherzugriff.
  */
 @Composable
-fun PermissionsScreen(onContinue: () -> Unit) {
+fun PermissionsScreen(
+    onContinue: () -> Unit,
+    viewModel: OnboardingViewModel = hiltViewModel(),
+) {
     val context = LocalContext.current
     var notificationsGranted by remember { mutableStateOf(hasNotificationPermission(context)) }
+
+    val grantedTrees by viewModel.grantedTrees.collectAsStateWithLifecycle()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
     ) { results ->
         val grantedByLauncher = results[Manifest.permission.POST_NOTIFICATIONS] == true
         notificationsGranted = grantedByLauncher || hasNotificationPermission(context)
+    }
+
+    val safLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri != null) {
+            viewModel.grantStorageTree(uri.toString())
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -139,13 +155,22 @@ fun PermissionsScreen(onContinue: () -> Unit) {
                 onRequest = null,
             )
 
+            // Phase 15 Task 15.6 — real SAF picker card.
             PermissionCard(
                 icon = LucideIcons.FolderOpen,
-                title = "Dateizugriff",
-                description = "Lokale Datei-Pane nutzt den Android Storage Access Framework-Dialog. " +
-                    "Für systemweiten Zugriff in den Einstellungen freischalten.",
-                granted = false,
-                onRequest = { openAppSettings(context) },
+                title = "Speicherordner",
+                description = if (grantedTrees.isEmpty()) {
+                    "Ori:Dev braucht einen Ordner, den es lesen/schreiben darf. " +
+                        "Tippe auf \"Ordner auswählen\", um den Systemdialog zu öffnen. " +
+                        "Du kannst später in den Einstellungen weitere hinzufügen oder entfernen."
+                } else {
+                    val names = grantedTrees.take(3).joinToString(", ") { it.displayName }
+                    val suffix = if (grantedTrees.size > 3) " +${grantedTrees.size - 3}" else ""
+                    "Freigegeben: $names$suffix"
+                },
+                granted = grantedTrees.isNotEmpty(),
+                onRequest = { safLauncher.launch(null) },
+                actionLabel = if (grantedTrees.isEmpty()) "Ordner auswählen" else "Weiteren hinzufügen",
             )
 
             Spacer(Modifier.height(16.dp))
@@ -173,6 +198,7 @@ private fun PermissionCard(
     description: String,
     granted: Boolean,
     onRequest: (() -> Unit)?,
+    actionLabel: String = "Erlauben",
 ) {
     OriCard(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -201,6 +227,16 @@ private fun PermissionCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = Gray500,
                 )
+                // Phase 15 Task 15.6 — even when "granted", the storage
+                // card keeps its action button so the user can add more
+                // folders. This is the same launcher pattern as the
+                // Settings section.
+                if (granted && onRequest != null && actionLabel != "Erlauben") {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = onRequest) {
+                        Text(actionLabel)
+                    }
+                }
             }
             if (granted) {
                 Box(
@@ -219,7 +255,7 @@ private fun PermissionCard(
                 }
             } else if (onRequest != null) {
                 Button(onClick = onRequest) {
-                    Text("Erlauben")
+                    Text(actionLabel)
                 }
             }
         }
@@ -232,14 +268,6 @@ private fun hasNotificationPermission(context: Context): Boolean {
         context,
         Manifest.permission.POST_NOTIFICATIONS,
     ) == PackageManager.PERMISSION_GRANTED
-}
-
-private fun openAppSettings(context: Context) {
-    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-        data = Uri.fromParts("package", context.packageName, null)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    context.startActivity(intent)
 }
 
 @Preview(showBackground = true)
