@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.ori.core.security.preferences.CrashReportingPreferences
+import dev.ori.domain.model.KeyboardMode
+import dev.ori.domain.preferences.KeyboardPreferences
 import dev.ori.domain.usecase.CheckPremiumUseCase
 import dev.ori.feature.settings.data.AppPreferences
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,6 +21,7 @@ public class SettingsViewModel @Inject constructor(
     application: Application,
     private val crashReportingPreferences: CrashReportingPreferences,
     private val appPreferences: AppPreferences,
+    private val keyboardPreferences: KeyboardPreferences,
     checkPremiumUseCase: CheckPremiumUseCase,
 ) : ViewModel() {
 
@@ -34,12 +37,14 @@ public class SettingsViewModel @Inject constructor(
         crashReportingPreferences.enabled,
         appPreferences.all,
         checkPremiumUseCase(),
-    ) { crashReporting, prefs, isPremium ->
+        keyboardPreferences.keyboardModeFlow,
+    ) { crashReporting, prefs, isPremium, keyboardMode ->
         SettingsState(
             crashReportingEnabled = crashReporting,
             versionName = versionName,
             preferences = prefs,
             premiumStatus = if (isPremium) PremiumStatus.Premium else PremiumStatus.Free,
+            keyboardMode = keyboardMode,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -80,6 +85,20 @@ public class SettingsViewModel @Inject constructor(
     }
     public fun setKeyboardToolbar(value: Boolean) {
         viewModelScope.launch { appPreferences.setKeyboardToolbar(value) }
+    }
+
+    /**
+     * Phase 14 Task 14.6 — persists the user's selected keyboard-surface
+     * mode. Task 14.5's `KeyboardHost` reactively picks up the change on
+     * its next Flow emission without requiring a restart.
+     *
+     * The section UI is responsible for showing the system-IME
+     * dictionary-learning warning before HYBRID / SYSTEM_ONLY reaches
+     * this method; by the time we're called the user has already
+     * confirmed.
+     */
+    public fun setKeyboardMode(value: KeyboardMode) {
+        viewModelScope.launch { keyboardPreferences.setKeyboardMode(value) }
     }
 
     // ---- Transfers ---------------------------------------------------------

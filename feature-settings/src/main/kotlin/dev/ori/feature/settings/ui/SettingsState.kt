@@ -1,5 +1,7 @@
 package dev.ori.feature.settings.ui
 
+import dev.ori.domain.model.KeyboardMode
+import dev.ori.domain.preferences.KeyboardPreferences
 import dev.ori.feature.settings.data.AppPreferencesSnapshot
 
 /**
@@ -15,12 +17,16 @@ import dev.ori.feature.settings.data.AppPreferencesSnapshot
  * - [versionName] is read once from the PackageManager.
  * - Premium state is `Free` for now; full Premium UI ships in a future
  *   Phase 12 (Monetarisierung) per plan v6 §3 item 3.
+ * - [keyboardMode] is the Phase 14 Task 14.6 keyboard-surface choice
+ *   (CUSTOM / HYBRID / SYSTEM_ONLY). Lives on its own preference file
+ *   because `feature-terminal` must not depend on `feature-settings`.
  */
 public data class SettingsState(
     val crashReportingEnabled: Boolean = false,
     val versionName: String = "",
     val preferences: AppPreferencesSnapshot = DEFAULT_PREFERENCES,
     val premiumStatus: PremiumStatus = PremiumStatus.Free,
+    val keyboardMode: KeyboardMode = KeyboardPreferences.DEFAULT_MODE,
 )
 
 public enum class PremiumStatus { Free, Premium }

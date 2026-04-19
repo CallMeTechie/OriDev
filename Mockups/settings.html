@@ -969,6 +969,25 @@
           </div>
         </div>
       </div>
+      <!-- Phase 14 Task 14.6 — keyboard-style picker. Tapping the row
+           opens a dialog with three options (Built-in / Hybrid / System
+           only). Picking Hybrid or System-only triggers a follow-up
+           warning about system-IME dictionary learning before the choice
+           is persisted. Decline returns to Built-in. -->
+      <div class="row">
+        <div class="row-left">
+          <div class="row-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/><path d="M7 16h10"/></svg>
+          </div>
+          <div class="row-text">
+            <div class="row-title">Keyboard Style</div>
+            <div class="row-subtitle">Built-in — recommended for passwords</div>
+          </div>
+        </div>
+        <div class="row-right">
+          <span class="row-value">Built-in</span>
+        </div>
+      </div>
       <div class="row">
         <div class="row-left">
           <div class="row-text">
@@ -1355,6 +1374,66 @@
       Subscription automatically renews unless auto-renew is turned off at least 24 hours before
       the end of the current period. You can manage or cancel your subscription in your
       Google Play account settings. Free trial available once per account.
+    </div>
+  </div>
+</div>
+
+<!-- Phase 14 Task 14.6 — Keyboard-style picker dialog (static mockup) -->
+<div class="premium-modal" id="keyboardStyleDialog" style="display:none;">
+  <div class="modal-handle"></div>
+  <div class="modal-header">
+    <h2>Keyboard Style</h2>
+    <p>Choose how the terminal receives keystrokes</p>
+  </div>
+  <div class="modal-body">
+    <div class="row">
+      <div class="row-left">
+        <div class="row-text">
+          <div class="row-title">Built-in keyboard</div>
+          <div class="row-subtitle">Recommended for passwords — nothing routed through a system IME</div>
+        </div>
+      </div>
+      <div class="row-right"><span class="row-value">Selected</span></div>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-text">
+          <div class="row-title">System keyboard with shortcut row</div>
+          <div class="row-subtitle">Gboard / SwiftKey plus Esc / Tab / Ctrl / Alt / arrows</div>
+        </div>
+      </div>
+      <div class="row-right"></div>
+    </div>
+    <div class="row">
+      <div class="row-left">
+        <div class="row-text">
+          <div class="row-title">System keyboard only</div>
+          <div class="row-subtitle">No extra-keys row; power-user escape hatch</div>
+        </div>
+      </div>
+      <div class="row-right"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Phase 14 Task 14.6 — System-IME dictionary warning dialog (static mockup) -->
+<div class="premium-modal" id="imeWarningDialog" style="display:none;">
+  <div class="modal-handle"></div>
+  <div class="modal-header">
+    <h2>Use system keyboard?</h2>
+    <p>Your system IME may learn and sync what you type</p>
+  </div>
+  <div class="modal-body">
+    <div class="fine-print">
+      Your system keyboard (Gboard, SwiftKey, …) may learn and sync the text
+      you type. Avoid typing passwords with the system keyboard, or use a
+      dedicated &ldquo;private mode&rdquo; IME. The built-in keyboard never
+      shares input.
+    </div>
+    <div class="row">
+      <div class="row-right">
+        <span class="row-value">Cancel returns to Built-in</span>
+      </div>
     </div>
   </div>
 </div>

@@ -48,6 +48,11 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
+    // Phase 14 Task 14.6 — Android-backed DataStore<Preferences> for
+    // KeyboardPreferencesModule (the domain module only pulls in the
+    // pure-JVM core variant, which has no preferencesDataStore() delegate).
+    implementation(libs.datastore.preferences)
+
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)
 
