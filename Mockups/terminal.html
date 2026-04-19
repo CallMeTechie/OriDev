@@ -504,6 +504,21 @@
     color: var(--accent-text);
   }
 
+  /* Phase 15 Task 15.3 — split keyboard preview */
+  .keyboard-panel.split-preview .split-row {
+    justify-content: space-between;
+  }
+  .keyboard-panel.split-preview .split-half {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+    justify-content: center;
+  }
+  .keyboard-panel.split-preview .split-gap {
+    width: 80px;
+    flex-shrink: 0;
+  }
+
   /* ======================== BOTTOM TOOLBAR ======================== */
   .bottom-toolbar {
     display: flex;
@@ -811,6 +826,139 @@
         <button class="key arrow-key" data-key="ArrowRight">&rarr;</button>
         <button class="key space-key" data-key=" ">Space</button>
         <button class="key enter-key wider" data-key="Enter">Enter &#9166;</button>
+      </div>
+    </div>
+
+    <!--
+      Phase 15 Task 15.3 — split-layout preview for the unfolded foldable.
+      ===================================================================
+      When screenWidthDp >= 600 the CustomKeyboard renders as two
+      half-width clusters separated by an 80dp mid-gap so both thumbs
+      reach naturally without re-gripping the Pixel Fold. The phone
+      path (< 600dp) is unchanged and uses the single-block panel above.
+
+      Each row below shows [left-half | gap | right-half]; modifier
+      keys (Fn, Ctrl, Shift, Alt) live on the left cluster only,
+      since TerminalExtraKeys (Task 14.4) already exposes Ctrl/Alt
+      independently of which half the user is typing in. Both
+      halves share the same ModifierState, so a Ctrl latched on the
+      left visually highlights regardless of which half the next
+      keystroke lands on.
+
+      Left half         | gap   | Right half
+      ------------------+-------+------------------------------------
+      Fn 1 2 3 4 5 6    | 80dp  | 7 8 9 0 - =
+      Tab q w e r t     | 80dp  | y u i o p [ ]
+      Ctrl a s d f g    | 80dp  | h j k l ; ' Enter
+      Shift z x c v b   | 80dp  | n m , . / \ ↑ ⌫
+      Alt ~ ` | SPACE-L | 80dp  | SPACE-R ← ↓ →
+
+      This block is preview-only HTML — the live Compose split layout
+      is authoritative. Kept here so future mockup diffs for the
+      terminal screen have a visual anchor for the foldable keyboard.
+    -->
+    <div class="keyboard-panel split-preview" id="keyboardPanelSplit" style="display:none;" aria-hidden="true">
+      <!-- Split row 1: numbers -->
+      <div class="key-row split-row">
+        <div class="split-half">
+          <button class="key modifier" data-key="Fn">Fn</button>
+          <button class="key" data-key="1">1</button>
+          <button class="key" data-key="2">2</button>
+          <button class="key" data-key="3">3</button>
+          <button class="key" data-key="4">4</button>
+          <button class="key" data-key="5">5</button>
+          <button class="key" data-key="6">6</button>
+        </div>
+        <div class="split-gap"></div>
+        <div class="split-half">
+          <button class="key" data-key="7">7</button>
+          <button class="key" data-key="8">8</button>
+          <button class="key" data-key="9">9</button>
+          <button class="key" data-key="0">0</button>
+          <button class="key" data-key="-">-</button>
+          <button class="key" data-key="=">=</button>
+        </div>
+      </div>
+      <!-- Split row 2: QWERTY top -->
+      <div class="key-row split-row">
+        <div class="split-half">
+          <button class="key modifier wide" data-key="Tab">Tab</button>
+          <button class="key" data-key="q">q</button>
+          <button class="key" data-key="w">w</button>
+          <button class="key" data-key="e">e</button>
+          <button class="key" data-key="r">r</button>
+          <button class="key" data-key="t">t</button>
+        </div>
+        <div class="split-gap"></div>
+        <div class="split-half">
+          <button class="key" data-key="y">y</button>
+          <button class="key" data-key="u">u</button>
+          <button class="key" data-key="i">i</button>
+          <button class="key" data-key="o">o</button>
+          <button class="key" data-key="p">p</button>
+          <button class="key" data-key="[">[</button>
+          <button class="key" data-key="]">]</button>
+        </div>
+      </div>
+      <!-- Split row 3: QWERTY mid -->
+      <div class="key-row split-row">
+        <div class="split-half">
+          <button class="key modifier wide" data-key="Ctrl">Ctrl</button>
+          <button class="key" data-key="a">a</button>
+          <button class="key" data-key="s">s</button>
+          <button class="key" data-key="d">d</button>
+          <button class="key" data-key="f">f</button>
+          <button class="key" data-key="g">g</button>
+        </div>
+        <div class="split-gap"></div>
+        <div class="split-half">
+          <button class="key" data-key="h">h</button>
+          <button class="key" data-key="j">j</button>
+          <button class="key" data-key="k">k</button>
+          <button class="key" data-key="l">l</button>
+          <button class="key" data-key=";">;</button>
+          <button class="key" data-key="'">'</button>
+          <button class="key enter-key wider" data-key="Enter">Enter &#9166;</button>
+        </div>
+      </div>
+      <!-- Split row 4: QWERTY bot -->
+      <div class="key-row split-row">
+        <div class="split-half">
+          <button class="key modifier wide" data-key="Shift">Shift</button>
+          <button class="key" data-key="z">z</button>
+          <button class="key" data-key="x">x</button>
+          <button class="key" data-key="c">c</button>
+          <button class="key" data-key="v">v</button>
+          <button class="key" data-key="b">b</button>
+        </div>
+        <div class="split-gap"></div>
+        <div class="split-half">
+          <button class="key" data-key="n">n</button>
+          <button class="key" data-key="m">m</button>
+          <button class="key" data-key=",">,</button>
+          <button class="key" data-key=".">.</button>
+          <button class="key" data-key="/">/</button>
+          <button class="key" data-key="\">\</button>
+          <button class="key arrow-key" data-key="ArrowUp">&uarr;</button>
+          <button class="key modifier wider" data-key="Backspace">&#9003;</button>
+        </div>
+      </div>
+      <!-- Split row 5: bottom (symbols + space halves + arrows) -->
+      <div class="key-row split-row">
+        <div class="split-half">
+          <button class="key modifier wide" data-key="Alt">Alt</button>
+          <button class="key" data-key="~">~</button>
+          <button class="key" data-key="`">`</button>
+          <button class="key" data-key="|">|</button>
+          <button class="key space-key" data-key=" ">Space</button>
+        </div>
+        <div class="split-gap"></div>
+        <div class="split-half">
+          <button class="key space-key" data-key=" ">Space</button>
+          <button class="key arrow-key" data-key="ArrowLeft">&larr;</button>
+          <button class="key arrow-key" data-key="ArrowDown">&darr;</button>
+          <button class="key arrow-key" data-key="ArrowRight">&rarr;</button>
+        </div>
       </div>
     </div>
 
