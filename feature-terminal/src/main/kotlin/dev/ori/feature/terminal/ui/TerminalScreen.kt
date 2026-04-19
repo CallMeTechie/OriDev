@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -177,10 +178,18 @@ fun TerminalScreen(
             }
         },
     ) { innerPadding ->
+        // Phase 15 Task 15.2 — imePadding() lives here, at the root of the
+        // terminal stack, so the ENTIRE stack (tab bar + terminal pane +
+        // KeyboardHost) lifts uniformly when the system IME opens. Previously
+        // the padding was applied inside KeyboardHost, which caused the 53dp
+        // extra-keys row to float 200-400px above Gboard. Scaffold's
+        // innerPadding (status/nav bars) and imePadding() are orthogonal —
+        // the former handles system bars, the latter the soft keyboard.
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .padding(innerPadding)
+                .imePadding(),
         ) {
             // Tab bar
             TerminalTabBar(
