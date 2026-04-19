@@ -34,12 +34,23 @@ class OriDevApplication : Application(), Configuration.Provider {
             .build()
 
     override fun attachBaseContext(base: Context) {
+        // Install BEFORE super.attachBaseContext so we capture crashes
+        // that happen during Hilt's @HiltAndroidApp graph validation
+        // (which runs INSIDE super.attachBaseContext on first launch).
+        // The previous "install after ACRA" order missed exactly the
+        // class of startup crashes we built the logger to capture —
+        // because the crash fires before our handler is set.
+        //
+        // Chain at install time:
+        //   1. our handler captures the system default → our handler runs first
+        //   2. ACRA installs after us, captures our handler → ACRA runs first,
+        //      then chains down to ours, then to the system default.
+        // Either way the file gets written: if the crash hits before ACRA's
+        // install, our handler runs directly; if it hits after, ACRA delegates
+        // to us. The OS kill is always the last link in the chain.
+        LocalCrashLogger.install(base)
         super.attachBaseContext(base)
         AcraConfig.initIfEnabled(this)
-        // Install AFTER ACRA so our handler captures ACRA's handler as its
-        // chain target — ours fires first (writes Downloads/oridev-crash-*.txt),
-        // then ACRA fires, then the OS kills the process.
-        LocalCrashLogger.install(this)
     }
 
     override fun onCreate() {

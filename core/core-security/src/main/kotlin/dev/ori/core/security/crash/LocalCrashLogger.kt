@@ -50,7 +50,12 @@ public object LocalCrashLogger {
      * twice still chains the previous handler exactly once.
      */
     public fun install(context: Context) {
-        val appContext = context.applicationContext
+        // applicationContext may still be null if install() is called before
+        // Application.attachBaseContext has finished (which is the whole
+        // point — we want to catch crashes that happen IN that call).
+        // Fall back to the raw context in that case; the ContentResolver
+        // is available on a base ContextWrapper too.
+        val appContext = context.applicationContext ?: context
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             @Suppress("TooGenericExceptionCaught")
