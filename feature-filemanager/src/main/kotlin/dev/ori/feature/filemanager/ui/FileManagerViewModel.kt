@@ -1,6 +1,5 @@
 package dev.ori.feature.filemanager.ui
 
-import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -10,6 +9,7 @@ import dev.ori.domain.model.TransferRequest
 import dev.ori.domain.repository.FileSystemRepository
 import dev.ori.domain.repository.LocalFileSystem
 import dev.ori.domain.repository.RemoteFileSystem
+import dev.ori.domain.repository.StorageAccessRepository
 import dev.ori.domain.usecase.ChmodUseCase
 import dev.ori.domain.usecase.CreateDirectoryUseCase
 import dev.ori.domain.usecase.DeleteFileUseCase
@@ -39,15 +39,57 @@ class FileManagerViewModel @Inject constructor(
     private val chmodUseCase: ChmodUseCase,
     private val getBookmarksUseCase: GetBookmarksUseCase,
     private val enqueueTransferUseCase: EnqueueTransferUseCase,
+    private val storageAccessRepository: StorageAccessRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FileManagerUiState())
     val uiState: StateFlow<FileManagerUiState> = _uiState.asStateFlow()
 
     init {
-        val initialPath = Environment.getExternalStorageDirectory().absolutePath
-        navigateToPath(ActivePane.LEFT, initialPath)
+        // Phase 15 Task 15.6 — no more Environment.getExternalStorageDirectory.
+        // The local pane stays empty until the user has granted at least
+        // one SAF tree; the UI shows a "Choose a folder" CTA in that
+        // case. The first granted tree auto-opens so existing muscle
+        // memory ("File Manager → immediately see files") still applies
+        // once setup is done.
+        observeGrantedTrees()
         loadBookmarks()
+    }
+
+    private fun observeGrantedTrees() {
+        viewModelScope.launch {
+            storageAccessRepository.grantedTrees.collect { trees ->
+                val wasEmpty = _uiState.value.grantedTrees.isEmpty()
+                _uiState.update { it.copy(grantedTrees = trees) }
+
+                val leftPath = _uiState.value.leftPane.currentPath
+                val firstTreeUri = trees.firstOrNull()?.uri
+                when {
+                    // First grant after empty state — auto-open the tree.
+                    wasEmpty && trees.isNotEmpty() && firstTreeUri != null && leftPath.isEmpty() -> {
+                        navigateToPath(ActivePane.LEFT, firstTreeUri)
+                    }
+                    // All grants removed — clear the left pane.
+                    trees.isEmpty() && leftPath.isNotEmpty() -> {
+                        updatePaneState(ActivePane.LEFT) {
+                            PaneState(currentPath = "", files = emptyList())
+                        }
+                    }
+                    // Granted tree the user is currently viewing was revoked
+                    // externally — clear the pane so we don't keep showing
+                    // stale listings.
+                    leftPath.isNotEmpty() && trees.none { leftPath.startsWith(it.uri) } -> {
+                        updatePaneState(ActivePane.LEFT) {
+                            PaneState(
+                                currentPath = "",
+                                files = emptyList(),
+                                error = "This folder is no longer accessible. Pick another folder or re-grant.",
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fun onEvent(event: FileManagerEvent) {
@@ -81,6 +123,20 @@ class FileManagerViewModel @Inject constructor(
                     previewError = null,
                 )
             }
+            is FileManagerEvent.GrantTree -> grantTree(event.uri)
+            is FileManagerEvent.RevokeTree -> revokeTree(event.uri)
+        }
+    }
+
+    private fun grantTree(uri: String) {
+        viewModelScope.launch {
+            storageAccessRepository.grant(uri)
+        }
+    }
+
+    private fun revokeTree(uri: String) {
+        viewModelScope.launch {
+            storageAccessRepository.revoke(uri)
         }
     }
 
@@ -129,6 +185,7 @@ class FileManagerViewModel @Inject constructor(
         }
 
     private fun navigateToPath(pane: ActivePane, path: String) {
+        if (path.isEmpty()) return
         viewModelScope.launch {
             updatePaneState(pane) { it.copy(isLoading = true, error = null) }
 
@@ -163,12 +220,23 @@ class FileManagerViewModel @Inject constructor(
 
     private fun navigateUp(pane: ActivePane) {
         val currentPath = getPaneState(pane).currentPath
+        if (pane == ActivePane.LEFT) {
+            // SAF has no parent traversal above the granted tree root.
+            // Pop the stack instead; if we're already at a tree root,
+            // no-op.
+            val stack = getPaneState(pane).pathStack
+            if (stack.size < 2) return
+            val previousPath = stack[stack.lastIndex - 1]
+            updatePaneState(pane) { current ->
+                current.copy(pathStack = current.pathStack.dropLast(2))
+            }
+            navigateToPath(pane, previousPath)
+            return
+        }
         val parentPath = File(currentPath).parent ?: "/"
         if (parentPath != currentPath) {
             updatePaneState(pane) { current ->
-                current.copy(
-                    pathStack = current.pathStack.dropLast(1),
-                )
+                current.copy(pathStack = current.pathStack.dropLast(1))
             }
             navigateToPath(pane, parentPath)
         }
@@ -262,7 +330,9 @@ class FileManagerViewModel @Inject constructor(
 
     private fun refreshPane(pane: ActivePane) {
         val currentPath = getPaneState(pane).currentPath
-        navigateToPath(pane, currentPath)
+        if (currentPath.isNotEmpty()) {
+            navigateToPath(pane, currentPath)
+        }
     }
 
     private fun clearError(pane: ActivePane) {

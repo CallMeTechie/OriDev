@@ -28,6 +28,7 @@ import dev.ori.feature.settings.sections.AccountPremiumSection
 import dev.ori.feature.settings.sections.AppearanceSection
 import dev.ori.feature.settings.sections.NotificationsSection
 import dev.ori.feature.settings.sections.SecuritySection
+import dev.ori.feature.settings.sections.StorageAccessSection
 import dev.ori.feature.settings.sections.TerminalSection
 import dev.ori.feature.settings.sections.TransfersSection
 
@@ -70,6 +71,8 @@ public fun SettingsScreen(
         onConnectionNotificationChanged = viewModel::setNotifyConnection,
         onClaudeNotificationChanged = viewModel::setNotifyClaude,
         onWearNotificationChanged = viewModel::setNotifyWear,
+        onGrantStorageTree = viewModel::grantStorageTree,
+        onRevokeStorageTree = viewModel::revokeStorageTree,
         modifier = modifier,
     )
 }
@@ -90,6 +93,8 @@ internal fun SettingsContent(
     onConnectionNotificationChanged: (Boolean) -> Unit = {},
     onClaudeNotificationChanged: (Boolean) -> Unit = {},
     onWearNotificationChanged: (Boolean) -> Unit = {},
+    onGrantStorageTree: (String) -> Unit = {},
+    onRevokeStorageTree: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -137,6 +142,11 @@ internal fun SettingsContent(
                 SecuritySection(
                     prefs = state.preferences,
                     onBiometricUnlockChanged = onBiometricUnlockChanged,
+                )
+                StorageAccessSection(
+                    grantedTrees = state.grantedTrees,
+                    onGrantTree = onGrantStorageTree,
+                    onRevokeTree = onRevokeStorageTree,
                 )
                 NotificationsSection(
                     prefs = state.preferences,

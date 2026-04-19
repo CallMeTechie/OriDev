@@ -13,6 +13,17 @@
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!--
+        Phase 15 Task 15.6 — local file access uses the Storage Access
+        Framework (`DocumentFile.fromTreeUri`) only. No
+        READ_EXTERNAL_STORAGE / WRITE_EXTERNAL_STORAGE / MANAGE_EXTERNAL_STORAGE
+        declarations; SAF requests are scoped per user-picked tree via an
+        Intent contract and need no manifest permission. The persisted
+        grants survive reboot via ContentResolver.takePersistableUriPermission.
+        Adding the broad storage permissions back would force a Play Store
+        "Permissions Declaration Form" review for general-purpose apps.
+    -->
+
     <application
         android:name=".OriDevApplication"
         android:allowBackup="false"

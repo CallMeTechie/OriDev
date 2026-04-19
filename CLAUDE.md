@@ -58,6 +58,13 @@ Multi-module Android project: Kotlin, Jetpack Compose, Material 3, Hilt, Room, M
 - Passwords in memory: char[] not String. Zero-fill after use.
 - Clipboard: Set EXTRA_IS_SENSITIVE flag. Auto-clear after 30s.
 - SSH Host Keys: Trust on First Use (TOFU). Reject on mismatch.
+- Local file access: Storage Access Framework `DocumentFile` only; no
+  `MANAGE_EXTERNAL_STORAGE` and no broad `READ/WRITE_EXTERNAL_STORAGE`.
+  The `LocalFileSystemRepository` routes all reads/writes through
+  `ContentResolver` + `DocumentFile`. Granted trees persist via
+  `takePersistableUriPermission` (Phase 15 Task 15.6) and are surfaced
+  plus removable in Settings → Speicherzugriff. The file-manager's
+  local pane shows a "Choose a folder" CTA when no trees are granted.
 
 #### Semgrep gate
 

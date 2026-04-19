@@ -32,6 +32,10 @@ android {
 dependencies {
     implementation(project(":core:core-common"))
     implementation(project(":core:core-ui"))
+    // Phase 15 Task 15.6 — StorageAccessRepository is consumed by the
+    // onboarding permissions screen so the storage-folder step persists
+    // through the same Hilt-provided repo as Settings and File Manager.
+    implementation(project(":domain"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

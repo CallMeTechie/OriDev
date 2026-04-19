@@ -2,6 +2,7 @@ package dev.ori.feature.filemanager.ui
 
 import dev.ori.domain.model.Bookmark
 import dev.ori.domain.model.FileItem
+import dev.ori.domain.model.GrantedTree
 
 enum class ViewMode {
     LIST,
@@ -14,7 +15,7 @@ enum class ActivePane {
 }
 
 data class PaneState(
-    val currentPath: String = "/",
+    val currentPath: String = "",
     val files: List<FileItem> = emptyList(),
     val selectedFiles: Set<String> = emptySet(),
     val isLoading: Boolean = false,
@@ -31,6 +32,10 @@ data class FileManagerUiState(
     val isFolded: Boolean = true,
     val activePane: ActivePane = ActivePane.LEFT,
     val bookmarks: List<Bookmark> = emptyList(),
+    // Phase 15 Task 15.6 — SAF granted trees. The local (LEFT) pane shows
+    // a "Choose a folder" CTA when this list is empty so the user is
+    // never left staring at a blank listing wondering why nothing works.
+    val grantedTrees: List<GrantedTree> = emptyList(),
     val splitRatio: Float = 0.5f,
     val showFileInfo: FileItem? = null,
     val contextMenuFile: FileItem? = null,
@@ -66,6 +71,13 @@ sealed class FileManagerEvent {
     data class InitiateTransfer(val sourcePaths: List<String>, val sourcePane: ActivePane) : FileManagerEvent()
     data class ShowFilePreview(val pane: ActivePane, val file: FileItem) : FileManagerEvent()
     data object ClosePreview : FileManagerEvent()
+
+    // Phase 15 Task 15.6 — SAF integration.
+    /** Persist the tree URI returned by the system folder picker. */
+    data class GrantTree(val uri: String) : FileManagerEvent()
+
+    /** Release a persisted SAF grant (invoked from Settings → Storage Access). */
+    data class RevokeTree(val uri: String) : FileManagerEvent()
 }
 
 data class DragState(

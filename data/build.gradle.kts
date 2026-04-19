@@ -53,6 +53,10 @@ dependencies {
     // pure-JVM core variant, which has no preferencesDataStore() delegate).
     implementation(libs.datastore.preferences)
 
+    // Phase 15 Task 15.6 — Storage Access Framework DocumentFile wrapper
+    // for LocalFileSystemRepository and StorageAccessRepositoryImpl.
+    implementation(libs.documentfile)
+
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)
 
