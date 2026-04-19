@@ -7,11 +7,14 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -106,6 +110,18 @@ fun CustomKeyboard(
         if (shiftActive) shiftActive = false
     }
 
+    // Phase 15 Task 15.3 — on an unfolded foldable the single-block
+    // layout forces both thumbs across the centre fold to reach the
+    // far keys. Split at screenWidthDp >= 600 so each thumb gets its
+    // own half-width cluster with an 80dp gap in the middle. Both
+    // halves observe the same `modifierState` and `onEvent`, so the
+    // Ctrl/Alt latch visuals (which live on the left half per the
+    // split) behave identically — there is no duplicate state
+    // machine, only a duplicate *view* of the same state. Phone
+    // path (< 600dp) is untouched.
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val split = shouldUseSplit(screenWidthDp)
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -113,131 +129,386 @@ fun CustomKeyboard(
             .padding(4.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        // Row 1: Function keys (toggleable)
-        if (showFunctionRow) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                KeyButton("Esc") { sendRaw((ESC).toByteArray()) }
-                KeyButton("F1") { sendRaw("${ESC}OP".toByteArray()) }
-                KeyButton("F2") { sendRaw("${ESC}OQ".toByteArray()) }
-                KeyButton("F3") { sendRaw("${ESC}OR".toByteArray()) }
-                KeyButton("F4") { sendRaw("${ESC}OS".toByteArray()) }
-                KeyButton("F5") { sendRaw("$ESC[15~".toByteArray()) }
-                KeyButton("F6") { sendRaw("$ESC[17~".toByteArray()) }
-                KeyButton("F7") { sendRaw("$ESC[18~".toByteArray()) }
-                KeyButton("F8") { sendRaw("$ESC[19~".toByteArray()) }
-                KeyButton("F9") { sendRaw("$ESC[20~".toByteArray()) }
-                KeyButton("F10") { sendRaw("$ESC[21~".toByteArray()) }
-                KeyButton("F11") { sendRaw("$ESC[23~".toByteArray()) }
-                KeyButton("F12") { sendRaw("$ESC[24~".toByteArray()) }
-                KeyButton("Home") { sendRaw("$ESC[H".toByteArray()) }
-                KeyButton("End") { sendRaw("$ESC[F".toByteArray()) }
-                KeyButton("PgUp") { sendRaw("$ESC[5~".toByteArray()) }
-                KeyButton("PgDn") { sendRaw("$ESC[6~".toByteArray()) }
-                KeyButton("Ins") { sendRaw("$ESC[2~".toByteArray()) }
-                KeyButton("Del") { sendRaw("$ESC[3~".toByteArray()) }
-            }
+        if (split) {
+            SplitKeyboardBody(
+                ctrlActive = ctrlActive,
+                altActive = altActive,
+                shiftActive = shiftActive,
+                showFunctionRow = showFunctionRow,
+                onToggleShift = { shiftActive = !shiftActive },
+                onToggleFunctionRow = { showFunctionRow = !showFunctionRow },
+                onEvent = onEvent,
+                sendKey = ::sendKey,
+                sendRaw = ::sendRaw,
+            )
+        } else {
+            PhoneKeyboardBody(
+                ctrlActive = ctrlActive,
+                altActive = altActive,
+                shiftActive = shiftActive,
+                showFunctionRow = showFunctionRow,
+                onToggleShift = { shiftActive = !shiftActive },
+                onToggleFunctionRow = { showFunctionRow = !showFunctionRow },
+                onEvent = onEvent,
+                sendKey = ::sendKey,
+                sendRaw = ::sendRaw,
+            )
         }
+    }
+}
 
-        // Row 2: Numbers
+// region Phone (legacy single-block) layout ---------------------------------
+
+/**
+ * Legacy single-block layout — byte-for-byte the same rendering that
+ * shipped before Phase 15 Task 15.3. Kept intact for the phone path
+ * (`screenWidthDp < 600`) where the narrow width already makes every
+ * key thumb-reachable without splitting.
+ */
+@Composable
+private fun ColumnScope.PhoneKeyboardBody(
+    ctrlActive: Boolean,
+    altActive: Boolean,
+    shiftActive: Boolean,
+    showFunctionRow: Boolean,
+    onToggleShift: () -> Unit,
+    onToggleFunctionRow: () -> Unit,
+    onEvent: (TerminalEvent) -> Unit,
+    sendKey: (String) -> Unit,
+    sendRaw: (ByteArray) -> Unit,
+) {
+    // Row 1: Function keys (toggleable)
+    if (showFunctionRow) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            ToggleKeyButton("Fn", showFunctionRow) { showFunctionRow = !showFunctionRow }
-            for (c in "1234567890-=") {
-                val label = if (shiftActive) {
-                    when (c) {
-                        '1' -> '!'
-                        '2' -> '@'
-                        '3' -> '#'
-                        '4' -> '$'
-                        '5' -> '%'
-                        '6' -> '^'
-                        '7' -> '&'
-                        '8' -> '*'
-                        '9' -> '('
-                        '0' -> ')'
-                        '-' -> '_'
-                        '=' -> '+'
-                        else -> c
-                    }.toString()
-                } else {
-                    c.toString()
-                }
-                KeyButton(label) { sendKey(label) }
-            }
+            FunctionRowKeys(sendRaw)
         }
+    }
 
-        // Row 3: QWERTY top
+    // Row 2: Numbers
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        ToggleKeyButton("Fn", showFunctionRow, onToggleFunctionRow)
+        NumberRowKeys(shiftActive, sendKey, KeyboardSide.FULL)
+    }
+
+    // Row 3: QWERTY top
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        KeyButton("Tab") { sendKey("\t") }
+        QwertyTopKeys(shiftActive, sendKey, KeyboardSide.FULL)
+    }
+
+    // Row 4: QWERTY mid
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        ToggleKeyButton("Ctrl", ctrlActive) { onEvent(TerminalEvent.ToggleCtrl) }
+        QwertyMidKeys(shiftActive, sendKey, KeyboardSide.FULL)
+    }
+
+    // Row 5: QWERTY bottom
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        ToggleKeyButton("Shift", shiftActive, onToggleShift)
+        QwertyBottomKeys(shiftActive, sendKey, sendRaw, KeyboardSide.FULL)
+    }
+
+    // Row 6: Bottom
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        ToggleKeyButton("Alt", altActive) { onEvent(TerminalEvent.ToggleAlt) }
+        BottomRowKeys(sendKey, sendRaw, KeyboardSide.FULL)
+    }
+}
+
+// endregion
+
+// region Split (foldable) layout --------------------------------------------
+
+/**
+ * Phase 15 Task 15.3 — split layout for the unfolded foldable. Each
+ * row is rendered as a pair of half-width clusters separated by an
+ * [FOLDABLE_SPLIT_GAP_DP] mid-gap, so left and right thumbs reach
+ * their own keys without re-gripping. The same per-row helpers used
+ * by the phone path are re-invoked with [KeyboardSide.LEFT] and
+ * [KeyboardSide.RIGHT] so the character inventory stays in one
+ * place.
+ */
+@Composable
+private fun ColumnScope.SplitKeyboardBody(
+    ctrlActive: Boolean,
+    altActive: Boolean,
+    shiftActive: Boolean,
+    showFunctionRow: Boolean,
+    onToggleShift: () -> Unit,
+    onToggleFunctionRow: () -> Unit,
+    onEvent: (TerminalEvent) -> Unit,
+    sendKey: (String) -> Unit,
+    sendRaw: (ByteArray) -> Unit,
+) {
+    // Function-key row stays full-width scrollable — it is shown
+    // only on demand and already handles overflow via
+    // horizontalScroll, so a split doesn't buy anything here.
+    if (showFunctionRow) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
+            FunctionRowKeys(sendRaw)
+        }
+    }
+
+    SplitRow(
+        left = {
+            ToggleKeyButton("Fn", showFunctionRow, onToggleFunctionRow)
+            NumberRowKeys(shiftActive, sendKey, KeyboardSide.LEFT)
+        },
+        right = {
+            NumberRowKeys(shiftActive, sendKey, KeyboardSide.RIGHT)
+        },
+    )
+
+    SplitRow(
+        left = {
             KeyButton("Tab") { sendKey("\t") }
-            for (c in "qwertyuiop") {
-                val label = if (shiftActive) c.uppercase() else c.toString()
-                KeyButton(label) { sendKey(label) }
-            }
-            val lBracket = if (shiftActive) "{" else "["
-            val rBracket = if (shiftActive) "}" else "]"
-            KeyButton(lBracket) { sendKey(lBracket) }
-            KeyButton(rBracket) { sendKey(rBracket) }
-        }
+            QwertyTopKeys(shiftActive, sendKey, KeyboardSide.LEFT)
+        },
+        right = {
+            QwertyTopKeys(shiftActive, sendKey, KeyboardSide.RIGHT)
+        },
+    )
 
-        // Row 4: QWERTY mid
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
+    SplitRow(
+        left = {
             ToggleKeyButton("Ctrl", ctrlActive) { onEvent(TerminalEvent.ToggleCtrl) }
-            for (c in "asdfghjkl") {
-                val label = if (shiftActive) c.uppercase() else c.toString()
-                KeyButton(label) { sendKey(label) }
-            }
-            val semi = if (shiftActive) ":" else ";"
-            val quote = if (shiftActive) "\"" else "'"
-            KeyButton(semi) { sendKey(semi) }
-            KeyButton(quote) { sendKey(quote) }
-            KeyButton("Enter") { sendKey("\r") }
-        }
+            QwertyMidKeys(shiftActive, sendKey, KeyboardSide.LEFT)
+        },
+        right = {
+            QwertyMidKeys(shiftActive, sendKey, KeyboardSide.RIGHT)
+        },
+    )
 
-        // Row 5: QWERTY bottom
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            ToggleKeyButton("Shift", shiftActive) { shiftActive = !shiftActive }
-            for (c in "zxcvbnm,.") {
-                val label = if (shiftActive) {
-                    when (c) {
-                        ',' -> '<'
-                        '.' -> '>'
-                        else -> c.uppercase().first()
-                    }.toString()
-                } else {
-                    c.toString()
-                }
-                KeyButton(label) { sendKey(label) }
-            }
-            val slash = if (shiftActive) "?" else "/"
-            val backslash = if (shiftActive) "|" else "\\"
-            KeyButton(slash) { sendKey(slash) }
-            KeyButton(backslash) { sendKey(backslash) }
-            RepeatKeyButton("\u2191") { sendRaw("$ESC[A".toByteArray()) }
-            KeyButton("\u232B") { sendRaw(byteArrayOf(0x7F)) }
-        }
+    SplitRow(
+        left = {
+            ToggleKeyButton("Shift", shiftActive, onToggleShift)
+            QwertyBottomKeys(shiftActive, sendKey, sendRaw, KeyboardSide.LEFT)
+        },
+        right = {
+            QwertyBottomKeys(shiftActive, sendKey, sendRaw, KeyboardSide.RIGHT)
+        },
+    )
 
-        // Row 6: Bottom
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
+    SplitRow(
+        left = {
             ToggleKeyButton("Alt", altActive) { onEvent(TerminalEvent.ToggleAlt) }
+            BottomRowKeys(sendKey, sendRaw, KeyboardSide.LEFT)
+        },
+        right = {
+            BottomRowKeys(sendKey, sendRaw, KeyboardSide.RIGHT)
+        },
+    )
+}
+
+/**
+ * One row of the split layout: `[left-half | gap | right-half]`
+ * where each half takes equal weight so the keys stay thumb-aligned.
+ */
+@Composable
+private fun SplitRow(
+    left: @Composable RowScope.() -> Unit,
+    right: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            content = left,
+        )
+        Spacer(modifier = Modifier.width(FOLDABLE_SPLIT_GAP_DP.dp))
+        Row(
+            modifier = Modifier.weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            content = right,
+        )
+    }
+}
+
+// endregion
+
+// region Shared per-row key emitters ----------------------------------------
+
+@Composable
+private fun FunctionRowKeys(sendRaw: (ByteArray) -> Unit) {
+    KeyButton("Esc") { sendRaw((ESC).toByteArray()) }
+    KeyButton("F1") { sendRaw("${ESC}OP".toByteArray()) }
+    KeyButton("F2") { sendRaw("${ESC}OQ".toByteArray()) }
+    KeyButton("F3") { sendRaw("${ESC}OR".toByteArray()) }
+    KeyButton("F4") { sendRaw("${ESC}OS".toByteArray()) }
+    KeyButton("F5") { sendRaw("$ESC[15~".toByteArray()) }
+    KeyButton("F6") { sendRaw("$ESC[17~".toByteArray()) }
+    KeyButton("F7") { sendRaw("$ESC[18~".toByteArray()) }
+    KeyButton("F8") { sendRaw("$ESC[19~".toByteArray()) }
+    KeyButton("F9") { sendRaw("$ESC[20~".toByteArray()) }
+    KeyButton("F10") { sendRaw("$ESC[21~".toByteArray()) }
+    KeyButton("F11") { sendRaw("$ESC[23~".toByteArray()) }
+    KeyButton("F12") { sendRaw("$ESC[24~".toByteArray()) }
+    KeyButton("Home") { sendRaw("$ESC[H".toByteArray()) }
+    KeyButton("End") { sendRaw("$ESC[F".toByteArray()) }
+    KeyButton("PgUp") { sendRaw("$ESC[5~".toByteArray()) }
+    KeyButton("PgDn") { sendRaw("$ESC[6~".toByteArray()) }
+    KeyButton("Ins") { sendRaw("$ESC[2~".toByteArray()) }
+    KeyButton("Del") { sendRaw("$ESC[3~".toByteArray()) }
+}
+
+@Composable
+private fun NumberRowKeys(
+    shiftActive: Boolean,
+    sendKey: (String) -> Unit,
+    side: KeyboardSide,
+) {
+    val all = "1234567890-=".toList()
+    val keys = when (side) {
+        KeyboardSide.FULL -> all
+        KeyboardSide.LEFT -> splitRow(all).first
+        KeyboardSide.RIGHT -> splitRow(all).second
+    }
+    for (c in keys) {
+        val label = if (shiftActive) {
+            when (c) {
+                '1' -> '!'
+                '2' -> '@'
+                '3' -> '#'
+                '4' -> '$'
+                '5' -> '%'
+                '6' -> '^'
+                '7' -> '&'
+                '8' -> '*'
+                '9' -> '('
+                '0' -> ')'
+                '-' -> '_'
+                '=' -> '+'
+                else -> c
+            }.toString()
+        } else {
+            c.toString()
+        }
+        KeyButton(label) { sendKey(label) }
+    }
+}
+
+@Composable
+private fun QwertyTopKeys(
+    shiftActive: Boolean,
+    sendKey: (String) -> Unit,
+    side: KeyboardSide,
+) {
+    val letters = "qwertyuiop".toList()
+    val letterKeys = when (side) {
+        KeyboardSide.FULL -> letters
+        KeyboardSide.LEFT -> splitRow(letters).first
+        KeyboardSide.RIGHT -> splitRow(letters).second
+    }
+    for (c in letterKeys) {
+        val label = if (shiftActive) c.uppercase() else c.toString()
+        KeyButton(label) { sendKey(label) }
+    }
+    // Brackets belong to the right half — they sit after `p` on the
+    // full row and there's no natural place for them on the left.
+    if (side != KeyboardSide.LEFT) {
+        val lBracket = if (shiftActive) "{" else "["
+        val rBracket = if (shiftActive) "}" else "]"
+        KeyButton(lBracket) { sendKey(lBracket) }
+        KeyButton(rBracket) { sendKey(rBracket) }
+    }
+}
+
+@Composable
+private fun QwertyMidKeys(
+    shiftActive: Boolean,
+    sendKey: (String) -> Unit,
+    side: KeyboardSide,
+) {
+    val letters = "asdfghjkl".toList()
+    val letterKeys = when (side) {
+        KeyboardSide.FULL -> letters
+        KeyboardSide.LEFT -> splitRow(letters).first
+        KeyboardSide.RIGHT -> splitRow(letters).second
+    }
+    for (c in letterKeys) {
+        val label = if (shiftActive) c.uppercase() else c.toString()
+        KeyButton(label) { sendKey(label) }
+    }
+    if (side != KeyboardSide.LEFT) {
+        val semi = if (shiftActive) ":" else ";"
+        val quote = if (shiftActive) "\"" else "'"
+        KeyButton(semi) { sendKey(semi) }
+        KeyButton(quote) { sendKey(quote) }
+        KeyButton("Enter") { sendKey("\r") }
+    }
+}
+
+@Composable
+private fun QwertyBottomKeys(
+    shiftActive: Boolean,
+    sendKey: (String) -> Unit,
+    sendRaw: (ByteArray) -> Unit,
+    side: KeyboardSide,
+) {
+    val letters = "zxcvbnm,.".toList()
+    val letterKeys = when (side) {
+        KeyboardSide.FULL -> letters
+        KeyboardSide.LEFT -> splitRow(letters).first
+        KeyboardSide.RIGHT -> splitRow(letters).second
+    }
+    for (c in letterKeys) {
+        val label = if (shiftActive) {
+            when (c) {
+                ',' -> '<'
+                '.' -> '>'
+                else -> c.uppercase().first()
+            }.toString()
+        } else {
+            c.toString()
+        }
+        KeyButton(label) { sendKey(label) }
+    }
+    if (side != KeyboardSide.LEFT) {
+        val slash = if (shiftActive) "?" else "/"
+        val backslash = if (shiftActive) "|" else "\\"
+        KeyButton(slash) { sendKey(slash) }
+        KeyButton(backslash) { sendKey(backslash) }
+        RepeatKeyButton("\u2191") { sendRaw("$ESC[A".toByteArray()) }
+        KeyButton("\u232B") { sendRaw(byteArrayOf(0x7F)) }
+    }
+}
+
+@Composable
+private fun RowScope.BottomRowKeys(
+    sendKey: (String) -> Unit,
+    sendRaw: (ByteArray) -> Unit,
+    side: KeyboardSide,
+) {
+    when (side) {
+        KeyboardSide.FULL -> {
             KeyButton("~") { sendKey("~") }
             KeyButton("`") { sendKey("`") }
             KeyButton("|") { sendKey("|") }
@@ -246,8 +517,24 @@ fun CustomKeyboard(
             RepeatKeyButton("\u2193") { sendRaw("$ESC[B".toByteArray()) }
             RepeatKeyButton("\u2192") { sendRaw("$ESC[C".toByteArray()) }
         }
+        KeyboardSide.LEFT -> {
+            // Left half: symbol triplet + left-thumb half of Space.
+            KeyButton("~") { sendKey("~") }
+            KeyButton("`") { sendKey("`") }
+            KeyButton("|") { sendKey("|") }
+            SpaceKeyButton { sendKey(" ") }
+        }
+        KeyboardSide.RIGHT -> {
+            // Right half: right-thumb half of Space + arrow cluster.
+            SpaceKeyButton { sendKey(" ") }
+            RepeatKeyButton("\u2190") { sendRaw("$ESC[D".toByteArray()) }
+            RepeatKeyButton("\u2193") { sendRaw("$ESC[B".toByteArray()) }
+            RepeatKeyButton("\u2192") { sendRaw("$ESC[C".toByteArray()) }
+        }
     }
 }
+
+// endregion
 
 @Composable
 private fun KeyButton(
