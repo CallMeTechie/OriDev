@@ -31,7 +31,7 @@ okhttp = "5.3.2"
 moshi = "1.15.2"
 
 # Terminal & Editor
-termlib = "0.0.26"
+termlib = "0.0.34"
 sora-editor = "0.23.6"
 java-diff-utils = "4.12"
 
