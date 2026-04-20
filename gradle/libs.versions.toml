@@ -33,7 +33,7 @@ moshi = "1.15.2"
 # Terminal & Editor
 termlib = "0.0.26"
 sora-editor = "0.23.6"
-java-diff-utils = "4.12"
+java-diff-utils = "4.16"
 
 # Image Loading
 coil = "3.4.0"
