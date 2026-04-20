@@ -40,7 +40,7 @@ coil = "3.4.0"
 
 # Monetization
 billing = "7.1.1"
-play-services-ads = "23.6.0"
+play-services-ads = "25.2.0"
 
 # Wear OS
 wear-compose = "1.6.1"
