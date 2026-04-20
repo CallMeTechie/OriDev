@@ -76,7 +76,7 @@ baselineprofile-plugin = "1.4.1"
 uiautomator = "2.3.0"
 
 # Google Play Publisher (gradle-play-publisher)
-gradle-play-publisher = "3.12.1"
+gradle-play-publisher = "4.0.0"
 
 [libraries]
 # Kotlin
