@@ -9,6 +9,7 @@ import dagger.hilt.android.HiltAndroidApp
 import dev.ori.app.crash.AcraConfig
 import dev.ori.app.wear.WearDataSyncPublisher
 import dev.ori.core.security.crash.LocalCrashLogger
+import dev.ori.core.security.crash.NonFatalErrorLogger
 import dev.ori.core.security.preferences.CrashReportingPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,6 +50,7 @@ class OriDevApplication : Application(), Configuration.Provider {
         // install, our handler runs directly; if it hits after, ACRA delegates
         // to us. The OS kill is always the last link in the chain.
         LocalCrashLogger.install(base)
+        NonFatalErrorLogger.install(base)
         super.attachBaseContext(base)
         AcraConfig.initIfEnabled(this)
     }
