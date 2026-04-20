@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.ori.core.common.result.getAppError
 import dev.ori.core.security.biometric.CredentialUnlockGate
+import dev.ori.core.security.crash.NonFatalErrorLogger
 import dev.ori.domain.usecase.ConnectUseCase
 import dev.ori.domain.usecase.DeleteProfileUseCase
 import dev.ori.domain.usecase.DisconnectUseCase
@@ -84,10 +85,27 @@ class ConnectionListViewModel @Inject constructor(
         viewModelScope.launch {
             val result = connectUseCase(profileId)
             result.getAppError()?.let { error ->
+                // Dump the full cause chain to Downloads/oridev-error-*.txt
+                // so "connection failed" is diagnosable without adb logcat.
+                // The user-facing message stays short and friendly; the
+                // Throwable-level detail lives in the log file.
+                val cause = error.cause ?: AppErrorCarrier(error.message)
+                NonFatalErrorLogger.log(
+                    category = "connect-${error::class.simpleName?.lowercase() ?: "error"}",
+                    throwable = cause,
+                    contextNote = "profileId=$profileId; userMessage=${error.message}",
+                )
                 _uiState.update { it.copy(error = error.message) }
             }
         }
     }
+
+    /**
+     * Wrapper so that error paths that never carried a [Throwable] (e.g.
+     * an [dev.ori.core.common.error.AppError.PermissionDenied]) still end
+     * up in the Downloads log with at least the user-facing message.
+     */
+    private class AppErrorCarrier(message: String) : Throwable(message)
 
     /**
      * Phase 11 Tier-1 T1d — biometric gate wrapper for the connect flow.
