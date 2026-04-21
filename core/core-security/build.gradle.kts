@@ -41,6 +41,11 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)
+    // Full BouncyCastle — BouncyCastleSetup replaces Android's stripped-
+    // down built-in BC provider at app start so SSHJ can resolve Ed25519 /
+    // Curve25519. SSHJ brings this in transitively, but we reference
+    // BouncyCastleProvider directly and want the dependency explicit.
+    implementation(libs.bcprov.jdk18on)
 
     testImplementation(libs.junit5.api)
     testRuntimeOnly(libs.junit5.engine)
