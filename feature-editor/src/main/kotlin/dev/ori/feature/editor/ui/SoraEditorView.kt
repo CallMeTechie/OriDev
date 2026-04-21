@@ -88,6 +88,9 @@ fun SoraEditorView(
         modifier = modifier,
         factory = { ctx ->
             TextMateLoader.initialize(ctx)
+            // `lastFilename` mirrors what the factory applies so the first
+            // `update` pass doesn't needlessly re-create the language.
+            lastFilename = filename
             CodeEditor(ctx).apply {
                 setText(content)
                 editable = !readOnly
@@ -99,9 +102,6 @@ fun SoraEditorView(
                 }
                 controller?.editor = this
             }
-            // `lastFilename` mirrors what the factory just applied so the
-            // first `update` pass doesn't needlessly re-create the language.
-                .also { lastFilename = filename }
         },
         update = { editor ->
             if (editor.text.toString() != content) {
