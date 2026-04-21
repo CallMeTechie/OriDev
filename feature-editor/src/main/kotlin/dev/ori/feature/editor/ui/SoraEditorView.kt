@@ -5,6 +5,7 @@ package dev.ori.feature.editor.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
@@ -71,6 +72,18 @@ fun SoraEditorView(
     modifier: Modifier = Modifier,
     controller: SoraEditorController? = null,
 ) {
+    // Cache the last filename we handed to the editor so we only rebuild the
+    // TextMate language when the filename actually changes. Previously we
+    // stashed this via `View.setTag(android.R.id.text1, filename)` — but
+    // `android.R.id.*` is a system resource (upper byte 0x01) and on
+    // Android 16 (API 36) the tightened `View.setTag(int,Object)` key
+    // validation (CompatChange 376561342/395521150) rejects any key whose
+    // upper byte is < 0x02 with `IllegalArgumentException: The key must be
+    // an application-specific resource id`. That crashed the app the
+    // instant the Sora CodeEditor attached to the window. Holding the
+    // state in a Compose `remember` avoids the View.setTag path entirely.
+    var lastFilename by remember { mutableStateOf<String?>(null) }
+
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
@@ -86,18 +99,18 @@ fun SoraEditorView(
                 }
                 controller?.editor = this
             }
+            // `lastFilename` mirrors what the factory just applied so the
+            // first `update` pass doesn't needlessly re-create the language.
+                .also { lastFilename = filename }
         },
         update = { editor ->
             if (editor.text.toString() != content) {
                 editor.setText(content)
             }
             editor.editable = !readOnly
-            // Only re-create language when filename actually changes -- avoids
-            // allocating a new TextMateLanguage on every recomposition.
-            val currentLang = editor.getTag(android.R.id.text1) as? String
-            if (currentLang != filename) {
+            if (lastFilename != filename) {
                 editor.setEditorLanguage(TextMateLoader.loadLanguageForFile(filename))
-                editor.setTag(android.R.id.text1, filename)
+                lastFilename = filename
             }
             controller?.refresh()
         },
