@@ -99,6 +99,14 @@ fun ConnectionListScreen(
         }
     }
 
+    uiState.hostKeyPrompt?.let { prompt ->
+        HostKeyTrustDialog(
+            prompt = prompt,
+            onAccept = { viewModel.onEvent(ConnectionListEvent.AcceptHostKey) },
+            onReject = { viewModel.onEvent(ConnectionListEvent.RejectHostKey) },
+        )
+    }
+
     // Show bottom sheet when a profile is selected
     selectedProfile?.let { profile ->
         val isConnected = uiState.activeConnections.any {
