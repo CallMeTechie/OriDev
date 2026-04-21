@@ -249,8 +249,38 @@ private fun BreadcrumbBar(
     onSegmentClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val segments = path.split("/").filter { it.isNotEmpty() }
     val scrollState = rememberScrollState()
+
+    // Phase 15 Task 15.6 follow-up: SAF tree URIs (content://…/tree/…)
+    // MUST NOT be split on '/' — the "//" in "content://" collapses and
+    // the percent-encoded tree/document IDs get shredded, producing the
+    // garbled URI "/content:/com.android.externalstorage.documents/tree"
+    // the user saw in the listfiles error report. SAF has no useful
+    // per-segment navigation above the granted tree root anyway
+    // (DocumentsContract does not expose cross-tree parents), so render
+    // a single non-clickable label with the decoded document name and
+    // let [navigateUp]'s pathStack pop handle "go back".
+    if (path.startsWith("content://")) {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .horizontalScroll(scrollState)
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = safDisplayLabel(path),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        return
+    }
+
+    val segments = path.split("/").filter { it.isNotEmpty() }
 
     Row(
         modifier = modifier
@@ -293,4 +323,25 @@ private fun BreadcrumbBar(
     }
 
     Spacer(modifier = Modifier.height(4.dp))
+}
+
+/**
+ * Extracts a user-visible label from a SAF tree or document URI.
+ *
+ * - Tree URI: `content://…/tree/primary%3ADocuments` → `"Documents"`
+ * - Document URI: `content://…/tree/…/document/primary%3ADocuments%2Fsub%2Fnested`
+ *   → `"nested"`
+ *
+ * Falls back to the raw URI on any parse failure — the UI stays
+ * alive, worst case the user sees the opaque content:// string.
+ */
+internal fun safDisplayLabel(contentUri: String): String {
+    val afterDocument = contentUri.substringAfterLast("/document/", missingDelimiterValue = "")
+    val afterTree = contentUri.substringAfterLast("/tree/", missingDelimiterValue = "")
+    val raw = afterDocument.ifEmpty { afterTree }.ifEmpty { return contentUri }
+    val decoded = java.net.URLDecoder.decode(raw, Charsets.UTF_8.name())
+    // DocumentsContract IDs look like "primary:Documents/sub/nested".
+    // Strip the authority prefix and return the last path segment.
+    val afterColon = decoded.substringAfter(':', missingDelimiterValue = decoded)
+    return afterColon.substringAfterLast('/', missingDelimiterValue = afterColon).ifEmpty { afterColon }
 }
