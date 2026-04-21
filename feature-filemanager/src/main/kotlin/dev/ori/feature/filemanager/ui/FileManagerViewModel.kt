@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.ori.core.common.model.TransferDirection
 import dev.ori.core.common.result.getAppError
+import dev.ori.core.security.crash.NonFatalErrorLogger
 import dev.ori.domain.model.TransferRequest
 import dev.ori.domain.repository.FileSystemRepository
 import dev.ori.domain.repository.LocalFileSystem
@@ -207,6 +208,14 @@ class FileManagerViewModel @Inject constructor(
                 },
                 onFailure = { error ->
                     val appError = result.getAppError()
+                    // Dump the root cause (SAF NPE / SecurityException /
+                    // FileNotFoundException / etc.) to Downloads so the
+                    // short UI message is diagnosable offline.
+                    NonFatalErrorLogger.log(
+                        category = "listfiles-${pane.name.lowercase()}",
+                        throwable = appError?.cause ?: error,
+                        contextNote = "pane=$pane; path=$path; userMessage=${appError?.message ?: error.message}",
+                    )
                     updatePaneState(pane) {
                         it.copy(
                             isLoading = false,

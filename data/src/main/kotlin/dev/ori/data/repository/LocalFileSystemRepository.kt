@@ -49,9 +49,18 @@ public class LocalFileSystemRepository @Inject constructor(
 ) : FileSystemRepository {
 
     override suspend fun listFiles(path: String): List<FileItem> = withContext(Dispatchers.IO) {
-        val doc = resolveDocument(path) ?: return@withContext emptyList()
-        if (!doc.isDirectory) return@withContext emptyList()
-        doc.listFiles().map { it.toFileItem() }
+        val doc = resolveDocument(path)
+            ?: throw IllegalStateException("Could not resolve SAF document for path: $path")
+        if (!doc.isDirectory) {
+            throw IllegalStateException("SAF document is not a directory: $path")
+        }
+        // DocumentFile.listFiles() declares Array<DocumentFile> in Kotlin
+        // but is a platform type — SAF providers are allowed to return
+        // null (permission lost, provider killed, SD card unmounted).
+        // Without this guard the subsequent map throws NPE with a null
+        // message, which surfaces as "Failed to list files: null".
+        val children: Array<DocumentFile> = doc.listFiles() ?: emptyArray()
+        children.map { it.toFileItem() }
     }
 
     override suspend fun deleteFile(path: String) {
