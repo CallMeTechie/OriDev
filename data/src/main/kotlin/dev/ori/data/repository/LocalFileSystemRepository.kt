@@ -125,13 +125,22 @@ public class LocalFileSystemRepository @Inject constructor(
 
     private fun resolveDocument(path: String): DocumentFile? {
         val uri = runCatching { Uri.parse(path) }.getOrNull() ?: return null
-        // Tree URIs → fromTreeUri; child URIs (contain "/document/") →
-        // fromSingleUri. Both produce a DocumentFile whose listFiles()
-        // and delete()/rename() work against the underlying provider.
-        return if (path.contains("/document/")) {
-            DocumentFile.fromSingleUri(context, uri)
-        } else {
+        // Any URI rooted in a granted tree (`.../tree/...`) must go through
+        // `fromTreeUri` — it returns a `TreeDocumentFile` whose `listFiles()`
+        // builds the correct child query via
+        // `DocumentsContract.buildChildDocumentsUriUsingTree`. `fromTreeUri`
+        // accepts both pure tree URIs AND tree-document URIs (subfolders),
+        // extracting the document id via `DocumentsContract.getDocumentId`.
+        //
+        // The previous `path.contains("/document/")` split routed every
+        // subfolder through `fromSingleUri`, which returns a
+        // `SingleDocumentFile` whose `listFiles()` unconditionally throws
+        // `UnsupportedOperationException`. That made navigation into any
+        // subdirectory fail (not just empty ones).
+        return if (path.contains("/tree/")) {
             DocumentFile.fromTreeUri(context, uri)
+        } else {
+            DocumentFile.fromSingleUri(context, uri)
         }
     }
 
