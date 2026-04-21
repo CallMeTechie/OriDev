@@ -10,6 +10,7 @@ import dev.ori.app.crash.AcraConfig
 import dev.ori.app.wear.WearDataSyncPublisher
 import dev.ori.core.security.crash.LocalCrashLogger
 import dev.ori.core.security.crash.NonFatalErrorLogger
+import dev.ori.core.security.crypto.BouncyCastleSetup
 import dev.ori.core.security.preferences.CrashReportingPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -59,6 +60,11 @@ class OriDevApplication : Application(), Configuration.Provider {
         Trace.beginSection("OriDevApplication.onCreate")
         try {
             super.onCreate()
+            // Replace Android's stripped-down built-in "BC" security
+            // provider with the full bcprov-jdk18on so SSHJ can resolve
+            // Ed25519 / Curve25519 / ChaCha20-Poly1305 on modern OpenSSH
+            // servers. Must run BEFORE the first SSH connect.
+            BouncyCastleSetup.install()
             // Initialize Google Mobile Ads SDK (UMP consent handled automatically by GMA v23+)
             com.google.android.gms.ads.MobileAds.initialize(this)
             wearDataSyncPublisher.start()

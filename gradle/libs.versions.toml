@@ -26,6 +26,9 @@ hilt-navigation-compose = "1.2.0"
 
 # Networking
 sshj = "0.40.0"
+# Keep in sync with the version SSHJ pulls in transitively (runtime uses
+# whichever BC wins provider-order). Bump together with sshj.
+bcprov = "1.80"
 commons-net = "3.13.0"
 okhttp = "5.3.2"
 moshi = "1.15.2"
@@ -136,6 +139,7 @@ hilt-android-testing = { module = "com.google.dagger:hilt-android-testing", vers
 
 # Networking
 sshj = { module = "com.hierynomus:sshj", version.ref = "sshj" }
+bcprov-jdk18on = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bcprov" }
 commons-net = { module = "commons-net:commons-net", version.ref = "commons-net" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 okhttp-logging = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp" }

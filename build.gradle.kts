@@ -56,6 +56,38 @@ subprojects {
     }
 }
 
+// bcprov-jdk18on 1.80 (pulled in transitively via :core:core-security for
+// BouncyCastleSetup, reachable from every Android module that depends on
+// :core:core-security) and jspecify 1.0.0 both ship a
+// META-INF/versions/9/OSGI-INF/MANIFEST.MF resource. Android's
+// MergeJavaResWorkAction rejects the duplicate. Configuring the exclusion
+// in one place prevents us from tracking which Android module inherits
+// bcprov through which graph edge. :app already set this; :wear started
+// failing after Phase 15, now :feature-settings fails on test APKs too.
+// Applied here once for all Android library + app subprojects.
+subprojects {
+    plugins.withId("com.android.library") {
+        extensions.configure<com.android.build.gradle.LibraryExtension> {
+            packaging {
+                resources.excludes += setOf(
+                    "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+                    "META-INF/versions/9/OSGI-INF/*.xml",
+                )
+            }
+        }
+    }
+    plugins.withId("com.android.application") {
+        extensions.configure<com.android.build.gradle.AppExtension> {
+            packagingOptions {
+                resources.excludes += setOf(
+                    "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+                    "META-INF/versions/9/OSGI-INF/*.xml",
+                )
+            }
+        }
+    }
+}
+
 // JaCoCo coverage for all subprojects with Kotlin
 subprojects {
     afterEvaluate {
