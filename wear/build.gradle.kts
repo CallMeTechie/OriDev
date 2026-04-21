@@ -79,6 +79,21 @@ android {
     buildFeatures {
         compose = true
     }
+
+    packaging {
+        resources {
+            // bcprov-jdk18on 1.80 (pulled in transitively via :core:core-security
+            // for BouncyCastleSetup) and jspecify 1.0.0 both ship a
+            // META-INF/versions/9/OSGI-INF/MANIFEST.MF resource. Android's
+            // mergeJavaResource task refuses the duplicate. The content is
+            // OSGI metadata the Android runtime does not use, so dropping it
+            // is safe.
+            excludes += setOf(
+                "META-INF/versions/9/OSGI-INF/MANIFEST.MF",
+                "META-INF/versions/9/OSGI-INF/*.xml",
+            )
+        }
+    }
 }
 
 dependencies {
