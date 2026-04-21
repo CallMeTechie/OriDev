@@ -16,23 +16,34 @@ class ConnectUseCase @Inject constructor(
         return try {
             val connection = repository.connect(profileId)
             appSuccess(connection)
-        } catch (e: AppErrorException) {
-            when (e.error) {
-                is AppError.HostKeyUnknown,
-                is AppError.HostKeyMismatch,
-                -> throw e
-
-                is AppError.AuthenticationError -> appFailure(e.error)
-
-                else -> appFailure(e.error)
-            }
         } catch (e: Exception) {
-            val message = e.message ?: "Connection failed"
-            when {
-                isAuthError(e) -> appFailure(AppError.AuthenticationError(message, e))
-                else -> appFailure(AppError.NetworkError(message, e))
+            // SSHJ wraps our verifier exception inside its own
+            // TransportException → SSHException chain, so `catch
+            // (AppErrorException)` alone never fired and the
+            // HostKey branches were dead code. Walk the cause chain
+            // looking for our marker exception before falling
+            // through to the generic auth/network mapping.
+            val appError = findAppError(e)
+            if (appError != null) {
+                appFailure(appError)
+            } else {
+                val message = e.message ?: "Connection failed"
+                if (isAuthError(e)) {
+                    appFailure(AppError.AuthenticationError(message, e))
+                } else {
+                    appFailure(AppError.NetworkError(message, e))
+                }
             }
         }
+    }
+
+    private fun findAppError(e: Throwable): AppError? {
+        var current: Throwable? = e
+        while (current != null) {
+            if (current is AppErrorException) return current.error
+            current = current.cause
+        }
+        return null
     }
 
     private fun isAuthError(e: Exception): Boolean {

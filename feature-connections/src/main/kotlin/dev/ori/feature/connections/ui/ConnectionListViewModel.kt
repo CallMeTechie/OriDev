@@ -4,6 +4,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.ori.core.common.error.AppError
 import dev.ori.core.common.result.getAppError
 import dev.ori.core.security.biometric.CredentialUnlockGate
 import dev.ori.core.security.crash.NonFatalErrorLogger
@@ -13,6 +14,7 @@ import dev.ori.domain.usecase.DisconnectUseCase
 import dev.ori.domain.usecase.GetConnectionsUseCase
 import dev.ori.domain.usecase.GetFavoriteConnectionsUseCase
 import dev.ori.domain.usecase.SaveProfileUseCase
+import dev.ori.domain.usecase.TrustHostUseCase
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +32,7 @@ class ConnectionListViewModel @Inject constructor(
     private val disconnectUseCase: DisconnectUseCase,
     private val deleteProfileUseCase: DeleteProfileUseCase,
     private val saveProfileUseCase: SaveProfileUseCase,
+    private val trustHostUseCase: TrustHostUseCase,
     private val credentialUnlockGate: CredentialUnlockGate,
 ) : ViewModel() {
 
@@ -78,6 +81,10 @@ class ConnectionListViewModel @Inject constructor(
             is ConnectionListEvent.ClearError -> {
                 _uiState.update { it.copy(error = null) }
             }
+            is ConnectionListEvent.AcceptHostKey -> acceptHostKey()
+            is ConnectionListEvent.RejectHostKey -> {
+                _uiState.update { it.copy(hostKeyPrompt = null) }
+            }
         }
     }
 
@@ -95,8 +102,63 @@ class ConnectionListViewModel @Inject constructor(
                     throwable = cause,
                     contextNote = "profileId=$profileId; userMessage=${error.message}",
                 )
-                _uiState.update { it.copy(error = error.message) }
+                // Unknown/mismatched host keys must surface as a TOFU
+                // dialog — if we quietly show an error toast the user
+                // keeps retrying, which leads to fail2ban bans against
+                // the client IP on the target host.
+                when (error) {
+                    is AppError.HostKeyUnknown -> _uiState.update {
+                        it.copy(
+                            hostKeyPrompt = HostKeyPrompt(
+                                profileId = profileId,
+                                host = error.host,
+                                port = portForHost(error.host),
+                                fingerprint = error.fingerprint,
+                                keyType = error.keyType,
+                            ),
+                        )
+                    }
+                    is AppError.HostKeyMismatch -> _uiState.update {
+                        it.copy(
+                            hostKeyPrompt = HostKeyPrompt(
+                                profileId = profileId,
+                                host = error.host,
+                                port = portForHost(error.host),
+                                fingerprint = error.actualFingerprint,
+                                keyType = "unknown",
+                                expectedFingerprint = error.expectedFingerprint,
+                            ),
+                        )
+                    }
+                    else -> _uiState.update { it.copy(error = error.message) }
+                }
             }
+        }
+    }
+
+    private fun portForHost(host: String): Int =
+        _uiState.value.profiles.firstOrNull { it.host == host }?.port ?: 22
+
+    private fun acceptHostKey() {
+        val prompt = _uiState.value.hostKeyPrompt ?: return
+        viewModelScope.launch {
+            val result = trustHostUseCase(
+                host = prompt.host,
+                port = prompt.port,
+                keyType = prompt.keyType,
+                fingerprint = prompt.fingerprint,
+            )
+            result.getAppError()?.let { error ->
+                _uiState.update {
+                    it.copy(
+                        hostKeyPrompt = null,
+                        error = error.message,
+                    )
+                }
+                return@launch
+            }
+            _uiState.update { it.copy(hostKeyPrompt = null) }
+            connect(prompt.profileId)
         }
     }
 
