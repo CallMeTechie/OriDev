@@ -5,22 +5,18 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -42,7 +38,6 @@ import dev.ori.core.ui.components.OriServiceIndicator
 import dev.ori.core.ui.components.OriTopBar
 import dev.ori.core.ui.icons.lucide.FolderOpen
 import dev.ori.core.ui.icons.lucide.LucideIcons
-import dev.ori.core.ui.icons.lucide.Trash2
 import dev.ori.domain.model.AdSlot
 import dev.ori.domain.model.FileItem
 import dev.ori.feature.premium.ui.AdSlotHost
@@ -145,42 +140,32 @@ fun FileManagerScreen(
             val selectedCount = paneState.selectedFiles.size
 
             if (selectedCount > 0) {
-                Surface(
-                    tonalElevation = 3.dp,
-                    color = MaterialTheme.colorScheme.surface,
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "$selectedCount selected",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Button(
-                            onClick = {
-                                deletePane = activePane
-                                showDeleteConfirmation = true
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.error,
-                                contentColor = MaterialTheme.colorScheme.onError,
-                            ),
-                        ) {
-                            // Phase 11 P2.5-polish — Lucide Trash2 replaces Material Delete.
-                            Icon(
-                                LucideIcons.Trash2,
-                                contentDescription = "Ausgewählte Dateien löschen",
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Delete")
-                        }
-                    }
+                val singleFile = if (selectedCount == 1) {
+                    paneState.files.firstOrNull { it.path == paneState.selectedFiles.first() }
+                } else {
+                    null
                 }
+                MultiSelectToolbar(
+                    selectedCount = selectedCount,
+                    singleSelectedFile = singleFile,
+                    onCopyToOtherPane = {
+                        viewModel.onEvent(
+                            FileManagerEvent.InitiateTransfer(
+                                sourcePaths = paneState.selectedFiles.toList(),
+                                sourcePane = activePane,
+                            ),
+                        )
+                    },
+                    onRenameSingle = { file -> renameTarget = activePane to file },
+                    onChmodSingle = { file -> chmodTarget = activePane to file },
+                    onInfoSingle = { file ->
+                        viewModel.onEvent(FileManagerEvent.ShowFileInfo(file))
+                    },
+                    onDelete = {
+                        deletePane = activePane
+                        showDeleteConfirmation = true
+                    },
+                )
             } else {
                 AdSlotHost(
                     slot = AdSlot.FILE_MANAGER_STICKY,
