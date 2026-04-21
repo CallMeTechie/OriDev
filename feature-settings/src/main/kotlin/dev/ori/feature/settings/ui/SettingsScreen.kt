@@ -60,13 +60,21 @@ public fun SettingsScreen(
         state = state,
         onNavigateToPaywall = onNavigateToPaywall,
         onCrashReportingChanged = viewModel::setCrashReportingEnabled,
+        onFontSizeChanged = viewModel::setFontSize,
+        onTerminalFontChanged = viewModel::setTerminalFont,
+        onDefaultShellChanged = viewModel::setDefaultShell,
+        onScrollbackChanged = viewModel::setScrollback,
+        onBellModeChanged = viewModel::setBellMode,
         onHardwareKeyboardChanged = viewModel::setHardwareKeyboard,
         onKeyboardToolbarChanged = viewModel::setKeyboardToolbar,
         onKeyboardModeChanged = viewModel::setKeyboardMode,
         onAutoResumeChanged = viewModel::setAutoResume,
+        onOverwriteModeChanged = viewModel::setOverwriteMode,
         onMaxRetryAttemptsChanged = viewModel::setMaxRetryAttempts,
         onRetryBackoffSecondsChanged = viewModel::setRetryBackoffSeconds,
         onBiometricUnlockChanged = viewModel::setBiometricUnlock,
+        onAutoLockTimeoutChanged = viewModel::setAutoLockTimeoutMinutes,
+        onClipboardClearSecondsChanged = viewModel::setClipboardClearSeconds,
         onTransferDoneNotificationChanged = viewModel::setNotifyTransferDone,
         onConnectionNotificationChanged = viewModel::setNotifyConnection,
         onClaudeNotificationChanged = viewModel::setNotifyClaude,
@@ -78,17 +86,26 @@ public fun SettingsScreen(
 }
 
 @Composable
+@Suppress("LongParameterList")
 internal fun SettingsContent(
     state: SettingsState,
     onNavigateToPaywall: () -> Unit = {},
     onCrashReportingChanged: (Boolean) -> Unit,
+    onFontSizeChanged: (Int) -> Unit = {},
+    onTerminalFontChanged: (String) -> Unit = {},
+    onDefaultShellChanged: (String) -> Unit = {},
+    onScrollbackChanged: (Int) -> Unit = {},
+    onBellModeChanged: (String) -> Unit = {},
     onHardwareKeyboardChanged: (Boolean) -> Unit = {},
     onKeyboardToolbarChanged: (Boolean) -> Unit = {},
     onKeyboardModeChanged: (KeyboardMode) -> Unit = {},
     onAutoResumeChanged: (Boolean) -> Unit = {},
+    onOverwriteModeChanged: (String) -> Unit = {},
     onMaxRetryAttemptsChanged: (Int) -> Unit = {},
     onRetryBackoffSecondsChanged: (Int) -> Unit = {},
     onBiometricUnlockChanged: (Boolean) -> Unit = {},
+    onAutoLockTimeoutChanged: (Int) -> Unit = {},
+    onClipboardClearSecondsChanged: (Int) -> Unit = {},
     onTransferDoneNotificationChanged: (Boolean) -> Unit = {},
     onConnectionNotificationChanged: (Boolean) -> Unit = {},
     onClaudeNotificationChanged: (Boolean) -> Unit = {},
@@ -125,23 +142,33 @@ internal fun SettingsContent(
                     premiumStatus = state.premiumStatus,
                     onNavigateToPaywall = onNavigateToPaywall,
                 )
-                AppearanceSection(prefs = state.preferences)
+                AppearanceSection(
+                    prefs = state.preferences,
+                    onFontSizeChanged = onFontSizeChanged,
+                    onTerminalFontChanged = onTerminalFontChanged,
+                )
                 TerminalSection(
                     prefs = state.preferences,
                     keyboardMode = state.keyboardMode,
                     onHardwareKeyboardChanged = onHardwareKeyboardChanged,
                     onKeyboardToolbarChanged = onKeyboardToolbarChanged,
                     onKeyboardModeChanged = onKeyboardModeChanged,
+                    onDefaultShellChanged = onDefaultShellChanged,
+                    onScrollbackChanged = onScrollbackChanged,
+                    onBellModeChanged = onBellModeChanged,
                 )
                 TransfersSection(
                     prefs = state.preferences,
                     onAutoResumeChanged = onAutoResumeChanged,
                     onMaxRetryAttemptsChanged = onMaxRetryAttemptsChanged,
                     onRetryBackoffSecondsChanged = onRetryBackoffSecondsChanged,
+                    onOverwriteModeChanged = onOverwriteModeChanged,
                 )
                 SecuritySection(
                     prefs = state.preferences,
                     onBiometricUnlockChanged = onBiometricUnlockChanged,
+                    onAutoLockTimeoutChanged = onAutoLockTimeoutChanged,
+                    onClipboardClearSecondsChanged = onClipboardClearSecondsChanged,
                 )
                 StorageAccessSection(
                     grantedTrees = state.grantedTrees,

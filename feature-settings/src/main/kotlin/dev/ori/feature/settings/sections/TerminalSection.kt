@@ -33,6 +33,8 @@ import dev.ori.core.ui.theme.Gray700
 import dev.ori.core.ui.theme.Gray900
 import dev.ori.domain.model.KeyboardMode
 import dev.ori.feature.settings.components.SettingsCard
+import dev.ori.feature.settings.components.SettingsOptionPickerDialog
+import dev.ori.feature.settings.components.SettingsPickerOption
 import dev.ori.feature.settings.components.SettingsRow
 import dev.ori.feature.settings.data.AppPreferencesSnapshot
 
@@ -43,6 +45,9 @@ internal fun TerminalSection(
     onHardwareKeyboardChanged: (Boolean) -> Unit,
     onKeyboardToolbarChanged: (Boolean) -> Unit,
     onKeyboardModeChanged: (KeyboardMode) -> Unit,
+    onDefaultShellChanged: (String) -> Unit = {},
+    onScrollbackChanged: (Int) -> Unit = {},
+    onBellModeChanged: (String) -> Unit = {},
 ) {
     // Phase 14 Task 14.6 — the picker and the IME-warning dialog are
     // two separate overlays that the section owns. The picker is shown
@@ -53,25 +58,31 @@ internal fun TerminalSection(
     // persistence.
     var showPicker by remember { mutableStateOf(false) }
     var pendingMode by remember { mutableStateOf<KeyboardMode?>(null) }
+    var showShellPicker by remember { mutableStateOf(false) }
+    var showScrollbackPicker by remember { mutableStateOf(false) }
+    var showBellPicker by remember { mutableStateOf(false) }
 
     SettingsCard(sectionLabel = "Terminal") {
         SettingsRow(
             icon = LucideIcons.Terminal,
             title = "Standard-Shell",
             subtitle = prefs.defaultShell,
+            onClick = { showShellPicker = true },
             trailing = { Text(text = prefs.defaultShell, color = Gray500) },
         )
         SettingsRow(
             icon = LucideIcons.Terminal,
             title = "Scrollback-Zeilen",
             subtitle = "${prefs.scrollback} Zeilen",
+            onClick = { showScrollbackPicker = true },
             trailing = { Text(text = "${prefs.scrollback}", color = Gray500) },
         )
         SettingsRow(
             icon = LucideIcons.Bell,
             title = "Bell-Modus",
-            subtitle = "Visuelle Benachrichtigung bei Terminal-Bell",
-            trailing = { Text(text = prefs.bellMode, color = Gray500) },
+            subtitle = bellModeDescription(prefs.bellMode),
+            onClick = { showBellPicker = true },
+            trailing = { Text(text = bellModeLabel(prefs.bellMode), color = Gray500) },
         )
         SettingsRow(
             icon = LucideIcons.Keyboard,
@@ -139,6 +150,90 @@ internal fun TerminalSection(
             },
         )
     }
+
+    if (showShellPicker) {
+        SettingsOptionPickerDialog(
+            title = "Standard-Shell",
+            options = SHELL_OPTIONS,
+            selected = prefs.defaultShell,
+            onDismiss = { showShellPicker = false },
+            onSelect = onDefaultShellChanged,
+        )
+    }
+
+    if (showScrollbackPicker) {
+        SettingsOptionPickerDialog(
+            title = "Scrollback-Zeilen",
+            options = SCROLLBACK_OPTIONS,
+            selected = prefs.scrollback,
+            onDismiss = { showScrollbackPicker = false },
+            onSelect = onScrollbackChanged,
+        )
+    }
+
+    if (showBellPicker) {
+        SettingsOptionPickerDialog(
+            title = "Bell-Modus",
+            options = BELL_MODE_OPTIONS,
+            selected = prefs.bellMode,
+            onDismiss = { showBellPicker = false },
+            onSelect = onBellModeChanged,
+        )
+    }
+}
+
+private val SHELL_OPTIONS = listOf(
+    SettingsPickerOption(
+        value = "/bin/bash",
+        label = "/bin/bash",
+        description = "GNU Bash — Standard auf Linux",
+    ),
+    SettingsPickerOption(
+        value = "/bin/zsh",
+        label = "/bin/zsh",
+        description = "Z Shell mit Oh-My-Zsh-Kompatibilität",
+    ),
+    SettingsPickerOption(
+        value = "/bin/sh",
+        label = "/bin/sh",
+        description = "POSIX Shell (minimaler, breit verfügbar)",
+    ),
+    SettingsPickerOption(
+        value = "/bin/dash",
+        label = "/bin/dash",
+        description = "Schlanke Debian-Shell",
+    ),
+    SettingsPickerOption(
+        value = "/bin/fish",
+        label = "/bin/fish",
+        description = "Friendly Interactive Shell",
+    ),
+)
+
+private val SCROLLBACK_OPTIONS = listOf(
+    SettingsPickerOption(value = 1_000, label = "1.000", description = "Minimal — für Geräte mit wenig RAM"),
+    SettingsPickerOption(value = 5_000, label = "5.000"),
+    SettingsPickerOption(value = 10_000, label = "10.000", description = "Standard"),
+    SettingsPickerOption(value = 25_000, label = "25.000"),
+    SettingsPickerOption(value = 50_000, label = "50.000", description = "Sehr lang — höherer Speicherverbrauch"),
+)
+
+private val BELL_MODE_OPTIONS = listOf(
+    SettingsPickerOption(value = "visible", label = "Visuell", description = "Kurzes Aufleuchten des Terminals"),
+    SettingsPickerOption(value = "audible", label = "Akustisch", description = "System-Beep-Signal abspielen"),
+    SettingsPickerOption(value = "none", label = "Aus", description = "Terminal-Bell komplett ignorieren"),
+)
+
+private fun bellModeLabel(value: String): String = when (value) {
+    "audible" -> "Akustisch"
+    "none" -> "Aus"
+    else -> "Visuell"
+}
+
+private fun bellModeDescription(value: String): String = when (value) {
+    "audible" -> "Akustisches Beep-Signal"
+    "none" -> "Terminal-Bell ignorieren"
+    else -> "Visuelle Benachrichtigung bei Terminal-Bell"
 }
 
 @Composable
