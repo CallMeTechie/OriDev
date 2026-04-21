@@ -78,34 +78,44 @@ class ConnectUseCaseTest {
     }
 
     @Test
-    fun `connect with HostKeyUnknown rethrows exception`() = runTest {
+    fun `connect with HostKeyUnknown returns typed failure`() = runTest {
         val hostKeyError = AppError.HostKeyUnknown("example.com", "fingerprint", "RSA")
         coEvery { repository.connect(1L) } throws AppErrorException(hostKeyError)
 
-        var thrown: AppErrorException? = null
-        try {
-            connectUseCase(1L)
-        } catch (e: AppErrorException) {
-            thrown = e
-        }
+        val result = connectUseCase(1L)
 
-        assertThat(thrown).isNotNull()
-        assertThat(thrown!!.error).isInstanceOf(AppError.HostKeyUnknown::class.java)
+        assertThat(result.isFailure).isTrue()
+        val error = result.getAppError()
+        assertThat(error).isInstanceOf(AppError.HostKeyUnknown::class.java)
     }
 
     @Test
-    fun `connect with HostKeyMismatch rethrows exception`() = runTest {
+    fun `connect with HostKeyMismatch returns typed failure`() = runTest {
         val mismatchError = AppError.HostKeyMismatch("example.com", "expected", "actual")
         coEvery { repository.connect(1L) } throws AppErrorException(mismatchError)
 
-        var thrown: AppErrorException? = null
-        try {
-            connectUseCase(1L)
-        } catch (e: AppErrorException) {
-            thrown = e
-        }
+        val result = connectUseCase(1L)
 
-        assertThat(thrown).isNotNull()
-        assertThat(thrown!!.error).isInstanceOf(AppError.HostKeyMismatch::class.java)
+        assertThat(result.isFailure).isTrue()
+        val error = result.getAppError()
+        assertThat(error).isInstanceOf(AppError.HostKeyMismatch::class.java)
+    }
+
+    @Test
+    fun `connect unwraps HostKeyUnknown buried in TransportException cause chain`() = runTest {
+        // SSHJ wraps our verifier exception inside its own TransportException.
+        // Before the cause-chain walk this scenario mapped to NetworkError and
+        // the TOFU dialog never fired.
+        val hostKeyError = AppError.HostKeyUnknown("example.com", "fp", "ED25519")
+        val wrapped = RuntimeException(
+            "TransportException",
+            RuntimeException("SSHException", AppErrorException(hostKeyError)),
+        )
+        coEvery { repository.connect(1L) } throws wrapped
+
+        val result = connectUseCase(1L)
+
+        assertThat(result.isFailure).isTrue()
+        assertThat(result.getAppError()).isInstanceOf(AppError.HostKeyUnknown::class.java)
     }
 }
