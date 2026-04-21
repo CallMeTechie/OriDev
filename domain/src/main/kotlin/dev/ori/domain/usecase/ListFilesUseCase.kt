@@ -17,6 +17,13 @@ class ListFilesUseCase @Inject constructor() {
             )
             appSuccess(sorted)
         } catch (e: Exception) {
-            appFailure(AppError.FileOperationError("Failed to list files: ${e.message}", e))
+            // When e.message is null (NPE, SAF provider failures, etc.)
+            // "Failed to list files: null" is useless — fall back to the
+            // exception class name so the user-facing text at least
+            // identifies the failure class. The full stack still lives
+            // in Downloads/oridev-error-*.txt via the ViewModel's
+            // NonFatalErrorLogger hook.
+            val detail = e.message ?: e.javaClass.simpleName
+            appFailure(AppError.FileOperationError("Failed to list files: $detail", e))
         }
 }

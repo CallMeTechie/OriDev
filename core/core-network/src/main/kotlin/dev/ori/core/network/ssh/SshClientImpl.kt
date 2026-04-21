@@ -35,7 +35,13 @@ class SshClientImpl @Inject constructor(
         username: String,
         password: CharArray?,
         privateKey: ByteArray?,
-    ): SshSession {
+    ): SshSession = withContext(Dispatchers.IO) {
+        // SSHJ's SocketClient.connect() does blocking network I/O —
+        // without this switch it raises NetworkOnMainThreadException
+        // on API 11+ (we caught it on Pixel Fold API 36 via the
+        // NonFatalErrorLogger). All other SshClientImpl methods
+        // already route through Dispatchers.IO; this one was the
+        // outlier.
         try {
             val client = SSHClient()
             client.addHostKeyVerifier(hostKeyVerifier)
@@ -64,7 +70,7 @@ class SshClientImpl @Inject constructor(
                 val sessionId = UUID.randomUUID().toString()
                 sessions[sessionId] = client
 
-                return SshSession(
+                return@withContext SshSession(
                     sessionId = sessionId,
                     profileId = 0,
                     host = host,
