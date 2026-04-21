@@ -10,6 +10,24 @@ data class ConnectionListUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val searchQuery: String = "",
+    val hostKeyPrompt: HostKeyPrompt? = null,
+)
+
+/**
+ * TOFU prompt raised when [dev.ori.domain.usecase.ConnectUseCase] returns
+ * an [dev.ori.core.common.error.AppError.HostKeyUnknown] or
+ * [dev.ori.core.common.error.AppError.HostKeyMismatch]. The UI layer turns
+ * this into an accept/reject dialog; on accept the ViewModel persists the
+ * fingerprint via [dev.ori.domain.usecase.TrustHostUseCase] and retries
+ * the original connect attempt for [profileId].
+ */
+data class HostKeyPrompt(
+    val profileId: Long,
+    val host: String,
+    val port: Int,
+    val fingerprint: String,
+    val keyType: String,
+    val expectedFingerprint: String? = null,
 )
 
 sealed class ConnectionListEvent {
@@ -19,4 +37,6 @@ sealed class ConnectionListEvent {
     data class ToggleFavorite(val profile: ServerProfile) : ConnectionListEvent()
     data class Search(val query: String) : ConnectionListEvent()
     data object ClearError : ConnectionListEvent()
+    data object AcceptHostKey : ConnectionListEvent()
+    data object RejectHostKey : ConnectionListEvent()
 }

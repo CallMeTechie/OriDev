@@ -13,6 +13,7 @@ import dev.ori.domain.usecase.DisconnectUseCase
 import dev.ori.domain.usecase.GetConnectionsUseCase
 import dev.ori.domain.usecase.GetFavoriteConnectionsUseCase
 import dev.ori.domain.usecase.SaveProfileUseCase
+import dev.ori.domain.usecase.TrustHostUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -39,6 +40,7 @@ class ConnectionListViewModelTest {
     private val disconnectUseCase = mockk<DisconnectUseCase>()
     private val deleteProfileUseCase = mockk<DeleteProfileUseCase>()
     private val saveProfileUseCase = mockk<SaveProfileUseCase>()
+    private val trustHostUseCase = mockk<TrustHostUseCase>(relaxed = true)
     private val credentialUnlockGate = mockk<CredentialUnlockGate>(relaxed = true)
 
     private val testProfile = ServerProfile(
@@ -71,6 +73,7 @@ class ConnectionListViewModelTest {
             disconnectUseCase = disconnectUseCase,
             deleteProfileUseCase = deleteProfileUseCase,
             saveProfileUseCase = saveProfileUseCase,
+            trustHostUseCase = trustHostUseCase,
             credentialUnlockGate = credentialUnlockGate,
         )
     }
