@@ -4,22 +4,25 @@ import dev.ori.core.network.model.RemoteFile
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.domain.model.FileItem
 import dev.ori.domain.repository.FileSystemRepository
+import dev.ori.domain.repository.RemoteFileSystemSession
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
+import javax.inject.Singleton
 
+@Singleton
 class RemoteFileSystemRepository @Inject constructor(
     private val sshClient: SshClient,
-) : FileSystemRepository {
+) : FileSystemRepository, RemoteFileSystemSession {
 
     private val activeSessionId = AtomicReference<String?>(null)
 
     /**
      * Sets the active SSH session ID. Must be called before any file operations.
-     * This is NOT part of the [FileSystemRepository] interface -- the ViewModel
-     * obtains the concrete type via a separate Hilt binding to call this method.
+     * The [RemoteFileSystemSession] interface exposes this binding so feature
+     * modules can stay free of direct data-layer imports.
      */
-    fun setActiveSession(sessionId: String) {
+    override fun setActiveSession(sessionId: String) {
         activeSessionId.set(sessionId)
     }
 

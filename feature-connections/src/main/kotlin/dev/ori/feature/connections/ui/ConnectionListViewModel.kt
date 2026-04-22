@@ -8,6 +8,7 @@ import dev.ori.core.common.error.AppError
 import dev.ori.core.common.result.getAppError
 import dev.ori.core.security.biometric.CredentialUnlockGate
 import dev.ori.core.security.crash.NonFatalErrorLogger
+import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.usecase.ConnectUseCase
 import dev.ori.domain.usecase.DeleteProfileUseCase
 import dev.ori.domain.usecase.DisconnectUseCase
@@ -34,6 +35,7 @@ class ConnectionListViewModel @Inject constructor(
     private val saveProfileUseCase: SaveProfileUseCase,
     private val trustHostUseCase: TrustHostUseCase,
     private val credentialUnlockGate: CredentialUnlockGate,
+    private val connectionRepository: ConnectionRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ConnectionListUiState())
@@ -65,6 +67,16 @@ class ConnectionListViewModel @Inject constructor(
                         isLoading = state.isLoading,
                     )
                 }
+            }
+        }
+        // Observe active SSH sessions so the connection dot and the
+        // "X aktiv" top-bar pill reflect real state. Without this the
+        // per-row indicator stayed permanently red even after a
+        // successful connect, and the detail sheet's "Connect"/
+        // "Disconnect" label was always wrong.
+        viewModelScope.launch {
+            connectionRepository.getActiveConnections().collect { active ->
+                _uiState.update { it.copy(activeConnections = active) }
             }
         }
     }
