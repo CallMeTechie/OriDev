@@ -186,8 +186,18 @@ class ConnectionListViewModel @Inject constructor(
                 subtitle = "Biometrie bestätigen, um Zugangsdaten zu laden",
             )
             if (unlockResult.isFailure) {
-                val message = unlockResult.exceptionOrNull()?.message
-                    ?: "Biometrie abgebrochen"
+                // Funnel the biometric rejection through the same
+                // Downloads/oridev-error-*.txt channel as every other
+                // connect failure so "tap Connect, nothing happens" has
+                // at least one artifact to diagnose from.
+                val cause = unlockResult.exceptionOrNull()
+                    ?: AppErrorCarrier("Biometrie abgebrochen")
+                NonFatalErrorLogger.log(
+                    category = "connect-biometric",
+                    throwable = cause,
+                    contextNote = "profileId=$profileId",
+                )
+                val message = cause.message ?: "Biometrie abgebrochen"
                 _uiState.update { it.copy(error = message) }
                 return@launch
             }

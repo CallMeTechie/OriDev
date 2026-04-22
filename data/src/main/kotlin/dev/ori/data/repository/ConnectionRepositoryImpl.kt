@@ -69,7 +69,7 @@ class ConnectionRepositoryImpl @Inject constructor(
         try {
             when (profile.authMethod) {
                 AuthMethod.PASSWORD -> {
-                    password = credentialStore.getPassword(profile.credentialRef)
+                    password = loadPasswordOrFail(profile, profileId)
                 }
                 AuthMethod.SSH_KEY -> {
                     privateKey = credentialStore.getSshKey(profile.credentialRef)
@@ -118,6 +118,31 @@ class ConnectionRepositoryImpl @Inject constructor(
 
     override suspend fun getActiveSessionId(profileId: Long): String? =
         activeSessions[profileId]?.sessionId
+
+    /**
+     * Look up the stored password for a PASSWORD-auth profile and raise
+     * a typed error instead of passing `null` down to [SshClient]. SSHJ's
+     * own `IllegalArgumentException("Either password or private key
+     * must be provided")` is opaque in crash reports — this wrapper
+     * spells out whether the alias was managed by the Keystore flow or
+     * whether the row still carries a legacy plaintext ref from before
+     * PR #171 (those need an edit-form re-save to migrate).
+     */
+    private suspend fun loadPasswordOrFail(
+        profile: ServerProfile,
+        profileId: Long,
+    ): CharArray {
+        val stored = credentialStore.getPassword(profile.credentialRef)
+        if (stored != null) return stored
+        val isManagedAlias = profile.credentialRef.startsWith(MANAGED_ALIAS_PREFIX)
+        val detail = if (isManagedAlias) {
+            "Keystore alias ${profile.credentialRef} has no stored password"
+        } else {
+            "Profile $profileId has a legacy credentialRef; open the edit form " +
+                "and re-save the password to migrate it to the Keystore"
+        }
+        throw IllegalStateException("Password missing for profile $profileId: $detail")
+    }
 
     private fun updateActiveConnections() {
         _activeConnections.value = activeSessions.map { (profileId, session) ->

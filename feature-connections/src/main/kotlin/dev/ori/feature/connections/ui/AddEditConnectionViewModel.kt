@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.ori.core.common.model.AuthMethod
 import dev.ori.core.common.model.Protocol
 import dev.ori.core.common.result.getAppError
+import dev.ori.core.security.crash.NonFatalErrorLogger
 import dev.ori.domain.model.ServerProfile
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.CredentialStore
@@ -142,19 +143,21 @@ class AddEditConnectionViewModel @Inject constructor(
             try {
                 val profile = connectionRepository.getProfileById(id)
                 if (profile != null) {
-                    // For PASSWORD auth we do NOT echo the stored secret
-                    // (or its alias) back into the text field — the user
-                    // would otherwise see `kref_…` and overwrite the alias
-                    // onto itself. Leaving the field blank signals "keep
-                    // the existing stored password" on save; typing a new
-                    // value overwrites it. The managed alias — if any —
-                    // is captured separately so the Keystore entry can be
-                    // reused across edits.
+                    // For PASSWORD auth: decrypt from the Keystore and
+                    // prefill the masked field. The text-field already
+                    // hides the value behind `PasswordVisualTransformation`
+                    // with an eye toggle, so showing the plaintext in the
+                    // VM state is no worse than what the SSH client does
+                    // during a connect. Not prefilling was unnecessarily
+                    // confusing: users saw an empty field and assumed the
+                    // password was gone. Legacy plaintext in `credentialRef`
+                    // (pre-Keystore migration) is taken as-is.
                     val isManagedPasswordProfile = profile.authMethod == AuthMethod.PASSWORD &&
                         profile.credentialRef.startsWith(KEYSTORE_ALIAS_PREFIX)
                     existingManagedAlias = if (isManagedPasswordProfile) profile.credentialRef else null
                     val initialCredentialField = when {
-                        profile.authMethod == AuthMethod.PASSWORD -> ""
+                        profile.authMethod != AuthMethod.PASSWORD -> profile.credentialRef
+                        isManagedPasswordProfile -> decryptPasswordOrEmpty(profile.credentialRef)
                         else -> profile.credentialRef
                     }
                     _formState.update {
@@ -249,14 +252,13 @@ class AddEditConnectionViewModel @Inject constructor(
             _formState.update { it.copy(usernameError = "Username is required") }
             hasError = true
         }
-        // In edit mode with an existing managed password, leaving the
-        // field blank is a valid "keep existing" signal. For every other
-        // case the field must be populated.
-        val keepExistingPassword = state.isEditMode &&
-            state.authMethod == AuthMethod.PASSWORD &&
-            state.hasExistingPassword &&
-            state.credential.isBlank()
-        if (!keepExistingPassword && state.credential.isBlank()) {
+        // Password / key path is always required — the edit form prefills
+        // the decrypted password on load, so a blank field at save time
+        // means the user actively cleared it. Treat that as a validation
+        // error rather than a silent "keep existing" signal: the user
+        // sees immediate feedback instead of an update that strips the
+        // credential.
+        if (state.credential.isBlank()) {
             val label = if (state.authMethod == AuthMethod.SSH_KEY) "SSH key path" else "Password"
             _formState.update { it.copy(credentialError = "$label is required") }
             hasError = true
@@ -278,7 +280,6 @@ class AddEditConnectionViewModel @Inject constructor(
             val resolvedCredentialRef = when (state.authMethod) {
                 AuthMethod.PASSWORD -> storePasswordAndResolveAlias(
                     plaintext = state.credential,
-                    keepExisting = keepExistingPassword,
                 )
                 AuthMethod.SSH_KEY,
                 AuthMethod.KEY_AGENT,
@@ -317,17 +318,11 @@ class AddEditConnectionViewModel @Inject constructor(
      * alias is reused across edits of the same profile so the Keystore
      * entry is overwritten in place rather than leaking stale blobs.
      *
-     * [keepExisting] signals "user didn't touch the password field in
-     * edit mode" — in that case the returned value is the existing alias
-     * with no Keystore mutation.
+     * The edit form prefills the decrypted password into the text field,
+     * so every save carries the full intended value — no "keep existing"
+     * shortcut is needed.
      */
-    private suspend fun storePasswordAndResolveAlias(
-        plaintext: String,
-        keepExisting: Boolean,
-    ): String {
-        if (keepExisting) {
-            return existingManagedAlias ?: ""
-        }
+    private suspend fun storePasswordAndResolveAlias(plaintext: String): String {
         val alias = existingManagedAlias ?: "$KEYSTORE_ALIAS_PREFIX${UUID.randomUUID()}"
         val chars = plaintext.toCharArray()
         try {
@@ -340,6 +335,37 @@ class AddEditConnectionViewModel @Inject constructor(
         }
         existingManagedAlias = alias
         return alias
+    }
+
+    /**
+     * Fetch a managed password from the Keystore so the edit form can
+     * prefill it. Any failure (missing entry, crypto mismatch after a
+     * factory reset, provider unavailable) is downgraded to an empty
+     * string so the UI stays usable — the user can just retype. Errors
+     * are forwarded to [NonFatalErrorLogger] so we never fail silently.
+     */
+    private suspend fun decryptPasswordOrEmpty(alias: String): String = try {
+        credentialStore.getPassword(alias)?.let { chars ->
+            try {
+                String(chars)
+            } finally {
+                chars.fill('\u0000')
+            }
+        } ?: run {
+            NonFatalErrorLogger.log(
+                category = "credential-miss",
+                throwable = IllegalStateException("Keystore has no entry for alias $alias"),
+                contextNote = "profileId=$profileId",
+            )
+            ""
+        }
+    } catch (e: Exception) {
+        NonFatalErrorLogger.log(
+            category = "credential-decrypt",
+            throwable = e,
+            contextNote = "profileId=$profileId; alias=$alias",
+        )
+        ""
     }
 
     private companion object {
