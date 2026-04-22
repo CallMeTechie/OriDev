@@ -1,19 +1,28 @@
 package dev.ori.feature.filemanager.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -25,20 +34,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ori.core.ui.component.StatusDot
 import dev.ori.core.ui.icons.lucide.CheckSquare
+import dev.ori.core.ui.icons.lucide.File
+import dev.ori.core.ui.icons.lucide.FileCode
+import dev.ori.core.ui.icons.lucide.FileText
+import dev.ori.core.ui.icons.lucide.Folder
 import dev.ori.core.ui.icons.lucide.FolderPlus
 import dev.ori.core.ui.icons.lucide.Grid2x2
+import dev.ori.core.ui.icons.lucide.Image
 import dev.ori.core.ui.icons.lucide.List
 import dev.ori.core.ui.icons.lucide.LucideIcons
 import dev.ori.core.ui.icons.lucide.RefreshCw
+import dev.ori.core.ui.icons.lucide.Settings
 import dev.ori.domain.model.FileItem
+import androidx.compose.foundation.lazy.grid.items as gridItems
 
 @Suppress("LongParameterList")
 @Composable
@@ -175,36 +195,85 @@ fun FileListPane(
                 )
             }
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                // Parent directory entry
-                if (paneState.currentPath != "/") {
-                    item(key = "parent_dir") {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onNavigateUp() }
-                                .semantics {
-                                    contentDescription = "Eine Ebene nach oben"
-                                }
-                                .padding(horizontal = 12.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "..",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.primary,
+            when (paneState.viewMode) {
+                ViewMode.LIST -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    // Parent directory entry
+                    if (paneState.currentPath != "/") {
+                        item(key = "parent_dir") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onNavigateUp() }
+                                    .semantics {
+                                        contentDescription = "Eine Ebene nach oben"
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "..",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
+
+                    items(
+                        items = paneState.files,
+                        key = { it.path },
+                    ) { file ->
+                        Box {
+                            FileItemRow(
+                                file = file,
+                                isSelected = file.path in paneState.selectedFiles,
+                                onClick = {
+                                    if (file.isDirectory) {
+                                        onNavigateToPath(file.path)
+                                    } else {
+                                        onShowFilePreview(file)
+                                    }
+                                },
+                                onLongClick = {
+                                    contextMenuFile = file
+                                    onShowContextMenu(file)
+                                },
+                                onToggleSelection = { onToggleSelection(file.path) },
+                                onDragStart = { onDragStart(file.path) },
+                                onDragEnd = onDragEnd,
+                                onDrop = onDrop,
                             )
+
+                            if (contextMenuFile == file) {
+                                FileContextMenu(
+                                    file = file,
+                                    expanded = true,
+                                    onDismiss = { contextMenuFile = null },
+                                    onInfo = { onShowFileInfo(file) },
+                                    onRename = { onRename(file) },
+                                    onDelete = { onDelete(file) },
+                                    onChmod = { onChmod(file) },
+                                    onTransfer = { /* Transfer -- deferred to Phase 5 */ },
+                                )
+                            }
                         }
                     }
                 }
 
-                items(
-                    items = paneState.files,
-                    key = { it.path },
-                ) { file ->
-                    Box {
-                        FileItemRow(
+                // PR 3 bugfix — the Kachel/List toggle previously mutated
+                // `viewMode` but the renderer always used LazyColumn, so
+                // the user saw the icon flip with no visual change.
+                // LazyVerticalGrid renders a real tile layout now.
+                ViewMode.GRID -> LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 96.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    gridItems(items = paneState.files, key = { it.path }) { file ->
+                        FileItemCell(
                             file = file,
                             isSelected = file.path in paneState.selectedFiles,
                             onClick = {
@@ -218,28 +287,83 @@ fun FileListPane(
                                 contextMenuFile = file
                                 onShowContextMenu(file)
                             },
-                            onToggleSelection = { onToggleSelection(file.path) },
-                            onDragStart = { onDragStart(file.path) },
-                            onDragEnd = onDragEnd,
-                            onDrop = onDrop,
                         )
-
-                        if (contextMenuFile == file) {
-                            FileContextMenu(
-                                file = file,
-                                expanded = true,
-                                onDismiss = { contextMenuFile = null },
-                                onInfo = { onShowFileInfo(file) },
-                                onRename = { onRename(file) },
-                                onDelete = { onDelete(file) },
-                                onChmod = { onChmod(file) },
-                                onTransfer = { /* Transfer -- deferred to Phase 5 */ },
-                            )
-                        }
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * PR 3 — tile used by [ViewMode.GRID]. Mirrors the icon-choice logic
+ * from [FileItemRow] so folders, code files, text files, images, and
+ * config files all get the correct Lucide glyph instead of a generic
+ * "File" icon.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FileItemCell(
+    file: FileItem,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val background = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer
+    } else {
+        Color.Transparent
+    }
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(background)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            imageVector = gridFileIcon(file),
+            contentDescription = null,
+            modifier = Modifier.size(40.dp),
+            tint = if (file.isDirectory) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = file.name,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+private fun gridFileIcon(file: FileItem): ImageVector {
+    if (file.isDirectory) return LucideIcons.Folder
+    val extension = file.name.substringAfterLast('.', "").lowercase()
+    return when (extension) {
+        "kt", "java", "py", "js", "ts", "c", "cpp", "h", "rs", "go", "rb", "swift",
+        "sh", "bash", "zsh", "html", "css", "xml", "json", "yaml", "yml", "toml",
+        -> LucideIcons.FileCode
+
+        "md", "txt", "doc", "docx", "pdf", "rtf", "odt",
+        -> LucideIcons.FileText
+
+        "png", "jpg", "jpeg", "gif", "bmp", "svg", "webp", "ico",
+        -> LucideIcons.Image
+
+        "conf", "cfg", "ini", "properties", "env", "gradle",
+        -> LucideIcons.Settings
+
+        else -> LucideIcons.File
     }
 }
 

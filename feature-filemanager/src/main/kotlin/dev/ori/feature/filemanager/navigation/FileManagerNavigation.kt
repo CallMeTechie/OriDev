@@ -10,9 +10,13 @@ const val FILE_MANAGER_ROUTE = "filemanager"
 
 fun NavGraphBuilder.fileManagerScreen(
     onNavigateToEditor: (filePath: String, isRemote: Boolean) -> Unit = { _, _ -> },
+    onNavigateToConnections: () -> Unit = {},
 ) {
     composable(route = FILE_MANAGER_ROUTE) {
-        FileManagerScreen(onNavigateToEditor = onNavigateToEditor)
+        FileManagerScreen(
+            onNavigateToEditor = onNavigateToEditor,
+            onNavigateToConnections = onNavigateToConnections,
+        )
     }
 }
 
