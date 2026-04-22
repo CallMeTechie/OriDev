@@ -40,3 +40,18 @@ sealed class ConnectionListEvent {
     data object AcceptHostKey : ConnectionListEvent()
     data object RejectHostKey : ConnectionListEvent()
 }
+
+/**
+ * PR 2 — disambiguates which top-level tab the sheet's primary CTA is
+ * wiring toward so the single [ConnectionListViewModel.openProfile]
+ * entry point can drive both flows.
+ */
+enum class OpenTarget { TERMINAL, FILES }
+
+/**
+ * PR 2 — one-shot navigation effect emitted by
+ * [ConnectionListViewModel.openProfile] after a successful
+ * `sessionRegistry.connect()`. Carries the real [sessionId] so the
+ * Screen-level nav callback can focus the registry on it.
+ */
+data class OpenProfileEffect(val target: OpenTarget, val sessionId: String)

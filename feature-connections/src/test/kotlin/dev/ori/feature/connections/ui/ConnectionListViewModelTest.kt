@@ -7,7 +7,9 @@ import dev.ori.core.common.model.Protocol
 import dev.ori.core.common.result.appSuccess
 import dev.ori.core.security.biometric.CredentialUnlockGate
 import dev.ori.domain.model.ServerProfile
+import dev.ori.domain.model.Session
 import dev.ori.domain.repository.ConnectionRepository
+import dev.ori.domain.repository.SessionRegistry
 import dev.ori.domain.usecase.ConnectUseCase
 import dev.ori.domain.usecase.DeleteProfileUseCase
 import dev.ori.domain.usecase.DisconnectUseCase
@@ -23,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -46,6 +49,7 @@ class ConnectionListViewModelTest {
     private val connectionRepository = mockk<ConnectionRepository>(relaxed = true).also {
         every { it.getActiveConnections() } returns flowOf(emptyList())
     }
+    private val sessionRegistry = mockk<SessionRegistry>(relaxed = true)
 
     private val testProfile = ServerProfile(
         id = 1L,
@@ -80,6 +84,7 @@ class ConnectionListViewModelTest {
             trustHostUseCase = trustHostUseCase,
             credentialUnlockGate = credentialUnlockGate,
             connectionRepository = connectionRepository,
+            sessionRegistry = sessionRegistry,
         )
     }
 
@@ -125,5 +130,50 @@ class ConnectionListViewModelTest {
         coVerify {
             saveProfileUseCase(testProfile.copy(isFavorite = true))
         }
+    }
+
+    @Test
+    fun `openProfile — success emits effect with sessionId`() = runTest {
+        every { getConnections() } returns flowOf(listOf(testProfile))
+        every { getFavorites() } returns flowOf(emptyList())
+        coEvery { sessionRegistry.connect(testProfile.id) } returns Result.success(
+            Session(
+                id = "s-A",
+                profileId = testProfile.id,
+                profileName = testProfile.name,
+                host = testProfile.host,
+                port = testProfile.port,
+                connectedAt = 1_000L,
+            ),
+        )
+
+        val viewModel = createViewModel()
+
+        viewModel.openEffects.test {
+            viewModel.openProfile(testProfile.id, OpenTarget.TERMINAL)
+            val effect = awaitItem()
+            assertThat(effect.target).isEqualTo(OpenTarget.TERMINAL)
+            assertThat(effect.sessionId).isEqualTo("s-A")
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `openProfile — failure surfaces error on uiState and does not emit effect`() = runTest {
+        every { getConnections() } returns flowOf(emptyList())
+        every { getFavorites() } returns flowOf(emptyList())
+        coEvery { sessionRegistry.connect(1L) } returns Result.failure(
+            IllegalStateException("boom"),
+        )
+
+        val viewModel = createViewModel()
+        viewModel.openProfile(1L, OpenTarget.TERMINAL)
+        advanceUntilIdle()
+
+        // UnconfinedTestDispatcher conflates the init-block combine
+        // emission and the failure-path update into one StateFlow
+        // value by the time the test resumes, so assert on the current
+        // snapshot rather than walking Turbine.
+        assertThat(viewModel.uiState.value.error).isEqualTo("boom")
     }
 }

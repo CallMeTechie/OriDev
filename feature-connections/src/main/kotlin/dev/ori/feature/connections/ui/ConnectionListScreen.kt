@@ -1,7 +1,5 @@
 package dev.ori.feature.connections.ui
 
-import android.content.Context
-import android.content.ContextWrapper
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,13 +30,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.ori.core.common.model.Protocol
@@ -68,11 +64,11 @@ fun ConnectionListScreen(
     onNavigateToAdd: () -> Unit = {},
     onNavigateToEdit: (Long) -> Unit = {},
     onNavigateToProxmox: () -> Unit = {},
-    // PR 2 — sessionId placeholder. The detail sheet will fill these in
-    // via `sessionRegistry.connect(profileId).getOrThrow().id` in a
-    // follow-up chunk; for now we pass "" so the host's
-    // `sessionRegistry.focus(sessionId)` is a harmless no-op and the
-    // user still lands on the correct bottom-tab base route.
+    // PR 2 — the sessionId is now a real id produced by
+    // `sessionRegistry.connect(profileId)` inside the ViewModel's
+    // `openProfile` flow. The host (`OriDevNavHost`) uses it to
+    // `sessionRegistry.focus(sessionId)` before navigating to the
+    // top-level Terminal / Files tab.
     onOpenTerminal: (sessionId: String) -> Unit = {},
     onOpenFileManager: (sessionId: String) -> Unit = {},
     viewModel: ConnectionListViewModel = hiltViewModel(),
@@ -81,11 +77,17 @@ fun ConnectionListScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    // Phase 11 Tier-1 T1d — obtain the hosting FragmentActivity so the VM
-    // can forward it to CredentialUnlockGate for BiometricPrompt. Nullable
-    // to preserve @Preview rendering: the preview Context is not a
-    // FragmentActivity, so the tap handler falls back to the non-gated path.
-    val activity = LocalContext.current.findFragmentActivity()
+    // PR 2 — collect one-shot nav effects emitted by `openProfile` on a
+    // successful `sessionRegistry.connect()`. The effect carries the
+    // real sessionId we hand to the navigation callback.
+    LaunchedEffect(Unit) {
+        viewModel.openEffects.collect { effect ->
+            when (effect.target) {
+                OpenTarget.TERMINAL -> onOpenTerminal(effect.sessionId)
+                OpenTarget.FILES -> onOpenFileManager(effect.sessionId)
+            }
+        }
+    }
 
     // Phase 11 carry-over #E — number of currently-connected sessions shown
     // as a pulsing pill in OriTopBar's indicator slot (e.g. "2 aktiv").
@@ -122,16 +124,19 @@ fun ConnectionListScreen(
             isConnected = isConnected,
             sheetState = sheetState,
             onDismiss = { selectedProfile = null },
-            onConnect = {
-                // Phase 11 Tier-1 T1d — gate credential fetch behind the
-                // biometric preference. If we can't resolve a FragmentActivity
-                // (e.g. preview / test), fall through to the legacy flow.
-                if (activity != null) {
-                    viewModel.unlockAndConnect(activity, profile.id)
-                } else {
-                    viewModel.onEvent(ConnectionListEvent.Connect(profile.id))
-                }
+            onOpenTerminal = {
+                scope.launch { sheetState.hide() }
                 selectedProfile = null
+                // PR 2 — connect-on-demand. The VM calls
+                // `sessionRegistry.connect(profile.id)` and, on success,
+                // emits an effect this screen collects to hand the real
+                // sessionId to `onOpenTerminal`.
+                viewModel.openProfile(profile.id, OpenTarget.TERMINAL)
+            },
+            onOpenFiles = {
+                scope.launch { sheetState.hide() }
+                selectedProfile = null
+                viewModel.openProfile(profile.id, OpenTarget.FILES)
             },
             onDisconnect = {
                 viewModel.onEvent(ConnectionListEvent.Disconnect(profile.id))
@@ -145,19 +150,6 @@ fun ConnectionListScreen(
             onDelete = {
                 viewModel.onEvent(ConnectionListEvent.Delete(profile))
                 selectedProfile = null
-            },
-            onOpenTerminal = {
-                scope.launch { sheetState.hide() }
-                selectedProfile = null
-                // PR 2 — empty sessionId until the sheet is rewired to
-                // perform `sessionRegistry.connect(profile.id)` up-front
-                // and forward the resulting session.id here.
-                onOpenTerminal("")
-            },
-            onOpenFileManager = {
-                scope.launch { sheetState.hide() }
-                selectedProfile = null
-                onOpenFileManager("")
             },
         )
     }
@@ -288,21 +280,6 @@ fun ConnectionListScreen(
             }
         }
     }
-}
-
-/**
- * Walks [ContextWrapper] chain to find a [FragmentActivity]. Returns null
- * if the context is not hosted by one (Compose preview / unit test). This
- * keeps the connection screen renderable in isolation while still letting
- * the real activity flow through to [CredentialUnlockGate].
- */
-private fun Context.findFragmentActivity(): FragmentActivity? {
-    var ctx: Context? = this
-    while (ctx is ContextWrapper) {
-        if (ctx is FragmentActivity) return ctx
-        ctx = ctx.baseContext
-    }
-    return null
 }
 
 /**
