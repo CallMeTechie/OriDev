@@ -78,7 +78,12 @@ fun OriDevNavHost(
             },
         )
 
-        terminalScreen()
+        terminalScreen(
+            // PR 3 — empty-state CTA when no terminal sessions are open.
+            onNavigateToConnections = {
+                navController.navigateToTopLevelRoute(CONNECTIONS_ROUTE)
+            },
+        )
 
         transferQueueScreen()
 

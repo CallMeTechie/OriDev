@@ -8,9 +8,11 @@ import dev.ori.feature.terminal.ui.TerminalScreen
 
 const val TERMINAL_ROUTE = "terminal"
 
-fun NavGraphBuilder.terminalScreen() {
+fun NavGraphBuilder.terminalScreen(
+    onNavigateToConnections: () -> Unit = {},
+) {
     composable(route = TERMINAL_ROUTE) {
-        TerminalScreen()
+        TerminalScreen(onNavigateToConnections = onNavigateToConnections)
     }
 }
 
