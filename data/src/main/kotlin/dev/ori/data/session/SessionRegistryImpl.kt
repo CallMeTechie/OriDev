@@ -6,15 +6,19 @@ import dev.ori.data.mapper.toDomain
 import dev.ori.domain.model.Session
 import dev.ori.domain.repository.CredentialStore
 import dev.ori.domain.repository.SessionRegistry
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -33,18 +37,36 @@ import javax.inject.Singleton
  * dependency the profile-lookup actually needs.
  */
 @Singleton
-class SessionRegistryImpl @Inject constructor(
+class SessionRegistryImpl(
     private val sshClient: SshClient,
     private val credentialStore: CredentialStore,
     private val serverProfileDao: ServerProfileDao,
     private val serviceLifecycleBinder: ServiceLifecycleBinder,
+    registryDispatcher: CoroutineDispatcher,
 ) : SessionRegistry {
+
+    /**
+     * Hilt-visible constructor: delegates to the primary constructor with
+     * [Dispatchers.IO]. The primary constructor accepts an injectable
+     * dispatcher so unit tests can drive [scheduleGraceDisconnect]'s
+     * `delay` through virtual time via `UnconfinedTestDispatcher(testScheduler)`.
+     * We keep this secondary constructor rather than defaulting the
+     * primary param because Dagger/Hilt ignores Kotlin default values on
+     * `@Inject`-annotated constructors.
+     */
+    @Inject
+    constructor(
+        sshClient: SshClient,
+        credentialStore: CredentialStore,
+        serverProfileDao: ServerProfileDao,
+        serviceLifecycleBinder: ServiceLifecycleBinder,
+    ) : this(sshClient, credentialStore, serverProfileDao, serviceLifecycleBinder, Dispatchers.IO)
 
     fun interface ServiceLifecycleBinder {
         fun onOpenSessionsChanged(anyOpen: Boolean)
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + registryDispatcher)
 
     private val _openSessions = MutableStateFlow<List<Session>>(emptyList())
     override val openSessions: StateFlow<List<Session>> = _openSessions.asStateFlow()
@@ -58,6 +80,9 @@ class SessionRegistryImpl @Inject constructor(
      * `disconnect()` cancel an in-flight connect for that profile.
      */
     private val inFlight = ConcurrentHashMap<Long, Deferred<Result<Session>>>()
+
+    private val filesUsed = ConcurrentHashMap.newKeySet<String>()
+    private val graceJobs = ConcurrentHashMap<String, Job>()
 
     override suspend fun connect(profileId: Long): Result<Session> {
         _openSessions.value.firstOrNull { it.profileId == profileId }?.let { existing ->
@@ -120,6 +145,8 @@ class SessionRegistryImpl @Inject constructor(
         inFlight[session.profileId]?.cancel()
         runCatching { sshClient.disconnect(sessionId) }
         _openSessions.update { list -> list.filterNot { it.id == sessionId } }
+        filesUsed.remove(sessionId)
+        graceJobs.remove(sessionId)?.cancel()
         if (_focusedSessionId.value == sessionId) {
             _focusedSessionId.value = _openSessions.value.firstOrNull()?.id
         }
@@ -128,5 +155,31 @@ class SessionRegistryImpl @Inject constructor(
 
     override suspend fun cancelConnect(profileId: Long) {
         inFlight[profileId]?.cancel()
+    }
+
+    override fun markFilesUsed(sessionId: String) {
+        filesUsed.add(sessionId)
+        // If a grace job is pending for this session, cancel — Files wants it.
+        graceJobs.remove(sessionId)?.cancel()
+    }
+
+    override fun scheduleGraceDisconnect(sessionId: String) {
+        if (filesUsed.contains(sessionId)) return
+        graceJobs.remove(sessionId)?.cancel()
+        graceJobs[sessionId] = scope.launch {
+            delay(GRACE_MILLIS)
+            if (!filesUsed.contains(sessionId)) {
+                disconnect(sessionId)
+            }
+            graceJobs.remove(sessionId)
+        }
+    }
+
+    override fun cancelGraceDisconnect(sessionId: String) {
+        graceJobs.remove(sessionId)?.cancel()
+    }
+
+    private companion object {
+        const val GRACE_MILLIS = 5_000L
     }
 }
