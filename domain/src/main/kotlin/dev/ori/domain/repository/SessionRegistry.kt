@@ -12,11 +12,13 @@ import kotlinx.coroutines.flow.StateFlow
  *  - `TerminalViewModel`'s implicit state from its direct
  *    `sshClient.connect(...)` call
  *
- * The registry is intended to be a process-wide singleton (bound via Hilt in `:data`). All three flows are hot and
- * survive ViewModel recreation. [connect] is idempotent per
- * [Session.profileId] — concurrent calls for the same profile share
- * one in-flight `Deferred`, and a mid-handshake [disconnect] cancels
- * that Deferred and closes any socket the SSH layer already opened.
+ * The registry is intended to be a process-wide singleton (bound via
+ * Hilt in `:data`). All three flows are hot and survive ViewModel
+ * recreation. [connect] is idempotent per [Session.profileId] —
+ * concurrent calls for the same profile share one in-flight
+ * `Deferred`. Mid-handshake teardown goes through [cancelConnect]
+ * (sessionId doesn't exist yet during handshake); the symmetric path
+ * [disconnect] operates on sessions that are already registered.
  */
 interface SessionRegistry {
     /** All currently-open sessions in insertion order. */
@@ -39,10 +41,16 @@ interface SessionRegistry {
     fun focus(sessionId: String)
 
     /**
-     * Tear down [sessionId]. If a connect for the same profile is
-     * still in flight, that connect is cancelled and its socket
-     * closed. If the disconnected session was focused, focus moves
-     * to the next open session (or null if none remain).
+     * Tear down [sessionId]. No-op if [sessionId] is not in
+     * [openSessions] — a mid-handshake session has no id yet, so
+     * callers who want to abort a pending handshake must use
+     * [cancelConnect] with the profileId instead.
+     *
+     * If the session's profile also has an in-flight connect Deferred
+     * (e.g. an auto-reconnect racing with user teardown), that Deferred
+     * is cancelled so a late-landing handshake cannot re-insert the
+     * session. If the disconnected session was focused, focus moves to
+     * the next open session (or null if none remain).
      */
     suspend fun disconnect(sessionId: String)
 
