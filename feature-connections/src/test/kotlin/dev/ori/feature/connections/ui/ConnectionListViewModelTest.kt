@@ -61,6 +61,10 @@ class ConnectionListViewModelTest {
         // before calling `createViewModel()`.
         every { it.openSessions } returns MutableStateFlow(emptyList<Session>()).asStateFlow()
         every { it.focusedSessionId } returns MutableStateFlow<String?>(null).asStateFlow()
+        // PR 3 Section 11 — reconnect-banner combine needs a concrete
+        // StateFlow on init; default to empty so existing tests stay
+        // deterministic. Tests that exercise the banner override this.
+        every { it.persistedProfileIds } returns MutableStateFlow(emptySet<Long>()).asStateFlow()
     }
 
     private val testProfile = ServerProfile(
@@ -255,5 +259,108 @@ class ConnectionListViewModelTest {
         advanceUntilIdle()
 
         coVerify(exactly = 0) { sessionRegistry.disconnect(any()) }
+    }
+
+    @Test
+    fun `reconnectBannerProfiles empty when openSessions non-empty`() = runTest {
+        every { getConnections() } returns flowOf(listOf(testProfile))
+        every { getFavorites() } returns flowOf(emptyList())
+        val persisted = MutableStateFlow(setOf(1L, 2L))
+        val open = MutableStateFlow(
+            listOf(
+                Session(
+                    id = "s-A",
+                    profileId = 1L,
+                    profileName = testProfile.name,
+                    host = testProfile.host,
+                    port = testProfile.port,
+                    connectedAt = 1_000L,
+                ),
+            ),
+        )
+        every { sessionRegistry.persistedProfileIds } returns persisted.asStateFlow()
+        every { sessionRegistry.openSessions } returns open.asStateFlow()
+        every { connectionRepository.getAllProfiles() } returns flowOf(
+            listOf(testProfile, testProfile.copy(id = 2L, name = "dev-vm")),
+        )
+
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        // Registry has a live session, so the banner must stay hidden
+        // even though persistence remembers two profileIds.
+        assertThat(viewModel.reconnectBannerProfiles.value).isEmpty()
+    }
+
+    @Test
+    fun `reconnectBannerProfiles populated when openSessions empty and persistence non-empty`() =
+        runTest {
+            every { getConnections() } returns flowOf(listOf(testProfile))
+            every { getFavorites() } returns flowOf(emptyList())
+            val profile2 = testProfile.copy(id = 2L, name = "dev-vm")
+            val persisted = MutableStateFlow(setOf(1L, 2L))
+            val open = MutableStateFlow<List<Session>>(emptyList())
+            every { sessionRegistry.persistedProfileIds } returns persisted.asStateFlow()
+            every { sessionRegistry.openSessions } returns open.asStateFlow()
+            every { connectionRepository.getAllProfiles() } returns flowOf(
+                listOf(testProfile, profile2),
+            )
+
+            val viewModel = createViewModel()
+            advanceUntilIdle()
+
+            assertThat(viewModel.reconnectBannerProfiles.value.map { it.id })
+                .containsExactly(1L, 2L)
+        }
+
+    @Test
+    fun `reconnectAll calls sessionRegistry connect for every persisted profile`() = runTest {
+        every { getConnections() } returns flowOf(listOf(testProfile))
+        every { getFavorites() } returns flowOf(emptyList())
+        val profile2 = testProfile.copy(id = 2L, name = "dev-vm")
+        val persisted = MutableStateFlow(setOf(1L, 2L))
+        val open = MutableStateFlow<List<Session>>(emptyList())
+        every { sessionRegistry.persistedProfileIds } returns persisted.asStateFlow()
+        every { sessionRegistry.openSessions } returns open.asStateFlow()
+        every { connectionRepository.getAllProfiles() } returns flowOf(
+            listOf(testProfile, profile2),
+        )
+        coEvery { sessionRegistry.connect(any()) } returns Result.success(
+            Session(
+                id = "s-X",
+                profileId = 1L,
+                profileName = "X",
+                host = "x.local",
+                port = 22,
+                connectedAt = 1L,
+            ),
+        )
+
+        val viewModel = createViewModel()
+        // Let the combine settle so reconnectBannerProfiles is populated.
+        advanceUntilIdle()
+
+        viewModel.reconnectAll()
+        advanceUntilIdle()
+
+        coVerify { sessionRegistry.connect(1L) }
+        coVerify { sessionRegistry.connect(2L) }
+    }
+
+    @Test
+    fun `dismissReconnectBanner clears persistence`() = runTest {
+        every { getConnections() } returns flowOf(emptyList())
+        every { getFavorites() } returns flowOf(emptyList())
+        every { sessionRegistry.persistedProfileIds } returns
+            MutableStateFlow(emptySet<Long>()).asStateFlow()
+        every { sessionRegistry.openSessions } returns
+            MutableStateFlow<List<Session>>(emptyList()).asStateFlow()
+        coEvery { sessionRegistry.clearPersistedProfileIds() } just Runs
+
+        val viewModel = createViewModel()
+        viewModel.dismissReconnectBanner()
+        advanceUntilIdle()
+
+        coVerify { sessionRegistry.clearPersistedProfileIds() }
     }
 }

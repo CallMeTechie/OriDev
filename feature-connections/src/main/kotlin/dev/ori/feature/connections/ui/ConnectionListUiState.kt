@@ -15,6 +15,16 @@ data class ConnectionListUiState(
      * "N aktiv" TopBar pill.
      */
     val activeProfiles: List<ServerProfile> = emptyList(),
+    /**
+     * PR 3 Section 11 safety-net — profiles whose id appears in
+     * [dev.ori.domain.repository.SessionRegistry.persistedProfileIds]
+     * *and* whose registry [dev.ori.domain.repository.SessionRegistry.openSessions]
+     * is currently empty. When non-empty, the [ConnectionListScreen]
+     * shows a dismissible [ReconnectBanner] offering one-tap batch
+     * reconnect. Kept separate from [activeProfiles] because the
+     * banner is an after-kill recovery affordance, not live state.
+     */
+    val reconnectBannerProfiles: List<ServerProfile> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
     val searchQuery: String = "",

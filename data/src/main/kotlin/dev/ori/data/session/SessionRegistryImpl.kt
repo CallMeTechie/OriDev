@@ -15,8 +15,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
@@ -82,6 +84,19 @@ class SessionRegistryImpl(
 
     private val _focusedSessionId = MutableStateFlow<String?>(null)
     override val focusedSessionId: StateFlow<String?> = _focusedSessionId.asStateFlow()
+
+    /**
+     * Read-only projection of [SessionPersistencePreferences.profileIds]
+     * (spec Section 11). `SharingStarted.Eagerly` so the DataStore-backed
+     * flow starts collecting immediately on registry construction —
+     * consumers (the reconnect banner) must see the pre-kill set on the
+     * very first composition after process restart, not after a 5 s
+     * subscription grace. The registry scope lives for the whole process
+     * so this has no teardown concern.
+     */
+    override val persistedProfileIds: StateFlow<Set<Long>> =
+        sessionPersistence.profileIds
+            .stateIn(scope, SharingStarted.Eagerly, emptySet())
 
     /**
      * Pending connects keyed by profileId. Lets concurrent `connect()`
@@ -196,6 +211,10 @@ class SessionRegistryImpl(
 
     override fun cancelGraceDisconnect(sessionId: String) {
         graceJobs.remove(sessionId)?.cancel()
+    }
+
+    override suspend fun clearPersistedProfileIds() {
+        sessionPersistence.clear()
     }
 
     private companion object {

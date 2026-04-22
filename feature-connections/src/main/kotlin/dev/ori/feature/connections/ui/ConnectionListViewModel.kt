@@ -74,6 +74,38 @@ class ConnectionListViewModel @Inject constructor(
         )
 
     /**
+     * PR 3 Section 11 safety-net — profiles the OS killed the app with
+     * open sessions for. Derived by joining
+     * [SessionRegistry.persistedProfileIds] against the profile catalog
+     * and filtering out the banner entirely when the registry already
+     * has live sessions (the banner is only relevant *after* a process
+     * kill, when [SessionRegistry.openSessions] is empty but persistence
+     * has entries). The screen renders this as a [ReconnectBanner] and
+     * wires [reconnectAll] / [dismissReconnectBanner] off it.
+     *
+     * The `openSessions` short-circuit keeps the banner from flickering
+     * in between the first successful reconnect and the persistence
+     * update: as soon as one session is live we hide the banner, even
+     * if DataStore has not yet emitted the new set.
+     */
+    val reconnectBannerProfiles: StateFlow<List<ServerProfile>> =
+        combine(
+            sessionRegistry.persistedProfileIds,
+            sessionRegistry.openSessions,
+            connectionRepository.getAllProfiles(),
+        ) { persisted, currentlyOpen, profiles ->
+            if (currentlyOpen.isNotEmpty()) {
+                emptyList()
+            } else {
+                profiles.filter { it.id in persisted }
+            }
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STATE_SUBSCRIPTION_TIMEOUT_MS),
+            initialValue = emptyList(),
+        )
+
+    /**
      * PR 2 — one-shot navigation effects emitted by [openProfile] on a
      * successful `sessionRegistry.connect()`. The screen collects this
      * flow and drives the nav callback (Terminal / Files) with the real
@@ -171,6 +203,45 @@ class ConnectionListViewModel @Inject constructor(
             activeProfiles.collect { profiles ->
                 _uiState.update { it.copy(activeProfiles = profiles) }
             }
+        }
+        // PR 3 Section 11 — same pattern for the reconnect banner so the
+        // screen reads a single uiState snapshot instead of collecting a
+        // second StateFlow itself.
+        viewModelScope.launch {
+            reconnectBannerProfiles.collect { profiles ->
+                _uiState.update { it.copy(reconnectBannerProfiles = profiles) }
+            }
+        }
+    }
+
+    /**
+     * PR 3 Section 11 safety-net — batch-reconnect every profile in the
+     * current banner. Each call routes through [SessionRegistry.connect],
+     * which coalesces concurrent handshakes and pulls passwords from the
+     * Keystore (#171), so the user never sees a credential prompt. A
+     * failed reconnect surfaces via the same error-toast channel as the
+     * single-profile flow; successful ones repopulate
+     * [SessionRegistry.openSessions] which in turn empties
+     * [reconnectBannerProfiles] via the `openSessions.isNotEmpty()`
+     * short-circuit.
+     */
+    fun reconnectAll() {
+        viewModelScope.launch {
+            reconnectBannerProfiles.value.forEach { profile ->
+                sessionRegistry.connect(profile.id)
+            }
+        }
+    }
+
+    /**
+     * PR 3 Section 11 — "Schließen" on the banner. Clears the persisted
+     * profile-id set so the banner stays hidden across subsequent app
+     * launches until new sessions are opened. Does not disconnect any
+     * live sessions (there are none by definition in the banner path).
+     */
+    fun dismissReconnectBanner() {
+        viewModelScope.launch {
+            sessionRegistry.clearPersistedProfileIds()
         }
     }
 
