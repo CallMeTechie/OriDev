@@ -17,12 +17,16 @@ import dev.ori.domain.usecase.GetConnectionsUseCase
 import dev.ori.domain.usecase.GetFavoriteConnectionsUseCase
 import dev.ori.domain.usecase.SaveProfileUseCase
 import dev.ori.domain.usecase.TrustHostUseCase
+import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -48,8 +52,16 @@ class ConnectionListViewModelTest {
     private val credentialUnlockGate = mockk<CredentialUnlockGate>(relaxed = true)
     private val connectionRepository = mockk<ConnectionRepository>(relaxed = true).also {
         every { it.getActiveConnections() } returns flowOf(emptyList())
+        every { it.getAllProfiles() } returns flowOf(emptyList())
     }
-    private val sessionRegistry = mockk<SessionRegistry>(relaxed = true)
+    private val sessionRegistry = mockk<SessionRegistry>(relaxed = true).also {
+        // PR 2 Section 8 — default stub for the two StateFlows the
+        // ViewModel collects on `init` (`activeProfiles` combine). Tests
+        // that need non-empty flows override these via `every { ... }`
+        // before calling `createViewModel()`.
+        every { it.openSessions } returns MutableStateFlow(emptyList<Session>()).asStateFlow()
+        every { it.focusedSessionId } returns MutableStateFlow<String?>(null).asStateFlow()
+    }
 
     private val testProfile = ServerProfile(
         id = 1L,
@@ -175,5 +187,73 @@ class ConnectionListViewModelTest {
         // value by the time the test resumes, so assert on the current
         // snapshot rather than walking Turbine.
         assertThat(viewModel.uiState.value.error).isEqualTo("boom")
+    }
+
+    @Test
+    fun `activeProfiles derives from registry openSessions filtered into profile list`() =
+        runTest {
+            val profiles = listOf(testProfile, testProfile.copy(id = 2L, name = "dev-vm"))
+            every { getConnections() } returns flowOf(profiles)
+            every { getFavorites() } returns flowOf(emptyList())
+            every { connectionRepository.getAllProfiles() } returns flowOf(profiles)
+
+            val sessions = MutableStateFlow<List<Session>>(emptyList())
+            every { sessionRegistry.openSessions } returns sessions.asStateFlow()
+
+            val viewModel = createViewModel()
+
+            viewModel.activeProfiles.test {
+                assertThat(awaitItem()).isEmpty()
+                sessions.value = listOf(
+                    Session(
+                        id = "s-A",
+                        profileId = 1L,
+                        profileName = testProfile.name,
+                        host = testProfile.host,
+                        port = testProfile.port,
+                        connectedAt = 1_000L,
+                    ),
+                )
+                assertThat(awaitItem().map { it.id }).containsExactly(1L)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `quickDisconnect — matching profile triggers registry disconnect on its session`() =
+        runTest {
+            every { getConnections() } returns flowOf(listOf(testProfile))
+            every { getFavorites() } returns flowOf(emptyList())
+            val session = Session(
+                id = "s-A",
+                profileId = 1L,
+                profileName = testProfile.name,
+                host = testProfile.host,
+                port = testProfile.port,
+                connectedAt = 1_000L,
+            )
+            every { sessionRegistry.openSessions } returns
+                MutableStateFlow(listOf(session)).asStateFlow()
+            coEvery { sessionRegistry.disconnect("s-A") } just Runs
+
+            val viewModel = createViewModel()
+            viewModel.quickDisconnect(1L)
+            advanceUntilIdle()
+
+            coVerify { sessionRegistry.disconnect("s-A") }
+        }
+
+    @Test
+    fun `quickDisconnect — no session for profile is a no-op`() = runTest {
+        every { getConnections() } returns flowOf(listOf(testProfile))
+        every { getFavorites() } returns flowOf(emptyList())
+        every { sessionRegistry.openSessions } returns
+            MutableStateFlow(emptyList<Session>()).asStateFlow()
+
+        val viewModel = createViewModel()
+        viewModel.quickDisconnect(42L)
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { sessionRegistry.disconnect(any()) }
     }
 }

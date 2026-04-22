@@ -8,6 +8,7 @@ import dev.ori.core.common.error.AppError
 import dev.ori.core.common.result.getAppError
 import dev.ori.core.security.biometric.CredentialUnlockGate
 import dev.ori.core.security.crash.NonFatalErrorLogger
+import dev.ori.domain.model.ServerProfile
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRegistry
 import dev.ori.domain.usecase.ConnectUseCase
@@ -20,11 +21,13 @@ import dev.ori.domain.usecase.TrustHostUseCase
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -45,6 +48,30 @@ class ConnectionListViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(ConnectionListUiState())
     val uiState: StateFlow<ConnectionListUiState> = _uiState.asStateFlow()
+
+    /**
+     * PR 2 Section 8 — profiles with an open session, derived by joining
+     * [ConnectionRepository.getAllProfiles] against
+     * [SessionRegistry.openSessions]. The "Aktiv" section of the
+     * [ConnectionListScreen] renders this list, and the
+     * [ConnectionListUiState.activeProfiles] mirror is wired from here
+     * so the screen sees a single source of truth. Derivation (instead
+     * of a parallel field) closes the "roter Punkt bleibt rot"-bug
+     * structurally: a session that is not in the registry cannot
+     * appear in the active list.
+     */
+    val activeProfiles: StateFlow<List<ServerProfile>> =
+        combine(
+            connectionRepository.getAllProfiles(),
+            sessionRegistry.openSessions,
+        ) { profiles, sessions ->
+            val activeIds = sessions.map { it.profileId }.toSet()
+            profiles.filter { it.id in activeIds }
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(STATE_SUBSCRIPTION_TIMEOUT_MS),
+            initialValue = emptyList(),
+        )
 
     /**
      * PR 2 — one-shot navigation effects emitted by [openProfile] on a
@@ -134,6 +161,31 @@ class ConnectionListViewModel @Inject constructor(
             connectionRepository.getActiveConnections().collect { active ->
                 _uiState.update { it.copy(activeConnections = active) }
             }
+        }
+        // PR 2 Section 8 — mirror the derived [activeProfiles] StateFlow
+        // into [ConnectionListUiState.activeProfiles] so the screen can
+        // read everything off a single uiState snapshot (the "Aktiv"
+        // LazyColumn section + the TopBar "N aktiv" pill share one
+        // source).
+        viewModelScope.launch {
+            activeProfiles.collect { profiles ->
+                _uiState.update { it.copy(activeProfiles = profiles) }
+            }
+        }
+    }
+
+    /**
+     * PR 2 Section 8 — quick-disconnect for the "Aktiv" section's eject
+     * icon. Looks up the session whose [Session.profileId] matches
+     * [profileId] and routes to [SessionRegistry.disconnect]. No-op if
+     * the profile has no open session (race: the user tapped eject
+     * just as the session tore down on its own).
+     */
+    fun quickDisconnect(profileId: Long) {
+        viewModelScope.launch {
+            val sessionId = sessionRegistry.openSessions.value
+                .firstOrNull { it.profileId == profileId }?.id ?: return@launch
+            sessionRegistry.disconnect(sessionId)
         }
     }
 
@@ -305,5 +357,14 @@ class ConnectionListViewModel @Inject constructor(
                 _uiState.update { it.copy(error = error.message) }
             }
         }
+    }
+
+    private companion object {
+        /**
+         * `WhileSubscribed` stop timeout for the `activeProfiles`
+         * `stateIn` — matches the standard 5 s Compose-recomposition
+         * grace window.
+         */
+        const val STATE_SUBSCRIPTION_TIMEOUT_MS = 5_000L
     }
 }
