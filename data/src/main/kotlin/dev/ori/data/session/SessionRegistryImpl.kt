@@ -37,7 +37,12 @@ class SessionRegistryImpl @Inject constructor(
     private val sshClient: SshClient,
     private val credentialStore: CredentialStore,
     private val serverProfileDao: ServerProfileDao,
+    private val serviceLifecycleBinder: ServiceLifecycleBinder,
 ) : SessionRegistry {
+
+    fun interface ServiceLifecycleBinder {
+        fun onOpenSessionsChanged(anyOpen: Boolean)
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -89,6 +94,7 @@ class SessionRegistryImpl @Inject constructor(
         )
         _openSessions.update { it + session }
         _focusedSessionId.value = session.id
+        serviceLifecycleBinder.onOpenSessionsChanged(true)
         session
     }
 
@@ -117,6 +123,7 @@ class SessionRegistryImpl @Inject constructor(
         if (_focusedSessionId.value == sessionId) {
             _focusedSessionId.value = _openSessions.value.firstOrNull()?.id
         }
+        serviceLifecycleBinder.onOpenSessionsChanged(_openSessions.value.isNotEmpty())
     }
 
     override suspend fun cancelConnect(profileId: Long) {

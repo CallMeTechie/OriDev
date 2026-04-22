@@ -28,6 +28,7 @@ class SessionRegistryImplTest {
     private val sshClient = mockk<SshClient>(relaxed = true)
     private val credentialStore = mockk<CredentialStore>(relaxed = true)
     private val serverProfileDao = mockk<ServerProfileDao>(relaxed = true)
+    private val lifecycleBinder = mockk<SessionRegistryImpl.ServiceLifecycleBinder>(relaxed = true)
 
     private val testProfile = ServerProfile(
         id = 1L,
@@ -40,7 +41,7 @@ class SessionRegistryImplTest {
         credentialRef = "kref_test",
     )
 
-    private fun registry() = SessionRegistryImpl(sshClient, credentialStore, serverProfileDao)
+    private fun registry() = SessionRegistryImpl(sshClient, credentialStore, serverProfileDao, lifecycleBinder)
 
     private fun stubProfileA() {
         coEvery { serverProfileDao.getById(1L) } returns testProfile.toEntity()
@@ -230,5 +231,17 @@ class SessionRegistryImplTest {
         registry.cancelConnect(1L)
         testScheduler.advanceUntilIdle()
         try { pending.await() } catch (_: CancellationException) { /* ok */ }
+    }
+
+    @Test
+    fun `first connect signals service-start, last disconnect signals service-stop`() = runTest {
+        stubProfileA()
+        val registry = registry()
+
+        registry.connect(1L).getOrThrow()
+        io.mockk.verify { lifecycleBinder.onOpenSessionsChanged(true) }
+
+        registry.disconnect("s-A")
+        io.mockk.verify { lifecycleBinder.onOpenSessionsChanged(false) }
     }
 }
