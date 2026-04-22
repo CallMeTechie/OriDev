@@ -1,11 +1,14 @@
 package dev.ori.feature.filemanager.ui
 
+import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import dev.ori.domain.model.FileItem
 import dev.ori.domain.model.GrantedTree
 import dev.ori.domain.repository.BookmarkRepository
+import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.FileSystemRepository
+import dev.ori.domain.repository.RemoteFileSystemSession
 import dev.ori.domain.repository.StorageAccessRepository
 import dev.ori.domain.usecase.ChmodUseCase
 import dev.ori.domain.usecase.CreateDirectoryUseCase
@@ -45,6 +48,8 @@ class FileManagerViewModelTest {
     private val remoteRepository: FileSystemRepository = mockk(relaxed = true)
     private val bookmarkRepository: BookmarkRepository = mockk(relaxed = true)
     private val storageAccessRepository: StorageAccessRepository = mockk(relaxed = true)
+    private val remoteSession: RemoteFileSystemSession = mockk(relaxed = true)
+    private val connectionRepository: ConnectionRepository = mockk(relaxed = true)
     private val grantedTreesFlow = MutableStateFlow<List<GrantedTree>>(emptyList())
 
     // Use real use cases with mocked repositories to avoid MockK Result<T> issues
@@ -83,10 +88,12 @@ class FileManagerViewModelTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel(): FileManagerViewModel =
+    private fun createViewModel(profileId: Long? = null): FileManagerViewModel =
         FileManagerViewModel(
             localRepository = localRepository,
             remoteRepository = remoteRepository,
+            remoteSession = remoteSession,
+            connectionRepository = connectionRepository,
             listFilesUseCase = listFilesUseCase,
             deleteFileUseCase = deleteFileUseCase,
             renameFileUseCase = renameFileUseCase,
@@ -95,6 +102,9 @@ class FileManagerViewModelTest {
             getBookmarksUseCase = getBookmarksUseCase,
             enqueueTransferUseCase = enqueueTransferUseCase,
             storageAccessRepository = storageAccessRepository,
+            savedStateHandle = SavedStateHandle(
+                if (profileId != null) mapOf("profileId" to profileId) else emptyMap(),
+            ),
         )
 
     @Test

@@ -1,5 +1,6 @@
 package dev.ori.feature.filemanager.ui
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -7,9 +8,11 @@ import dev.ori.core.common.model.TransferDirection
 import dev.ori.core.common.result.getAppError
 import dev.ori.core.security.crash.NonFatalErrorLogger
 import dev.ori.domain.model.TransferRequest
+import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.FileSystemRepository
 import dev.ori.domain.repository.LocalFileSystem
 import dev.ori.domain.repository.RemoteFileSystem
+import dev.ori.domain.repository.RemoteFileSystemSession
 import dev.ori.domain.repository.StorageAccessRepository
 import dev.ori.domain.usecase.ChmodUseCase
 import dev.ori.domain.usecase.CreateDirectoryUseCase
@@ -33,6 +36,8 @@ private const val MAX_PATH_STACK_SIZE = 50
 class FileManagerViewModel @Inject constructor(
     @LocalFileSystem private val localRepository: FileSystemRepository,
     @RemoteFileSystem private val remoteRepository: FileSystemRepository,
+    private val remoteSession: RemoteFileSystemSession,
+    private val connectionRepository: ConnectionRepository,
     private val listFilesUseCase: ListFilesUseCase,
     private val deleteFileUseCase: DeleteFileUseCase,
     private val renameFileUseCase: RenameFileUseCase,
@@ -41,7 +46,17 @@ class FileManagerViewModel @Inject constructor(
     private val getBookmarksUseCase: GetBookmarksUseCase,
     private val enqueueTransferUseCase: EnqueueTransferUseCase,
     private val storageAccessRepository: StorageAccessRepository,
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
+
+    /**
+     * Profile id the nav graph handed us. Non-null means "we entered the
+     * File Manager via a specific server's detail sheet", which also means
+     * we can wire the remote pane to that server's SSH session on init
+     * (see [bindRemoteSession]) rather than leave the right-hand pane
+     * stuck at "No active SSH session. Call setActiveSession() first."
+     */
+    private val initialProfileId: Long? = savedStateHandle.get<Long>("profileId")
 
     private val _uiState = MutableStateFlow(FileManagerUiState())
     val uiState: StateFlow<FileManagerUiState> = _uiState.asStateFlow()
@@ -55,6 +70,33 @@ class FileManagerViewModel @Inject constructor(
         // once setup is done.
         observeGrantedTrees()
         loadBookmarks()
+        bindRemoteSession()
+    }
+
+    private fun bindRemoteSession() {
+        val profileId = initialProfileId ?: return
+        viewModelScope.launch {
+            val sessionId = connectionRepository.getActiveSessionId(profileId)
+            if (sessionId != null) {
+                remoteSession.setActiveSession(sessionId)
+                // Prime the right pane with the remote root so the user
+                // doesn't have to tap an empty breadcrumb to kick off the
+                // first listing.
+                val rightPath = _uiState.value.rightPane.currentPath
+                if (rightPath.isEmpty()) {
+                    navigateToPath(ActivePane.RIGHT, "/")
+                }
+            } else {
+                NonFatalErrorLogger.log(
+                    category = "filemanager-no-session",
+                    throwable = IllegalStateException(
+                        "FileManagerScreen opened with profileId=$profileId but the " +
+                            "ConnectionRepository has no active SSH session for it.",
+                    ),
+                    contextNote = "profileId=$profileId",
+                )
+            }
+        }
     }
 
     private fun observeGrantedTrees() {

@@ -7,6 +7,7 @@ import dev.ori.core.common.model.Protocol
 import dev.ori.core.common.result.appSuccess
 import dev.ori.core.security.biometric.CredentialUnlockGate
 import dev.ori.domain.model.ServerProfile
+import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.usecase.ConnectUseCase
 import dev.ori.domain.usecase.DeleteProfileUseCase
 import dev.ori.domain.usecase.DisconnectUseCase
@@ -42,6 +43,9 @@ class ConnectionListViewModelTest {
     private val saveProfileUseCase = mockk<SaveProfileUseCase>()
     private val trustHostUseCase = mockk<TrustHostUseCase>(relaxed = true)
     private val credentialUnlockGate = mockk<CredentialUnlockGate>(relaxed = true)
+    private val connectionRepository = mockk<ConnectionRepository>(relaxed = true).also {
+        every { it.getActiveConnections() } returns flowOf(emptyList())
+    }
 
     private val testProfile = ServerProfile(
         id = 1L,
@@ -75,6 +79,7 @@ class ConnectionListViewModelTest {
             saveProfileUseCase = saveProfileUseCase,
             trustHostUseCase = trustHostUseCase,
             credentialUnlockGate = credentialUnlockGate,
+            connectionRepository = connectionRepository,
         )
     }
 

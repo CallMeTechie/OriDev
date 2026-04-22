@@ -36,11 +36,20 @@ class ConnectionService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Must stay a subset of the manifest's `android:foregroundServiceType`
+        // (`dataSync`). On Android 14+ the ActivityManager validates both
+        // values on every startForeground call and raises
+        // `IllegalArgumentException: foregroundServiceType 0x… is not a
+        // subset of foregroundServiceType attribute 0x…` otherwise —
+        // which crashes the whole Service bounce (observed on Pixel Fold
+        // API 36). `CONNECTED_DEVICE` (0x10) was included here historically
+        // but is reserved for physical peripherals over USB/Bluetooth/NFC;
+        // SSH over TCP maps cleanly onto `DATA_SYNC`, which is what the
+        // manifest already declares.
         startForeground(
             NOTIFICATION_ID,
             buildNotification(),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
         )
         return START_STICKY
     }
