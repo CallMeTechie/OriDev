@@ -75,6 +75,7 @@ public fun SettingsScreen(
         onBiometricUnlockChanged = viewModel::setBiometricUnlock,
         onAutoLockTimeoutChanged = viewModel::setAutoLockTimeoutMinutes,
         onClipboardClearSecondsChanged = viewModel::setClipboardClearSeconds,
+        onBlockScreenshotsChanged = viewModel::setBlockScreenshotsWhileConnected,
         onTransferDoneNotificationChanged = viewModel::setNotifyTransferDone,
         onConnectionNotificationChanged = viewModel::setNotifyConnection,
         onClaudeNotificationChanged = viewModel::setNotifyClaude,
@@ -106,6 +107,7 @@ internal fun SettingsContent(
     onBiometricUnlockChanged: (Boolean) -> Unit = {},
     onAutoLockTimeoutChanged: (Int) -> Unit = {},
     onClipboardClearSecondsChanged: (Int) -> Unit = {},
+    onBlockScreenshotsChanged: (Boolean) -> Unit = {},
     onTransferDoneNotificationChanged: (Boolean) -> Unit = {},
     onConnectionNotificationChanged: (Boolean) -> Unit = {},
     onClaudeNotificationChanged: (Boolean) -> Unit = {},
@@ -169,6 +171,7 @@ internal fun SettingsContent(
                     onBiometricUnlockChanged = onBiometricUnlockChanged,
                     onAutoLockTimeoutChanged = onAutoLockTimeoutChanged,
                     onClipboardClearSecondsChanged = onClipboardClearSecondsChanged,
+                    onBlockScreenshotsChanged = onBlockScreenshotsChanged,
                 )
                 StorageAccessSection(
                     grantedTrees = state.grantedTrees,

@@ -6,8 +6,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import dev.ori.core.ui.components.OriToggle
 import dev.ori.core.ui.icons.lucide.Clipboard
 import dev.ori.core.ui.icons.lucide.Clock
+import dev.ori.core.ui.icons.lucide.EyeOff
 import dev.ori.core.ui.icons.lucide.FingerprintPattern
 import dev.ori.core.ui.icons.lucide.LucideIcons
 import dev.ori.core.ui.theme.Gray500
@@ -24,6 +26,7 @@ internal fun SecuritySection(
     onBiometricUnlockChanged: (Boolean) -> Unit,
     onAutoLockTimeoutChanged: (Int) -> Unit = {},
     onClipboardClearSecondsChanged: (Int) -> Unit = {},
+    onBlockScreenshotsChanged: (Boolean) -> Unit = {},
 ) {
     var showAutoLockPicker by remember { mutableStateOf(false) }
     var showClipboardPicker by remember { mutableStateOf(false) }
@@ -50,6 +53,17 @@ internal fun SecuritySection(
             subtitle = clipboardClearSubtitle(prefs.clipboardClearSeconds),
             onClick = { showClipboardPicker = true },
             trailing = { Text(text = clipboardClearLabel(prefs.clipboardClearSeconds), color = Gray500) },
+        )
+        SettingsRow(
+            icon = LucideIcons.EyeOff,
+            title = "Screenshots blockieren",
+            subtitle = "Bei aktiver SSH-Session Screenshots + Bildschirmaufnahmen unterbinden",
+            trailing = {
+                OriToggle(
+                    checked = prefs.blockScreenshotsWhileConnected,
+                    onCheckedChange = onBlockScreenshotsChanged,
+                )
+            },
         )
     }
     @Suppress("UnusedExpression")
