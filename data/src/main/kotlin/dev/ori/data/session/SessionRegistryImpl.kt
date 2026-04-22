@@ -42,6 +42,7 @@ class SessionRegistryImpl(
     private val credentialStore: CredentialStore,
     private val serverProfileDao: ServerProfileDao,
     private val serviceLifecycleBinder: ServiceLifecycleBinder,
+    private val sessionPersistence: SessionPersistencePreferences,
     registryDispatcher: CoroutineDispatcher,
 ) : SessionRegistry {
 
@@ -60,7 +61,15 @@ class SessionRegistryImpl(
         credentialStore: CredentialStore,
         serverProfileDao: ServerProfileDao,
         serviceLifecycleBinder: ServiceLifecycleBinder,
-    ) : this(sshClient, credentialStore, serverProfileDao, serviceLifecycleBinder, Dispatchers.IO)
+        sessionPersistence: SessionPersistencePreferences,
+    ) : this(
+        sshClient,
+        credentialStore,
+        serverProfileDao,
+        serviceLifecycleBinder,
+        sessionPersistence,
+        Dispatchers.IO,
+    )
 
     fun interface ServiceLifecycleBinder {
         fun onOpenSessionsChanged(anyOpen: Boolean)
@@ -120,6 +129,7 @@ class SessionRegistryImpl(
         _openSessions.update { it + session }
         _focusedSessionId.value = session.id
         serviceLifecycleBinder.onOpenSessionsChanged(true)
+        persistCurrentProfileIds()
         session
     }
 
@@ -151,6 +161,15 @@ class SessionRegistryImpl(
             _focusedSessionId.value = _openSessions.value.firstOrNull()?.id
         }
         serviceLifecycleBinder.onOpenSessionsChanged(_openSessions.value.isNotEmpty())
+        persistCurrentProfileIds()
+    }
+
+    private fun persistCurrentProfileIds() {
+        scope.launch {
+            sessionPersistence.setProfileIds(
+                _openSessions.value.map { it.profileId }.toSet(),
+            )
+        }
     }
 
     override suspend fun cancelConnect(profileId: Long) {

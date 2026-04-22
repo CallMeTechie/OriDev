@@ -30,6 +30,7 @@ class SessionRegistryImplTest {
     private val credentialStore = mockk<CredentialStore>(relaxed = true)
     private val serverProfileDao = mockk<ServerProfileDao>(relaxed = true)
     private val lifecycleBinder = mockk<SessionRegistryImpl.ServiceLifecycleBinder>(relaxed = true)
+    private val sessionPersistence = mockk<SessionPersistencePreferences>(relaxed = true)
 
     private val testProfile = ServerProfile(
         id = 1L,
@@ -48,6 +49,7 @@ class SessionRegistryImplTest {
             credentialStore,
             serverProfileDao,
             lifecycleBinder,
+            sessionPersistence,
             dispatcher ?: UnconfinedTestDispatcher(),
         )
 
@@ -298,5 +300,29 @@ class SessionRegistryImplTest {
 
         assertThat(registry.openSessions.value).hasSize(1)
         coVerify(exactly = 0) { sshClient.disconnect("s-A") }
+    }
+
+    @Test
+    fun `connect persists the new profile-id set`() = runTest {
+        stubProfileA()
+        val registry = registry()
+        registry.connect(1L).getOrThrow()
+        testScheduler.advanceUntilIdle()
+
+        coVerify { sessionPersistence.setProfileIds(setOf(1L)) }
+    }
+
+    @Test
+    fun `disconnect persists the reduced profile-id set`() = runTest {
+        stubProfileA()
+        stubProfileB()
+        val registry = registry()
+        registry.connect(1L).getOrThrow()
+        registry.connect(2L).getOrThrow()
+
+        registry.disconnect("s-A")
+        testScheduler.advanceUntilIdle()
+
+        coVerify { sessionPersistence.setProfileIds(setOf(2L)) }
     }
 }
