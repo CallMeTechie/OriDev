@@ -2,10 +2,20 @@ package dev.ori.feature.terminal.ui
 
 import dev.ori.domain.model.CommandSnippet
 import dev.ori.domain.model.KeyboardMode
-import dev.ori.domain.model.ServerProfile
 
+/**
+ * Terminal-tab UI state under the PR 2 1-session-N-PTY model.
+ *
+ * [sessionId] is the registry-owned session that backs this PTY tab.
+ * Multiple tabs can share the same [sessionId] (the user opened a
+ * second PTY on an already-connected profile). When the last tab for
+ * a given [sessionId] is closed, [TerminalViewModel.closeTab] calls
+ * `SessionRegistry.scheduleGraceDisconnect(sessionId)` and the 5-s
+ * grace-timer decides whether to actually drop the session.
+ */
 data class TerminalTabState(
     val id: String,
+    val sessionId: String,
     val profileId: Long,
     val serverName: String,
     val isConnected: Boolean = false,
@@ -52,8 +62,7 @@ data class TerminalUiState(
     val showPreferences: Boolean = false,
     val terminalFontSize: Float = 14f,
     val error: String? = null,
-    val showServerPicker: Boolean = false,
-    val availableServers: List<ServerProfile> = emptyList(),
+    val showProfilePicker: Boolean = false,
     val isRecording: Boolean = false,
     val activeRecordingId: Long? = null,
     val showSendToClaude: Boolean = false,
@@ -77,9 +86,11 @@ data class TerminalUiState(
 )
 
 sealed class TerminalEvent {
-    data class CreateTab(val profileId: Long, val serverName: String) : TerminalEvent()
+    data object OpenProfilePicker : TerminalEvent()
+    data object DismissProfilePicker : TerminalEvent()
+    data class OpenNewTab(val profileId: Long) : TerminalEvent()
     data class CloseTab(val tabId: String) : TerminalEvent()
-    data class SwitchTab(val index: Int) : TerminalEvent()
+    data class SelectTab(val tabId: String) : TerminalEvent()
     data class SendInput(val data: ByteArray) : TerminalEvent() {
         override fun equals(other: Any?) = other is SendInput && data.contentEquals(other.data)
         override fun hashCode() = data.contentHashCode()
@@ -105,8 +116,6 @@ sealed class TerminalEvent {
     data class SetFontSize(val size: Float) : TerminalEvent()
     data class ResizeTerminal(val cols: Int, val rows: Int) : TerminalEvent()
     data object ClearError : TerminalEvent()
-    data object ToggleServerPicker : TerminalEvent()
-    data class SelectServer(val profileId: Long, val serverName: String) : TerminalEvent()
     data object StartRecording : TerminalEvent()
     data object StopRecording : TerminalEvent()
     data object ExportRecording : TerminalEvent()

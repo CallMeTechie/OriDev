@@ -2,7 +2,6 @@ package dev.ori.feature.terminal.ui
 
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.os.Looper
 import androidx.core.content.getSystemService
 import androidx.lifecycle.ViewModel
@@ -12,9 +11,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.ori.core.network.ssh.ShellHandle
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.core.security.clipboard.OriClipboard
+import dev.ori.core.security.crash.NonFatalErrorLogger
 import dev.ori.core.ui.theme.TerminalBackground
 import dev.ori.core.ui.theme.TerminalText
 import dev.ori.domain.model.CommandSnippet
+import dev.ori.domain.model.ServerProfile
 import dev.ori.domain.preferences.KeyboardPreferences
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRecordingRepository
@@ -32,10 +33,12 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.connectbot.terminal.TerminalEmulator
@@ -69,10 +72,20 @@ class TerminalViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(TerminalUiState())
     val uiState: StateFlow<TerminalUiState> = _uiState.asStateFlow()
 
+    /**
+     * Profile list for the [TerminalProfilePicker] bottom-sheet. The
+     * picker is hosted by [TerminalScreen] and reads this flow via
+     * `collectAsStateWithLifecycle()`; the 5 s `WhileSubscribed` timeout
+     * means the Room query is torn down shortly after the user dismisses
+     * the sheet but survives a brief config-change round-trip.
+     */
+    val profiles: StateFlow<List<ServerProfile>> =
+        connectionRepository.getAllProfiles()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(PROFILES_SHARING_TIMEOUT_MS), emptyList())
+
     private val shellHandles = ConcurrentHashMap<String, ShellHandle>()
     private val terminalEmulators = ConcurrentHashMap<String, TerminalEmulator>()
     private val codeBlockDetectors = ConcurrentHashMap<String, CodeBlockDetector>()
-    private var serviceStarted = false
 
     /**
      * Phase 14 Task 14.5 — incoming [TerminalEvent.ResizeTerminal]
@@ -91,9 +104,11 @@ class TerminalViewModel @Inject constructor(
 
     fun onEvent(event: TerminalEvent) {
         when (event) {
-            is TerminalEvent.CreateTab -> createTab(event.profileId, event.serverName)
+            is TerminalEvent.OpenProfilePicker -> _uiState.update { it.copy(showProfilePicker = true) }
+            is TerminalEvent.DismissProfilePicker -> _uiState.update { it.copy(showProfilePicker = false) }
+            is TerminalEvent.OpenNewTab -> openNewTab(event.profileId)
             is TerminalEvent.CloseTab -> closeTab(event.tabId)
-            is TerminalEvent.SwitchTab -> switchTab(event.index)
+            is TerminalEvent.SelectTab -> selectTab(event.tabId)
             is TerminalEvent.SendInput -> sendInput(event.data)
             is TerminalEvent.SendText -> sendText(event.text)
             is TerminalEvent.Paste -> paste(event.text)
@@ -116,8 +131,6 @@ class TerminalViewModel @Inject constructor(
             is TerminalEvent.SetFontSize -> setFontSize(event.size)
             is TerminalEvent.ResizeTerminal -> onResizeRequested(event.cols, event.rows)
             is TerminalEvent.ClearError -> clearError()
-            is TerminalEvent.ToggleServerPicker -> toggleServerPicker()
-            is TerminalEvent.SelectServer -> selectServer(event.profileId, event.serverName)
             is TerminalEvent.StartRecording -> startRecording()
             is TerminalEvent.StopRecording -> stopRecording()
             is TerminalEvent.ExportRecording -> exportRecording()
@@ -159,80 +172,93 @@ class TerminalViewModel @Inject constructor(
         return terminalEmulators[tabId]
     }
 
-    private fun createTab(profileId: Long, serverName: String) {
-        val tabId = UUID.randomUUID().toString()
-        codeBlockDetectors[tabId] = CodeBlockDetector()
-
-        _uiState.update { state ->
-            val newTab = TerminalTabState(
-                id = tabId,
-                profileId = profileId,
-                serverName = serverName,
-            )
-            state.copy(
-                tabs = state.tabs + newTab,
-                activeTabIndex = state.tabs.size,
-            )
-        }
-
-        ensureServiceStarted()
-
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val session = sessionRegistry.connect(profileId).getOrElse { cause ->
-                    throw IllegalStateException(
-                        "Session handshake failed for profileId=$profileId",
-                        cause,
-                    )
-                }
-
-                val shellHandle = sshClient.openShell(session.id)
-                shellHandles[tabId] = shellHandle
-
-                val emulator = emulatorProvider.create(
-                    looper = Looper.getMainLooper(),
-                    initialRows = DEFAULT_ROWS,
-                    initialCols = DEFAULT_COLS,
-                    defaultForeground = TerminalText,
-                    defaultBackground = TerminalBackground,
-                    onKeyboardInput = { bytes ->
-                        viewModelScope.launch(Dispatchers.IO) {
-                            try {
-                                shellHandle.outputStream.write(bytes)
-                                shellHandle.outputStream.flush()
-                            } catch (_: IOException) { /* connection lost */ }
-                        }
-                    },
-                    onResize = { dimensions ->
-                        shellHandle.onResize(dimensions.columns, dimensions.rows)
-                    },
-                    onClipboardCopy = { text ->
-                        onEvent(TerminalEvent.CopyToClipboard(text))
-                    },
+    /**
+     * PR 2 Chunk 2 — 1 session → N PTY tabs. Connect (or reuse — the
+     * registry's per-profile Deferred is idempotent) a session, cancel
+     * any grace-timer that a previous "all tabs closed" state armed,
+     * open a fresh shell channel on that session, and append a local
+     * tab that carries the session id so [closeTab] can identify the
+     * last tab for a session and arm the grace-timer again.
+     */
+    fun openNewTab(profileId: Long) {
+        // No explicit Dispatchers.IO here: `SessionRegistry.connect` and
+        // `SshClient.openShell` both already `withContext(Dispatchers.IO)`
+        // for their blocking work, and staying on Main keeps the tab-list
+        // state update ordering deterministic (and lets unit tests that
+        // use `Dispatchers.setMain(UnconfinedTestDispatcher())` observe
+        // the state synchronously after `advanceUntilIdle()`).
+        viewModelScope.launch {
+            val session = sessionRegistry.connect(profileId).getOrElse { cause ->
+                NonFatalErrorLogger.log(
+                    category = "terminal-connect",
+                    throwable = cause,
+                    contextNote = "profileId=$profileId",
                 )
-                terminalEmulators[tabId] = emulator
-
-                _uiState.update { state ->
-                    state.copy(
-                        tabs = state.tabs.map { tab ->
-                            if (tab.id == tabId) {
-                                tab.copy(
-                                    isConnected = true,
-                                    shellId = shellHandle.shellId,
-                                )
-                            } else {
-                                tab
-                            }
-                        },
-                    )
-                }
-
-                startReaderCoroutine(tabId, shellHandle)
-            } catch (e: Exception) {
-                _uiState.update { state ->
-                    state.copy(error = "Failed to connect: ${e.message}")
-                }
+                _uiState.update { it.copy(error = "Failed to connect: ${cause.message}") }
+                return@launch
             }
+
+            // Opening a second tab on an already-connected session should
+            // not leave the grace timer armed from a previous "all tabs
+            // closed" state. Cancel defensively; no-op if nothing was
+            // scheduled.
+            sessionRegistry.cancelGraceDisconnect(session.id)
+
+            val shellHandle = try {
+                sshClient.openShell(session.id)
+            } catch (e: IOException) {
+                NonFatalErrorLogger.log(
+                    category = "terminal-open-shell",
+                    throwable = e,
+                    contextNote = "sessionId=${session.id}",
+                )
+                _uiState.update { it.copy(error = "Failed to open shell: ${e.message}") }
+                return@launch
+            }
+
+            val tabId = UUID.randomUUID().toString()
+            codeBlockDetectors[tabId] = CodeBlockDetector()
+            shellHandles[tabId] = shellHandle
+
+            val emulator = emulatorProvider.create(
+                looper = Looper.getMainLooper(),
+                initialRows = DEFAULT_ROWS,
+                initialCols = DEFAULT_COLS,
+                defaultForeground = TerminalText,
+                defaultBackground = TerminalBackground,
+                onKeyboardInput = { bytes ->
+                    viewModelScope.launch(Dispatchers.IO) {
+                        try {
+                            shellHandle.outputStream.write(bytes)
+                            shellHandle.outputStream.flush()
+                        } catch (_: IOException) { /* connection lost */ }
+                    }
+                },
+                onResize = { dimensions ->
+                    shellHandle.onResize(dimensions.columns, dimensions.rows)
+                },
+                onClipboardCopy = { text ->
+                    onEvent(TerminalEvent.CopyToClipboard(text))
+                },
+            )
+            terminalEmulators[tabId] = emulator
+
+            _uiState.update { state ->
+                val newTab = TerminalTabState(
+                    id = tabId,
+                    sessionId = session.id,
+                    profileId = session.profileId,
+                    serverName = session.profileName,
+                    isConnected = true,
+                    shellId = shellHandle.shellId,
+                )
+                state.copy(
+                    tabs = state.tabs + newTab,
+                    activeTabIndex = state.tabs.size,
+                )
+            }
+
+            startReaderCoroutine(tabId, shellHandle)
         }
     }
 
@@ -349,11 +375,22 @@ class TerminalViewModel @Inject constructor(
         }
     }
 
+    /**
+     * PR 2 Chunk 2 — tear the PTY only. If this was the last tab for
+     * the session, arm the registry's 5-s grace timer so the session
+     * either auto-disconnects (Files never used it) or stays alive
+     * (Files has called [SessionRegistry.markFilesUsed]).
+     */
     private fun closeTab(tabId: String) {
-        shellHandles.remove(tabId)?.onClose?.invoke()
+        val tab = _uiState.value.tabs.firstOrNull { it.id == tabId } ?: return
+        shellHandles[tabId]?.onClose?.invoke()
+        shellHandles.remove(tabId)
         terminalEmulators.remove(tabId)
         codeBlockDetectors.remove(tabId)
 
+        val remainingForSession = _uiState.value.tabs.count {
+            it.sessionId == tab.sessionId && it.id != tabId
+        }
         _uiState.update { state ->
             val newTabs = state.tabs.filterNot { it.id == tabId }
             val newIndex = if (state.activeTabIndex >= newTabs.size) {
@@ -363,15 +400,26 @@ class TerminalViewModel @Inject constructor(
             }
             state.copy(tabs = newTabs, activeTabIndex = newIndex)
         }
+        if (remainingForSession == 0) {
+            sessionRegistry.scheduleGraceDisconnect(tab.sessionId)
+        }
     }
 
-    private fun switchTab(index: Int) {
-        // Phase 14 Task 14.3 — clear modifiers on tab switch so a latched
-        // Ctrl/Alt on tab A does not bleed into tab B. Sticky is preserved
-        // (it is a user preference, not per-tab state).
+    /**
+     * PR 2 Chunk 2 — focus a tab by id and notify the registry so Files
+     * (and the future remote-pane header) can track the active session.
+     * Phase 14 Task 14.3 — clear modifiers on tab switch so a latched
+     * Ctrl/Alt on tab A does not bleed into tab B. Sticky is preserved
+     * (it is a user preference, not per-tab state).
+     */
+    private fun selectTab(tabId: String) {
+        val idx = _uiState.value.tabs.indexOfFirst { it.id == tabId }
+        if (idx < 0) return
+        val sessionId = _uiState.value.tabs[idx].sessionId
+        sessionRegistry.focus(sessionId)
         _uiState.update {
             it.copy(
-                activeTabIndex = index,
+                activeTabIndex = idx,
                 modifierState = it.modifierState.copy(ctrl = false, alt = false),
             )
         }
@@ -481,29 +529,6 @@ class TerminalViewModel @Inject constructor(
         _uiState.update { it.copy(error = null) }
     }
 
-    private fun toggleServerPicker() {
-        val currentlyShowing = _uiState.value.showServerPicker
-        if (!currentlyShowing) {
-            viewModelScope.launch {
-                connectionRepository.getAllProfiles().collect { profiles ->
-                    _uiState.update {
-                        it.copy(
-                            showServerPicker = true,
-                            availableServers = profiles,
-                        )
-                    }
-                }
-            }
-        } else {
-            _uiState.update { it.copy(showServerPicker = false) }
-        }
-    }
-
-    private fun selectServer(profileId: Long, serverName: String) {
-        _uiState.update { it.copy(showServerPicker = false) }
-        createTab(profileId, serverName)
-    }
-
     private fun startRecording() {
         val tab = getActiveTab() ?: return
         viewModelScope.launch {
@@ -594,16 +619,6 @@ class TerminalViewModel @Inject constructor(
         }
     }
 
-    private fun ensureServiceStarted() {
-        if (!serviceStarted) {
-            val intent = Intent().apply {
-                setClassName(context.packageName, "dev.ori.app.service.ConnectionService")
-            }
-            context.startForegroundService(intent)
-            serviceStarted = true
-        }
-    }
-
     override fun onCleared() {
         super.onCleared()
         shellHandles.values.forEach { it.onClose() }
@@ -617,6 +632,7 @@ class TerminalViewModel @Inject constructor(
         private const val DEFAULT_ROWS = 24
         private const val DEFAULT_COLS = 80
         private const val MAX_CODE_BLOCKS = 20
+        private const val PROFILES_SHARING_TIMEOUT_MS = 5_000L
 
         /**
          * Phase 14 Task 14.5 — ring-buffer for resize events between the

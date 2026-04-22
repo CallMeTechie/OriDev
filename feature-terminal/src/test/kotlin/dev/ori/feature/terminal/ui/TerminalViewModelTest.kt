@@ -1,6 +1,7 @@
 package dev.ori.feature.terminal.ui
 
 import android.content.Context
+import android.os.Looper
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import dev.ori.core.common.result.appSuccess
@@ -28,6 +29,9 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
@@ -76,13 +80,23 @@ class TerminalViewModelTest {
     @BeforeEach
     fun setup() {
         Dispatchers.setMain(testDispatcher)
+        // PR 2 Chunk 2 — openNewTab now runs on Dispatchers.Main (the test
+        // dispatcher) and calls Looper.getMainLooper() when it hands a
+        // Looper to the emulatorProvider. On the JVM Looper is stubbed
+        // and returns null, which trips Kotlin's non-null parameter
+        // check at the call site. Statically mock it to a relaxed Looper
+        // so the emulator-provider mock (relaxed = true) can accept it.
+        mockkStatic(Looper::class)
+        every { Looper.getMainLooper() } returns mockk(relaxed = true)
         every { getSnippetsUseCase(any()) } returns flowOf(emptyList())
         every { context.packageName } returns "dev.ori.app"
+        every { connectionRepository.getAllProfiles() } returns flowOf(emptyList())
     }
 
     @AfterEach
     fun tearDown() {
         Dispatchers.resetMain()
+        unmockkStatic(Looper::class)
     }
 
     private fun createViewModel(): TerminalViewModel {
@@ -135,18 +149,18 @@ class TerminalViewModelTest {
     }
 
     @Test
-    fun `createTab adds tab to state`() = runTest {
+    fun `openNewTab adds tab to state`() = runTest {
         stubSshConnection()
         val viewModel = createViewModel()
 
-        viewModel.onEvent(TerminalEvent.CreateTab(profileId = 1L, serverName = "Server 1"))
+        viewModel.openNewTab(profileId = 1L)
+        advanceUntilIdle()
 
-        // Tab addition is synchronous, so check the value directly
-        // (avoids race with the async IO coroutine that follows)
         val state = viewModel.uiState.value
         assertThat(state.tabs).hasSize(1)
         assertThat(state.tabs[0].serverName).isEqualTo("Server 1")
         assertThat(state.tabs[0].profileId).isEqualTo(1L)
+        assertThat(state.tabs[0].sessionId).isEqualTo("session-1")
         assertThat(state.activeTabIndex).isEqualTo(0)
     }
 
@@ -155,30 +169,112 @@ class TerminalViewModelTest {
         stubSshConnection()
         val viewModel = createViewModel()
 
-        viewModel.onEvent(TerminalEvent.CreateTab(profileId = 1L, serverName = "Server 1"))
+        viewModel.openNewTab(profileId = 1L)
+        advanceUntilIdle()
         val tabId = viewModel.uiState.value.tabs[0].id
 
         viewModel.onEvent(TerminalEvent.CloseTab(tabId))
 
-        // Check state directly to avoid race with async IO coroutine
         val state = viewModel.uiState.value
         assertThat(state.tabs).isEmpty()
         assertThat(state.activeTabIndex).isEqualTo(0)
     }
 
     @Test
-    fun `switchTab updates active index`() = runTest {
+    fun `selectTab updates active index and focuses registry`() = runTest {
+        // Return two distinct sessions so the tabs carry different session ids.
+        coEvery { sessionRegistry.connect(1L) } returns kotlin.Result.success(
+            Session(
+                id = "session-1", profileId = 1L, profileName = "Server 1",
+                host = "h1", port = 22, connectedAt = 0L,
+            ),
+        )
+        coEvery { sessionRegistry.connect(2L) } returns kotlin.Result.success(
+            Session(
+                id = "session-2", profileId = 2L, profileName = "Server 2",
+                host = "h2", port = 22, connectedAt = 0L,
+            ),
+        )
+        val shellInputStream = ByteArrayInputStream(ByteArray(0))
+        val shellOutputStream = ByteArrayOutputStream()
+        val shellHandle = ShellHandle(
+            shellId = "shell-1",
+            inputStream = shellInputStream,
+            outputStream = shellOutputStream,
+            onResize = { _, _ -> },
+            onClose = {},
+        )
+        coEvery { sshClient.openShell(any(), any(), any()) } returns shellHandle
+
+        val viewModel = createViewModel()
+        viewModel.openNewTab(profileId = 1L)
+        viewModel.openNewTab(profileId = 2L)
+        advanceUntilIdle()
+
+        val firstTabId = viewModel.uiState.value.tabs[0].id
+        viewModel.onEvent(TerminalEvent.SelectTab(firstTabId))
+
+        val state = viewModel.uiState.value
+        assertThat(state.activeTabIndex).isEqualTo(0)
+        verify { sessionRegistry.focus("session-1") }
+    }
+
+    @Test
+    fun `opening a second tab for the same profile reuses the session`() = runTest {
         stubSshConnection()
         val viewModel = createViewModel()
 
-        viewModel.onEvent(TerminalEvent.CreateTab(profileId = 1L, serverName = "Server 1"))
-        viewModel.onEvent(TerminalEvent.CreateTab(profileId = 2L, serverName = "Server 2"))
+        viewModel.openNewTab(profileId = 1L)
+        viewModel.openNewTab(profileId = 1L)
+        advanceUntilIdle()
 
-        viewModel.onEvent(TerminalEvent.SwitchTab(0))
-
-        // Check state directly to avoid race with async IO coroutine
         val state = viewModel.uiState.value
-        assertThat(state.activeTabIndex).isEqualTo(0)
+        assertThat(state.tabs).hasSize(2)
+        assertThat(state.tabs.map { it.sessionId }).containsExactly("session-1", "session-1")
+        coVerify(exactly = 2) { sessionRegistry.connect(1L) }
+        coVerify(exactly = 2) { sshClient.openShell("session-1", any(), any()) }
+    }
+
+    @Test
+    fun `closing the last tab for a session schedules a grace disconnect`() = runTest {
+        stubSshConnection()
+        val viewModel = createViewModel()
+
+        viewModel.openNewTab(profileId = 1L)
+        advanceUntilIdle()
+        val tabId = viewModel.uiState.value.tabs.first().id
+
+        viewModel.onEvent(TerminalEvent.CloseTab(tabId))
+        advanceUntilIdle()
+
+        verify { sessionRegistry.scheduleGraceDisconnect("session-1") }
+    }
+
+    @Test
+    fun `closing one of two tabs for the same session does NOT schedule a grace disconnect`() = runTest {
+        stubSshConnection()
+        val viewModel = createViewModel()
+
+        viewModel.openNewTab(profileId = 1L)
+        viewModel.openNewTab(profileId = 1L)
+        advanceUntilIdle()
+        val firstTabId = viewModel.uiState.value.tabs[0].id
+
+        viewModel.onEvent(TerminalEvent.CloseTab(firstTabId))
+        advanceUntilIdle()
+
+        verify(exactly = 0) { sessionRegistry.scheduleGraceDisconnect(any()) }
+    }
+
+    @Test
+    fun `openNewTab cancels any pending grace disconnect on the session`() = runTest {
+        stubSshConnection()
+        val viewModel = createViewModel()
+
+        viewModel.openNewTab(profileId = 1L)
+        advanceUntilIdle()
+
+        verify { sessionRegistry.cancelGraceDisconnect("session-1") }
     }
 
     @Test
@@ -314,9 +410,11 @@ class TerminalViewModelTest {
             logFilePath = "/tmp/rec",
         )
         val viewModel = createViewModel()
-        viewModel.onEvent(TerminalEvent.CreateTab(profileId = 1L, serverName = "Server"))
+        viewModel.openNewTab(profileId = 1L)
+        advanceUntilIdle()
 
         viewModel.onEvent(TerminalEvent.StartRecording)
+        advanceUntilIdle()
 
         val state = viewModel.uiState.value
         assertThat(state.isRecording).isTrue()
@@ -330,8 +428,10 @@ class TerminalViewModelTest {
             id = 42L, serverProfileId = 1L, startedAt = 0L, logFilePath = "/tmp/rec",
         )
         val viewModel = createViewModel()
-        viewModel.onEvent(TerminalEvent.CreateTab(profileId = 1L, serverName = "Server"))
+        viewModel.openNewTab(profileId = 1L)
+        advanceUntilIdle()
         viewModel.onEvent(TerminalEvent.StartRecording)
+        advanceUntilIdle()
         assertThat(viewModel.uiState.value.isRecording).isTrue()
 
         viewModel.onEvent(TerminalEvent.StopRecording)
@@ -538,13 +638,10 @@ class TerminalViewModelTest {
 
         val viewModel = createViewModel()
 
-        viewModel.onEvent(TerminalEvent.CreateTab(profileId = 999L, serverName = "Bad"))
+        viewModel.openNewTab(profileId = 999L)
+        advanceUntilIdle()
 
-        // Allow IO dispatcher to execute the coroutine
-        @Suppress("BlockingMethodInNonBlockingContext")
-        Thread.sleep(200)
-
-        // Verify error was set because profile was not found
+        // Verify error was set because the session handshake failed
         assertThat(viewModel.uiState.value.error).contains("Failed to connect")
 
         viewModel.onEvent(TerminalEvent.ClearError)
@@ -553,5 +650,25 @@ class TerminalViewModelTest {
             val state = awaitItem()
             assertThat(state.error).isNull()
         }
+    }
+
+    @Test
+    fun `opening the profile picker sets showProfilePicker true`() = runTest {
+        val viewModel = createViewModel()
+
+        viewModel.onEvent(TerminalEvent.OpenProfilePicker)
+
+        assertThat(viewModel.uiState.value.showProfilePicker).isTrue()
+    }
+
+    @Test
+    fun `dismissing the profile picker sets showProfilePicker false`() = runTest {
+        val viewModel = createViewModel()
+        viewModel.onEvent(TerminalEvent.OpenProfilePicker)
+        assertThat(viewModel.uiState.value.showProfilePicker).isTrue()
+
+        viewModel.onEvent(TerminalEvent.DismissProfilePicker)
+
+        assertThat(viewModel.uiState.value.showProfilePicker).isFalse()
     }
 }
