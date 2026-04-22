@@ -119,6 +119,7 @@ public open class AppPreferences(
     private val biometricUnlockKey = booleanPreferencesKey("biometric_unlock")
     private val autoLockTimeoutKey = intPreferencesKey("auto_lock_timeout_minutes")
     private val clipboardClearSecondsKey = intPreferencesKey("clipboard_clear_seconds")
+    private val blockScreenshotsKey = booleanPreferencesKey("block_screenshots_while_connected")
 
     public val biometricUnlock: Flow<Boolean> =
         dataStore.data.map { it[biometricUnlockKey] ?: false }
@@ -126,6 +127,8 @@ public open class AppPreferences(
         dataStore.data.map { it[autoLockTimeoutKey] ?: DEFAULT_AUTO_LOCK }
     public val clipboardClearSeconds: Flow<Int> =
         dataStore.data.map { it[clipboardClearSecondsKey] ?: DEFAULT_CLIPBOARD_CLEAR }
+    public val blockScreenshotsWhileConnected: Flow<Boolean> =
+        dataStore.data.map { it[blockScreenshotsKey] ?: false }
 
     public suspend fun setBiometricUnlock(value: Boolean) {
         dataStore.edit { it[biometricUnlockKey] = value }
@@ -135,6 +138,9 @@ public open class AppPreferences(
     }
     public suspend fun setClipboardClearSeconds(value: Int) {
         dataStore.edit { it[clipboardClearSecondsKey] = value }
+    }
+    public suspend fun setBlockScreenshotsWhileConnected(value: Boolean) {
+        dataStore.edit { it[blockScreenshotsKey] = value }
     }
 
     // ---- Notifications -----------------------------------------------------
@@ -180,6 +186,7 @@ public open class AppPreferences(
             biometricUnlock = prefs[biometricUnlockKey] ?: false,
             autoLockTimeoutMinutes = prefs[autoLockTimeoutKey] ?: DEFAULT_AUTO_LOCK,
             clipboardClearSeconds = prefs[clipboardClearSecondsKey] ?: DEFAULT_CLIPBOARD_CLEAR,
+            blockScreenshotsWhileConnected = prefs[blockScreenshotsKey] ?: false,
             notifyTransferDone = prefs[notifyTransferDoneKey] ?: true,
             notifyConnection = prefs[notifyConnectionKey] ?: true,
             notifyClaude = prefs[notifyClaudeKey] ?: false,
@@ -218,6 +225,7 @@ public data class AppPreferencesSnapshot(
     val biometricUnlock: Boolean,
     val autoLockTimeoutMinutes: Int,
     val clipboardClearSeconds: Int,
+    val blockScreenshotsWhileConnected: Boolean,
     val notifyTransferDone: Boolean,
     val notifyConnection: Boolean,
     val notifyClaude: Boolean,

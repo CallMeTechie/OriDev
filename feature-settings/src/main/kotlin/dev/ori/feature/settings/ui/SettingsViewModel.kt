@@ -132,6 +132,9 @@ public class SettingsViewModel @Inject constructor(
     public fun setClipboardClearSeconds(value: Int) {
         viewModelScope.launch { appPreferences.setClipboardClearSeconds(value) }
     }
+    public fun setBlockScreenshotsWhileConnected(value: Boolean) {
+        viewModelScope.launch { appPreferences.setBlockScreenshotsWhileConnected(value) }
+    }
 
     // ---- Storage Access (Phase 15 Task 15.6) -------------------------------
 

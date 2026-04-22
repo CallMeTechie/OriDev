@@ -134,6 +134,7 @@ class AppPreferencesTest {
             biometricUnlock = false,
             autoLockTimeoutMinutes = 5,
             clipboardClearSeconds = 30,
+            blockScreenshotsWhileConnected = false,
             notifyTransferDone = true,
             notifyConnection = true,
             notifyClaude = false,

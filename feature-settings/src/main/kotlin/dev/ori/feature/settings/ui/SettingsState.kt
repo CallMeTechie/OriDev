@@ -53,6 +53,7 @@ private val DEFAULT_PREFERENCES = AppPreferencesSnapshot(
     biometricUnlock = false,
     autoLockTimeoutMinutes = 5,
     clipboardClearSeconds = 30,
+    blockScreenshotsWhileConnected = false,
     notifyTransferDone = true,
     notifyConnection = true,
     notifyClaude = false,
