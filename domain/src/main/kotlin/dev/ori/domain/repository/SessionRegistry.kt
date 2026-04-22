@@ -12,18 +12,18 @@ import kotlinx.coroutines.flow.StateFlow
  *  - `TerminalViewModel`'s implicit state from its direct
  *    `sshClient.connect(...)` call
  *
- * The registry is a Hilt `@Singleton`. All three flows are hot and
+ * The registry is intended to be a process-wide singleton (bound via Hilt in `:data`). All three flows are hot and
  * survive ViewModel recreation. [connect] is idempotent per
  * [Session.profileId] — concurrent calls for the same profile share
  * one in-flight `Deferred`, and a mid-handshake [disconnect] cancels
  * that Deferred and closes any socket the SSH layer already opened.
  */
-public interface SessionRegistry {
+interface SessionRegistry {
     /** All currently-open sessions in insertion order. */
-    public val openSessions: StateFlow<List<Session>>
+    val openSessions: StateFlow<List<Session>>
 
     /** The focused session id, or null when no session is open. */
-    public val focusedSessionId: StateFlow<String?>
+    val focusedSessionId: StateFlow<String?>
 
     /**
      * Establish a session for [profileId]. Routes through
@@ -33,10 +33,10 @@ public interface SessionRegistry {
      * the existing session is focused and returned without a new
      * handshake.
      */
-    public suspend fun connect(profileId: Long): Result<Session>
+    suspend fun connect(profileId: Long): Result<Session>
 
     /** Make [sessionId] the focused session. No-op if already focused or unknown. */
-    public fun focus(sessionId: String)
+    fun focus(sessionId: String)
 
     /**
      * Tear down [sessionId]. If a connect for the same profile is
@@ -44,5 +44,5 @@ public interface SessionRegistry {
      * closed. If the disconnected session was focused, focus moves
      * to the next open session (or null if none remain).
      */
-    public suspend fun disconnect(sessionId: String)
+    suspend fun disconnect(sessionId: String)
 }

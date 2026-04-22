@@ -10,7 +10,7 @@ package dev.ori.domain.model
  * [profileName] so log breadcrumbs can carry a human-readable tag
  * per the spec's Section 3.2 observability requirement.
  */
-public data class Session(
+data class Session(
     val id: String,
     val profileId: Long,
     val profileName: String,
