@@ -43,15 +43,16 @@ import dev.ori.domain.model.FileItem
 import dev.ori.feature.premium.ui.AdSlotHost
 
 @Composable
-@Suppress("UnusedParameter")
 fun FileManagerScreen(
     viewModel: FileManagerViewModel = hiltViewModel(),
-    initialProfileId: Long? = null,
     onNavigateToEditor: (filePath: String, isRemote: Boolean) -> Unit = { _, _ -> },
 ) {
-    // Phase 11 P1.1 — initialProfileId is wired through navigation but the
-    // ViewModel hookup that opens the remote pane rooted on this profile is
-    // P2.5 (file manager screen alignment). Suppressed for now.
+    // PR 2 — the phantom `filemanager/{profileId}` route is gone; entry via
+    // registry focus + navigateToTopLevel means the ViewModel's
+    // SavedStateHandle.get<Long>("profileId") returns null and
+    // bindRemoteSession() short-circuits. Profile is surfaced through the
+    // RemoteFileSystemSession that the Connections sheet will set up when it
+    // calls sessionRegistry.connect(...) in a later chunk.
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteConfirmation by remember { mutableStateOf(false) }

@@ -7,6 +7,14 @@ data class ConnectionListUiState(
     val profiles: List<ServerProfile> = emptyList(),
     val favorites: List<ServerProfile> = emptyList(),
     val activeConnections: List<Connection> = emptyList(),
+    /**
+     * PR 2 Section 8 — profiles whose id appears in
+     * [dev.ori.domain.repository.SessionRegistry.openSessions]. Fed by
+     * the [ConnectionListViewModel.activeProfiles] derived StateFlow.
+     * Drives the "Aktiv" section of [ConnectionListScreen] plus the
+     * "N aktiv" TopBar pill.
+     */
+    val activeProfiles: List<ServerProfile> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
     val searchQuery: String = "",
@@ -40,3 +48,18 @@ sealed class ConnectionListEvent {
     data object AcceptHostKey : ConnectionListEvent()
     data object RejectHostKey : ConnectionListEvent()
 }
+
+/**
+ * PR 2 — disambiguates which top-level tab the sheet's primary CTA is
+ * wiring toward so the single [ConnectionListViewModel.openProfile]
+ * entry point can drive both flows.
+ */
+enum class OpenTarget { TERMINAL, FILES }
+
+/**
+ * PR 2 — one-shot navigation effect emitted by
+ * [ConnectionListViewModel.openProfile] after a successful
+ * `sessionRegistry.connect()`. Carries the real [sessionId] so the
+ * Screen-level nav callback can focus the registry on it.
+ */
+data class OpenProfileEffect(val target: OpenTarget, val sessionId: String)

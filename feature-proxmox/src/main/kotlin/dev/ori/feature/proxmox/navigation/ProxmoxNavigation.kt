@@ -12,7 +12,11 @@ const val PROXMOX_ROUTE = "proxmox"
 const val PROXMOX_CREATE_VM_ROUTE = "proxmox/create-vm/{nodeId}"
 
 fun NavGraphBuilder.proxmoxDashboardScreen(
-    onNavigateToTerminal: (profileId: Long) -> Unit,
+    // PR 2 — simplified to zero-argument navigation. The caller hops
+    // straight to the Terminal top-level route and the user picks a
+    // profile from there. Proxmox-driven connect-on-demand comes back
+    // in a later chunk via `sessionRegistry.connect(profileId)`.
+    onNavigateToTerminal: () -> Unit,
     onNavigateToCreateVm: (nodeId: Long) -> Unit,
     onNavigateBackFromWizard: () -> Unit,
 ) {

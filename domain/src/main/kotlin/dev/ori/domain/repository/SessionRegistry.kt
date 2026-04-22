@@ -66,4 +66,29 @@ interface SessionRegistry {
      * the same ViewModel.
      */
     suspend fun cancelConnect(profileId: Long)
+
+    /**
+     * Marker that the Files tab has opened this session's remote pane
+     * at least once. Consumed by [scheduleGraceDisconnect]: if the
+     * Terminal closes its last PTY for this session and Files never
+     * used it, the registry auto-disconnects after 5 s. If Files has
+     * used it, the session stays open — user must explicitly
+     * disconnect via the Connections sheet.
+     */
+    fun markFilesUsed(sessionId: String)
+
+    /**
+     * Schedule an auto-disconnect of [sessionId] 5 s from now IF no
+     * Files usage has been recorded for it. Idempotent: re-scheduling
+     * resets the timer. Calling [cancelGraceDisconnect], [disconnect],
+     * or [markFilesUsed] during the window cancels the scheduled
+     * disconnect. Opening another PTY on the same session via
+     * [connect] does NOT automatically cancel the grace timer — the
+     * caller must invoke [cancelGraceDisconnect] explicitly (keeps
+     * the two concerns separate).
+     */
+    fun scheduleGraceDisconnect(sessionId: String)
+
+    /** Cancel a pending grace disconnect for [sessionId], if any. */
+    fun cancelGraceDisconnect(sessionId: String)
 }

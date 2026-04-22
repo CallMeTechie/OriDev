@@ -14,6 +14,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -28,6 +29,7 @@ class SessionRegistryImplTest {
     private val sshClient = mockk<SshClient>(relaxed = true)
     private val credentialStore = mockk<CredentialStore>(relaxed = true)
     private val serverProfileDao = mockk<ServerProfileDao>(relaxed = true)
+    private val lifecycleBinder = mockk<SessionRegistryImpl.ServiceLifecycleBinder>(relaxed = true)
 
     private val testProfile = ServerProfile(
         id = 1L,
@@ -40,7 +42,14 @@ class SessionRegistryImplTest {
         credentialRef = "kref_test",
     )
 
-    private fun registry() = SessionRegistryImpl(sshClient, credentialStore, serverProfileDao)
+    private fun registry(dispatcher: CoroutineDispatcher? = null) =
+        SessionRegistryImpl(
+            sshClient,
+            credentialStore,
+            serverProfileDao,
+            lifecycleBinder,
+            dispatcher ?: UnconfinedTestDispatcher(),
+        )
 
     private fun stubProfileA() {
         coEvery { serverProfileDao.getById(1L) } returns testProfile.toEntity()
@@ -230,5 +239,64 @@ class SessionRegistryImplTest {
         registry.cancelConnect(1L)
         testScheduler.advanceUntilIdle()
         try { pending.await() } catch (_: CancellationException) { /* ok */ }
+    }
+
+    @Test
+    fun `first connect signals service-start, last disconnect signals service-stop`() = runTest {
+        stubProfileA()
+        val registry = registry()
+
+        registry.connect(1L).getOrThrow()
+        io.mockk.verify { lifecycleBinder.onOpenSessionsChanged(true) }
+
+        registry.disconnect("s-A")
+        io.mockk.verify { lifecycleBinder.onOpenSessionsChanged(false) }
+    }
+
+    @Test
+    fun `scheduleGraceDisconnect tears down after 5s when Files never used the session`() = runTest {
+        stubProfileA()
+        val registry = registry(UnconfinedTestDispatcher(testScheduler))
+        registry.connect(1L).getOrThrow()
+        assertThat(registry.openSessions.value).hasSize(1)
+
+        registry.scheduleGraceDisconnect("s-A")
+        testScheduler.advanceTimeBy(5_001L)
+        testScheduler.runCurrent()
+
+        assertThat(registry.openSessions.value).isEmpty()
+        coVerify { sshClient.disconnect("s-A") }
+    }
+
+    @Test
+    fun `markFilesUsed suppresses grace disconnect`() = runTest {
+        stubProfileA()
+        val registry = registry(UnconfinedTestDispatcher(testScheduler))
+        registry.connect(1L).getOrThrow()
+
+        registry.markFilesUsed("s-A")
+        registry.scheduleGraceDisconnect("s-A")
+
+        testScheduler.advanceTimeBy(10_000L)
+        testScheduler.runCurrent()
+
+        assertThat(registry.openSessions.value).hasSize(1)
+        coVerify(exactly = 0) { sshClient.disconnect("s-A") }
+    }
+
+    @Test
+    fun `markFilesUsed during the grace window cancels the pending disconnect`() = runTest {
+        stubProfileA()
+        val registry = registry(UnconfinedTestDispatcher(testScheduler))
+        registry.connect(1L).getOrThrow()
+
+        registry.scheduleGraceDisconnect("s-A")
+        testScheduler.advanceTimeBy(2_000L)
+        registry.markFilesUsed("s-A")
+        testScheduler.advanceTimeBy(5_000L)
+        testScheduler.runCurrent()
+
+        assertThat(registry.openSessions.value).hasSize(1)
+        coVerify(exactly = 0) { sshClient.disconnect("s-A") }
     }
 }

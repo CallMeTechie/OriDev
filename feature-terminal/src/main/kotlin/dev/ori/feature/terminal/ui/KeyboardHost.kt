@@ -43,7 +43,7 @@ import dev.ori.domain.model.KeyboardMode
  * - **Exactly ONE `TerminalImeAnchor`** is rendered across the entire
  *   terminal screen (even when the user has multiple SSH tabs). This
  *   is critical: the anchor owns focus, and instantiating it per-tab
- *   would make every `SwitchTab` event steal-and-restore focus,
+ *   would make every `SelectTab` event steal-and-restore focus,
  *   which in practice means the Android IME slams shut and re-opens
  *   on every tab switch. By placing the anchor in KeyboardHost (a
  *   single instance rendered once in [TerminalScreen]), focus stays

@@ -60,9 +60,7 @@ import org.connectbot.terminal.TerminalEmulator
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-@Suppress("UnusedParameter")
 fun TerminalScreen(
-    initialProfileId: Long? = null,
     viewModel: TerminalViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -185,10 +183,14 @@ fun TerminalScreen(
             TerminalTabBar(
                 tabs = uiState.tabs,
                 activeTabIndex = uiState.activeTabIndex,
-                onTabSelect = { viewModel.onEvent(TerminalEvent.SwitchTab(it)) },
+                onTabSelect = { index ->
+                    uiState.tabs.getOrNull(index)?.let { tab ->
+                        viewModel.onEvent(TerminalEvent.SelectTab(tab.id))
+                    }
+                },
                 onTabClose = { viewModel.onEvent(TerminalEvent.CloseTab(it)) },
                 onAddTab = {
-                    viewModel.onEvent(TerminalEvent.ToggleServerPicker)
+                    viewModel.onEvent(TerminalEvent.OpenProfilePicker)
                 },
             )
 
@@ -303,14 +305,16 @@ fun TerminalScreen(
         )
     }
 
-    // Server picker dialog
-    if (uiState.showServerPicker) {
-        ServerPickerDialog(
-            servers = uiState.availableServers,
-            onSelect = { profileId, serverName ->
-                viewModel.onEvent(TerminalEvent.SelectServer(profileId, serverName))
+    // Profile picker bottom-sheet (PR 2 Chunk 2 — replaces ServerPickerDialog)
+    if (uiState.showProfilePicker) {
+        val profiles by viewModel.profiles.collectAsStateWithLifecycle()
+        TerminalProfilePicker(
+            profiles = profiles,
+            onPick = { profileId ->
+                viewModel.openNewTab(profileId)
+                viewModel.onEvent(TerminalEvent.DismissProfilePicker)
             },
-            onDismiss = { viewModel.onEvent(TerminalEvent.ToggleServerPicker) },
+            onDismiss = { viewModel.onEvent(TerminalEvent.DismissProfilePicker) },
         )
     }
 

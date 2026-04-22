@@ -9,6 +9,7 @@ import dev.ori.domain.repository.BookmarkRepository
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.FileSystemRepository
 import dev.ori.domain.repository.RemoteFileSystemSession
+import dev.ori.domain.repository.SessionRegistry
 import dev.ori.domain.repository.StorageAccessRepository
 import dev.ori.domain.usecase.ChmodUseCase
 import dev.ori.domain.usecase.CreateDirectoryUseCase
@@ -49,6 +50,7 @@ class FileManagerViewModelTest {
     private val bookmarkRepository: BookmarkRepository = mockk(relaxed = true)
     private val storageAccessRepository: StorageAccessRepository = mockk(relaxed = true)
     private val remoteSession: RemoteFileSystemSession = mockk(relaxed = true)
+    private val sessionRegistry: SessionRegistry = mockk(relaxed = true)
     private val connectionRepository: ConnectionRepository = mockk(relaxed = true)
     private val grantedTreesFlow = MutableStateFlow<List<GrantedTree>>(emptyList())
 
@@ -93,6 +95,7 @@ class FileManagerViewModelTest {
             localRepository = localRepository,
             remoteRepository = remoteRepository,
             remoteSession = remoteSession,
+            sessionRegistry = sessionRegistry,
             connectionRepository = connectionRepository,
             listFilesUseCase = listFilesUseCase,
             deleteFileUseCase = deleteFileUseCase,

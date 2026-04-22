@@ -13,15 +13,21 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import dev.ori.app.navigation.OriDevNavHost
 import dev.ori.core.ui.icons.lucide.ArrowLeftRight
 import dev.ori.core.ui.icons.lucide.Folder
@@ -30,6 +36,7 @@ import dev.ori.core.ui.icons.lucide.Settings
 import dev.ori.core.ui.icons.lucide.Terminal
 import dev.ori.core.ui.icons.lucide.Wifi
 import dev.ori.core.ui.theme.OriDevTheme
+import dev.ori.domain.repository.SessionRegistry
 import dev.ori.feature.connections.navigation.CONNECTIONS_ROUTE
 import dev.ori.feature.filemanager.navigation.FILE_MANAGER_ROUTE
 import dev.ori.feature.terminal.navigation.TERMINAL_ROUTE
@@ -51,6 +58,20 @@ private val topLevelDestinations = listOf(
     TopLevelDestination("settings", "Settings", LucideIcons.Settings),
 )
 
+/**
+ * PR 2 — Hilt cannot directly inject into `@Composable` functions, so we
+ * expose the process-wide [SessionRegistry] singleton via an
+ * [EntryPoint] that reads the application Hilt component. Consumers pull
+ * it inside [OriDevApp] and hand the reference to [OriDevNavHost] which
+ * uses it to `focus(sessionId)` before switching to the top-level
+ * Terminal / File Manager destination.
+ */
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface SessionRegistryEntryPoint {
+    fun sessionRegistry(): SessionRegistry
+}
+
 @Composable
 fun OriDevApp() {
     OriDevTheme {
@@ -60,6 +81,13 @@ fun OriDevApp() {
 
         val configuration = LocalConfiguration.current
         val isWideScreen = configuration.screenWidthDp >= WIDE_SCREEN_BREAKPOINT_DP
+
+        val context = LocalContext.current
+        val sessionRegistry = remember(context) {
+            EntryPointAccessors
+                .fromApplication(context.applicationContext, SessionRegistryEntryPoint::class.java)
+                .sessionRegistry()
+        }
 
         if (isWideScreen) {
             // Foldable unfolded (>= 600dp): NavigationRail on the leading edge,
@@ -72,6 +100,7 @@ fun OriDevApp() {
                 Scaffold(modifier = Modifier.weight(1f)) { innerPadding ->
                     OriDevNavHost(
                         navController = navController,
+                        sessionRegistry = sessionRegistry,
                         modifier = Modifier.padding(innerPadding),
                     )
                 }
@@ -90,6 +119,7 @@ fun OriDevApp() {
             ) { innerPadding ->
                 OriDevNavHost(
                     navController = navController,
+                    sessionRegistry = sessionRegistry,
                     modifier = Modifier.padding(innerPadding),
                 )
             }
@@ -110,7 +140,7 @@ private fun AppNavigationBar(
                 icon = { Icon(item.icon, contentDescription = item.label) },
                 label = { Text(item.label) },
                 selected = currentDestination.isOnRoute(item.route),
-                onClick = { navController.navigateToTopLevel(item.route) },
+                onClick = { navController.navigateToTopLevelRoute(item.route) },
             )
         }
     }
@@ -127,7 +157,7 @@ private fun AppNavigationRail(
                 icon = { Icon(item.icon, contentDescription = item.label) },
                 label = { Text(item.label) },
                 selected = currentDestination.isOnRoute(item.route),
-                onClick = { navController.navigateToTopLevel(item.route) },
+                onClick = { navController.navigateToTopLevelRoute(item.route) },
             )
         }
     }
@@ -136,7 +166,7 @@ private fun AppNavigationRail(
 private fun NavDestination?.isOnRoute(route: String): Boolean =
     this?.hierarchy?.any { it.route == route } == true
 
-private fun NavHostController.navigateToTopLevel(route: String) {
+internal fun NavHostController.navigateToTopLevelRoute(route: String) {
     navigate(route) {
         popUpTo(graph.findStartDestination().id) {
             saveState = true

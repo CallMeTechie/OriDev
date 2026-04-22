@@ -44,7 +44,7 @@ private const val NODE_ROW_HEIGHT_DP = 140
 fun ProxmoxDashboardScreen(
     modifier: Modifier = Modifier,
     viewModel: ProxmoxDashboardViewModel = hiltViewModel(),
-    @Suppress("UNUSED_PARAMETER") onNavigateToTerminal: (profileId: Long) -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onNavigateToTerminal: () -> Unit = {},
     onNavigateToCreateVm: (nodeId: Long) -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
