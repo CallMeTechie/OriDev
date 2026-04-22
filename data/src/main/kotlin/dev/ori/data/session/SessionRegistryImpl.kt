@@ -91,15 +91,28 @@ class SessionRegistryImpl @Inject constructor(
         }
     }
 
+    /**
+     * Tear down [sessionId]. If the session is currently in
+     * [openSessions], close its SSH socket, remove it, and (if it
+     * was focused) promote the next session to focus. Also cancels
+     * any in-flight connect for the same profile so a handshake
+     * finishing after we tear down doesn't produce a zombie entry.
+     *
+     * No-op if [sessionId] is not in [openSessions] — a mid-handshake
+     * session has no id yet, so callers who want to cancel a pending
+     * connect must use [cancelConnect] with the profileId instead.
+     */
     override suspend fun disconnect(sessionId: String) {
-        val session = _openSessions.value.firstOrNull { it.id == sessionId }
-        session?.let { inFlight[it.profileId]?.cancel() }
-        if (session != null) {
-            runCatching { sshClient.disconnect(sessionId) }
-            _openSessions.update { list -> list.filterNot { it.id == sessionId } }
-            if (_focusedSessionId.value == sessionId) {
-                _focusedSessionId.value = _openSessions.value.firstOrNull()?.id
-            }
+        val session = _openSessions.value.firstOrNull { it.id == sessionId } ?: return
+        inFlight[session.profileId]?.cancel()
+        runCatching { sshClient.disconnect(sessionId) }
+        _openSessions.update { list -> list.filterNot { it.id == sessionId } }
+        if (_focusedSessionId.value == sessionId) {
+            _focusedSessionId.value = _openSessions.value.firstOrNull()?.id
         }
+    }
+
+    override suspend fun cancelConnect(profileId: Long) {
+        inFlight[profileId]?.cancel()
     }
 }

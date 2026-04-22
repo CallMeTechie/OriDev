@@ -45,4 +45,17 @@ interface SessionRegistry {
      * to the next open session (or null if none remain).
      */
     suspend fun disconnect(sessionId: String)
+
+    /**
+     * Cancel a still-in-flight [connect] for [profileId]. No-op if no
+     * handshake is pending for that profile. Closes any socket SSHJ
+     * already opened via the connect-coroutine's cancellation cleanup.
+     *
+     * Exists because [disconnect] takes a `sessionId`, which doesn't
+     * exist yet during handshake. The UI path that surfaces this is:
+     * a ViewModel calling `connect()` on another coroutine, then a
+     * "Cancel"/back-press triggering `cancelConnect(profileId)` from
+     * the same ViewModel.
+     */
+    suspend fun cancelConnect(profileId: Long)
 }

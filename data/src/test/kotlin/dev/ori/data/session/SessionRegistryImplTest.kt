@@ -12,6 +12,7 @@ import dev.ori.domain.repository.CredentialStore
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -172,27 +173,61 @@ class SessionRegistryImplTest {
     }
 
     @Test
-    fun `disconnect during in-flight connect cancels handshake and leaves openSessions empty`() =
-        runTest(UnconfinedTestDispatcher()) {
-            coEvery { connectionRepository.getProfileById(1L) } returns testProfile
-            coEvery { credentialStore.getPassword("kref_test") } returns "pw".toCharArray()
-            coEvery {
-                sshClient.connect(
-                    host = "nas.local",
-                    port = any(),
-                    username = any(),
-                    password = any<CharArray>(),
-                    privateKey = any(),
-                )
-            } coAnswers { awaitCancellation() }
-
-            val registry = registry()
-
-            val pending = async(start = CoroutineStart.UNDISPATCHED) { registry.connect(1L) }
-            pending.cancel()
-            testScheduler.advanceUntilIdle()
-
-            assertThat(registry.openSessions.value).isEmpty()
-            assertThat(registry.focusedSessionId.value).isNull()
+    fun `cancelConnect cancels in-flight handshake and leaves openSessions empty`() = runTest {
+        coEvery { connectionRepository.getProfileById(1L) } returns testProfile
+        coEvery { credentialStore.getPassword("kref_test") } returns "secret".toCharArray()
+        // Handshake blocks forever until cancelled — simulates an in-flight SSH connect.
+        coEvery {
+            sshClient.connect(any(), any(), any(), any<CharArray>(), any())
+        } coAnswers {
+            awaitCancellation()
         }
+
+        val registry = registry()
+        val pending = async(start = CoroutineStart.UNDISPATCHED) {
+            registry.connect(1L)
+        }
+
+        registry.cancelConnect(1L)
+        testScheduler.advanceUntilIdle()
+
+        assertThat(registry.openSessions.value).isEmpty()
+        assertThat(registry.focusedSessionId.value).isNull()
+        // Handshake never landed, so sshClient.disconnect is never invoked —
+        // SSHJ closes its own socket via the cancelled connect coroutine's
+        // internal try/finally (not our concern at the registry layer).
+        coVerify(exactly = 0) { sshClient.disconnect(any()) }
+        // The pending Deferred should now be either cancelled or completed
+        // with a CancellationException — either way, awaiting it inside a
+        // try/catch must not surface a regular Exception.
+        try {
+            pending.await()
+        } catch (_: CancellationException) {
+            // expected
+        }
+    }
+
+    @Test
+    fun `disconnect with unknown sessionId during in-flight connect is a no-op`() = runTest {
+        coEvery { connectionRepository.getProfileById(1L) } returns testProfile
+        coEvery { credentialStore.getPassword("kref_test") } returns "secret".toCharArray()
+        coEvery {
+            sshClient.connect(any(), any(), any(), any<CharArray>(), any())
+        } coAnswers { awaitCancellation() }
+
+        val registry = registry()
+        val pending = async(start = CoroutineStart.UNDISPATCHED) { registry.connect(1L) }
+
+        // Caller hasn't yet received a sessionId — there is no valid id
+        // to pass to disconnect. A stale one must not throw and must not
+        // affect the in-flight handshake.
+        registry.disconnect("no-such-session")
+        assertThat(registry.openSessions.value).isEmpty()
+        coVerify(exactly = 0) { sshClient.disconnect(any()) }
+
+        // Clean up the still-pending handshake so the test scope settles.
+        registry.cancelConnect(1L)
+        testScheduler.advanceUntilIdle()
+        try { pending.await() } catch (_: CancellationException) { /* ok */ }
+    }
 }
