@@ -9,6 +9,7 @@ import dev.ori.core.common.model.Protocol
 import dev.ori.core.common.result.getAppError
 import dev.ori.domain.model.ServerProfile
 import dev.ori.domain.repository.ConnectionRepository
+import dev.ori.domain.repository.CredentialStore
 import dev.ori.domain.usecase.CheckPremiumUseCase
 import dev.ori.domain.usecase.SaveProfileUseCase
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 data class AddEditFormState(
@@ -44,6 +46,7 @@ data class AddEditFormState(
     val credentialError: String? = null,
     val isEditMode: Boolean = false,
     val profileId: Long = 0,
+    val hasExistingPassword: Boolean = false,
 ) {
     val title: String get() = if (isEditMode) "Edit Connection" else "Add Connection"
 }
@@ -94,10 +97,21 @@ class AddEditConnectionViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val saveProfileUseCase: SaveProfileUseCase,
     private val connectionRepository: ConnectionRepository,
+    private val credentialStore: CredentialStore,
     checkPremiumUseCase: CheckPremiumUseCase,
 ) : ViewModel() {
 
     private val profileId: Long = savedStateHandle["profileId"] ?: 0L
+
+    /**
+     * The alias under which an existing profile's password is already
+     * persisted in [CredentialStore] (e.g. `kref_2c7…`). Captured when an
+     * edit loads a profile so `save()` can either (a) reuse the alias and
+     * overwrite the stored bytes when the user types a new password, or
+     * (b) keep the existing entry untouched when the password field is
+     * left blank. Null for new profiles and for legacy/unmanaged refs.
+     */
+    private var existingManagedAlias: String? = null
 
     private val _formState = MutableStateFlow(AddEditFormState())
     val formState: StateFlow<AddEditFormState> = _formState.asStateFlow()
@@ -128,6 +142,21 @@ class AddEditConnectionViewModel @Inject constructor(
             try {
                 val profile = connectionRepository.getProfileById(id)
                 if (profile != null) {
+                    // For PASSWORD auth we do NOT echo the stored secret
+                    // (or its alias) back into the text field — the user
+                    // would otherwise see `kref_…` and overwrite the alias
+                    // onto itself. Leaving the field blank signals "keep
+                    // the existing stored password" on save; typing a new
+                    // value overwrites it. The managed alias — if any —
+                    // is captured separately so the Keystore entry can be
+                    // reused across edits.
+                    val isManagedPasswordProfile = profile.authMethod == AuthMethod.PASSWORD &&
+                        profile.credentialRef.startsWith(KEYSTORE_ALIAS_PREFIX)
+                    existingManagedAlias = if (isManagedPasswordProfile) profile.credentialRef else null
+                    val initialCredentialField = when {
+                        profile.authMethod == AuthMethod.PASSWORD -> ""
+                        else -> profile.credentialRef
+                    }
                     _formState.update {
                         it.copy(
                             name = profile.name,
@@ -136,13 +165,14 @@ class AddEditConnectionViewModel @Inject constructor(
                             protocol = profile.protocol,
                             username = profile.username,
                             authMethod = profile.authMethod,
-                            credential = profile.credentialRef,
+                            credential = initialCredentialField,
                             startupCommand = profile.startupCommand ?: "",
                             projectDirectory = profile.projectDirectory ?: "",
                             maxBandwidthKbps = profile.maxBandwidthKbps,
                             isEditMode = true,
                             profileId = profile.id,
                             isLoading = false,
+                            hasExistingPassword = isManagedPasswordProfile,
                         )
                     }
                 } else {
@@ -219,7 +249,14 @@ class AddEditConnectionViewModel @Inject constructor(
             _formState.update { it.copy(usernameError = "Username is required") }
             hasError = true
         }
-        if (state.credential.isBlank()) {
+        // In edit mode with an existing managed password, leaving the
+        // field blank is a valid "keep existing" signal. For every other
+        // case the field must be populated.
+        val keepExistingPassword = state.isEditMode &&
+            state.authMethod == AuthMethod.PASSWORD &&
+            state.hasExistingPassword &&
+            state.credential.isBlank()
+        if (!keepExistingPassword && state.credential.isBlank()) {
             val label = if (state.authMethod == AuthMethod.SSH_KEY) "SSH key path" else "Password"
             _formState.update { it.copy(credentialError = "$label is required") }
             hasError = true
@@ -230,6 +267,24 @@ class AddEditConnectionViewModel @Inject constructor(
         viewModelScope.launch {
             _formState.update { it.copy(isSaving = true) }
 
+            // For PASSWORD auth we encrypt via the Keystore-backed
+            // CredentialStore and only persist the alias in Room. Before
+            // this rewrite the UI stored the plaintext password inside
+            // `ServerProfile.credentialRef` and no call to
+            // `credentialStore.storePassword(...)` ever happened, so the
+            // subsequent `connect()` lookup via `getPassword(ref)` always
+            // returned null and the SSH client failed with "Either
+            // password or private key must be provided".
+            val resolvedCredentialRef = when (state.authMethod) {
+                AuthMethod.PASSWORD -> storePasswordAndResolveAlias(
+                    plaintext = state.credential,
+                    keepExisting = keepExistingPassword,
+                )
+                AuthMethod.SSH_KEY,
+                AuthMethod.KEY_AGENT,
+                -> state.credential
+            }
+
             val profile = ServerProfile(
                 id = state.profileId,
                 name = state.name.trim(),
@@ -238,7 +293,7 @@ class AddEditConnectionViewModel @Inject constructor(
                 protocol = state.protocol,
                 username = state.username.trim(),
                 authMethod = state.authMethod,
-                credentialRef = state.credential,
+                credentialRef = resolvedCredentialRef,
                 startupCommand = state.startupCommand.ifBlank { null },
                 projectDirectory = state.projectDirectory.ifBlank { null },
                 maxBandwidthKbps = state.maxBandwidthKbps,
@@ -254,5 +309,45 @@ class AddEditConnectionViewModel @Inject constructor(
             _formState.update { it.copy(isSaving = false) }
             _effect.emit(AddEditEffect.NavigateBack)
         }
+    }
+
+    /**
+     * Persist the typed password via the Keystore-backed [CredentialStore]
+     * and return the alias to store in [ServerProfile.credentialRef]. The
+     * alias is reused across edits of the same profile so the Keystore
+     * entry is overwritten in place rather than leaking stale blobs.
+     *
+     * [keepExisting] signals "user didn't touch the password field in
+     * edit mode" — in that case the returned value is the existing alias
+     * with no Keystore mutation.
+     */
+    private suspend fun storePasswordAndResolveAlias(
+        plaintext: String,
+        keepExisting: Boolean,
+    ): String {
+        if (keepExisting) {
+            return existingManagedAlias ?: ""
+        }
+        val alias = existingManagedAlias ?: "$KEYSTORE_ALIAS_PREFIX${UUID.randomUUID()}"
+        val chars = plaintext.toCharArray()
+        try {
+            credentialStore.storePassword(alias, chars)
+        } finally {
+            // `storePassword` already wipes the CharArray after encrypting,
+            // so this is defence-in-depth for the path where storePassword
+            // throws before reaching its own zero-fill.
+            chars.fill('\u0000')
+        }
+        existingManagedAlias = alias
+        return alias
+    }
+
+    private companion object {
+        /**
+         * Prefix that identifies an alias this ViewModel minted. Lets us
+         * distinguish managed aliases from legacy `credentialRef` strings
+         * that still carry the raw plaintext password (pre-fix installs).
+         */
+        const val KEYSTORE_ALIAS_PREFIX = "kref_"
     }
 }
