@@ -50,6 +50,13 @@ class ConnectionRepositoryImpl @Inject constructor(
 
     override suspend fun deleteProfile(profile: ServerProfile) {
         serverProfileDao.delete(profile.toEntity())
+        // Remove the Keystore entry alongside the row so we don't leak
+        // encrypted password blobs for profiles the user deleted. Only
+        // aliases this repo actually minted (prefix `kref_`) are touched —
+        // legacy plaintext credentialRef strings are left alone.
+        if (profile.credentialRef.startsWith(MANAGED_ALIAS_PREFIX)) {
+            credentialStore.deleteCredential(profile.credentialRef)
+        }
     }
 
     override suspend fun connect(profileId: Long): Connection {
@@ -122,5 +129,15 @@ class ConnectionRepositoryImpl @Inject constructor(
                 connectedSince = session.connectedAt,
             )
         }
+    }
+
+    private companion object {
+        // Kept in sync with AddEditConnectionViewModel.KEYSTORE_ALIAS_PREFIX.
+        // The ViewModel mints aliases with this prefix for every PASSWORD
+        // profile it saves; the repo uses it as the cleanup trigger on
+        // delete. Extracting the constant to a shared domain type would
+        // require an inter-module utility that doesn't yet exist — the
+        // duplication is explicit so the relationship is visible.
+        const val MANAGED_ALIAS_PREFIX = "kref_"
     }
 }
