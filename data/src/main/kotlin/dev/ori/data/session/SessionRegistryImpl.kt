@@ -1,8 +1,9 @@
 package dev.ori.data.session
 
 import dev.ori.core.network.ssh.SshClient
+import dev.ori.data.dao.ServerProfileDao
+import dev.ori.data.mapper.toDomain
 import dev.ori.domain.model.Session
-import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.CredentialStore
 import dev.ori.domain.repository.SessionRegistry
 import kotlinx.coroutines.CoroutineScope
@@ -24,12 +25,18 @@ import javax.inject.Singleton
  * The registry owns an internal supervisor scope so in-flight connects
  * survive ViewModel deaths — the coroutine that runs a TCP handshake
  * must not be cancelled just because the activity rotated.
+ *
+ * Injects [ServerProfileDao] directly rather than going through
+ * `ConnectionRepository` because `ConnectionRepositoryImpl` itself
+ * depends on this registry — a Dagger-level dependency cycle would
+ * otherwise form (registry → repo → registry). The Dao is the narrow
+ * dependency the profile-lookup actually needs.
  */
 @Singleton
 class SessionRegistryImpl @Inject constructor(
     private val sshClient: SshClient,
     private val credentialStore: CredentialStore,
-    private val connectionRepository: ConnectionRepository,
+    private val serverProfileDao: ServerProfileDao,
 ) : SessionRegistry {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -63,7 +70,7 @@ class SessionRegistryImpl @Inject constructor(
     }
 
     private suspend fun runConnect(profileId: Long): Result<Session> = runCatching {
-        val profile = connectionRepository.getProfileById(profileId)
+        val profile = serverProfileDao.getById(profileId)?.toDomain()
             ?: error("Profile not found: $profileId")
         val password = credentialStore.getPassword(profile.credentialRef)
         val sshSession = sshClient.connect(

@@ -6,8 +6,9 @@ import dev.ori.core.common.model.AuthMethod
 import dev.ori.core.common.model.Protocol
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.core.network.ssh.SshSession
+import dev.ori.data.dao.ServerProfileDao
+import dev.ori.data.mapper.toEntity
 import dev.ori.domain.model.ServerProfile
-import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.CredentialStore
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -26,7 +27,7 @@ class SessionRegistryImplTest {
 
     private val sshClient = mockk<SshClient>(relaxed = true)
     private val credentialStore = mockk<CredentialStore>(relaxed = true)
-    private val connectionRepository = mockk<ConnectionRepository>(relaxed = true)
+    private val serverProfileDao = mockk<ServerProfileDao>(relaxed = true)
 
     private val testProfile = ServerProfile(
         id = 1L,
@@ -39,10 +40,10 @@ class SessionRegistryImplTest {
         credentialRef = "kref_test",
     )
 
-    private fun registry() = SessionRegistryImpl(sshClient, credentialStore, connectionRepository)
+    private fun registry() = SessionRegistryImpl(sshClient, credentialStore, serverProfileDao)
 
     private fun stubProfileA() {
-        coEvery { connectionRepository.getProfileById(1L) } returns testProfile
+        coEvery { serverProfileDao.getById(1L) } returns testProfile.toEntity()
         coEvery { credentialStore.getPassword("kref_test") } returns "pw".toCharArray()
         coEvery {
             sshClient.connect(
@@ -57,7 +58,7 @@ class SessionRegistryImplTest {
 
     private fun stubProfileB() {
         val profileB = testProfile.copy(id = 2L, name = "dev-vm", host = "dev.local")
-        coEvery { connectionRepository.getProfileById(2L) } returns profileB
+        coEvery { serverProfileDao.getById(2L) } returns profileB.toEntity()
         coEvery { credentialStore.getPassword("kref_test") } returns "pw".toCharArray()
         coEvery {
             sshClient.connect(
@@ -174,7 +175,7 @@ class SessionRegistryImplTest {
 
     @Test
     fun `cancelConnect cancels in-flight handshake and leaves openSessions empty`() = runTest {
-        coEvery { connectionRepository.getProfileById(1L) } returns testProfile
+        coEvery { serverProfileDao.getById(1L) } returns testProfile.toEntity()
         coEvery { credentialStore.getPassword("kref_test") } returns "secret".toCharArray()
         // Handshake blocks forever until cancelled — simulates an in-flight SSH connect.
         coEvery {
@@ -209,7 +210,7 @@ class SessionRegistryImplTest {
 
     @Test
     fun `disconnect with unknown sessionId during in-flight connect is a no-op`() = runTest {
-        coEvery { connectionRepository.getProfileById(1L) } returns testProfile
+        coEvery { serverProfileDao.getById(1L) } returns testProfile.toEntity()
         coEvery { credentialStore.getPassword("kref_test") } returns "secret".toCharArray()
         coEvery {
             sshClient.connect(any(), any(), any(), any<CharArray>(), any())
