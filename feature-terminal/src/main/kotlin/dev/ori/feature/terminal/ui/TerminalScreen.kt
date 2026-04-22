@@ -60,9 +60,7 @@ import org.connectbot.terminal.TerminalEmulator
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-@Suppress("UnusedParameter")
 fun TerminalScreen(
-    initialProfileId: Long? = null,
     viewModel: TerminalViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()

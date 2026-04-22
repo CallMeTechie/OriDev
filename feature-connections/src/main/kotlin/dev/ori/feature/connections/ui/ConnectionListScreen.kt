@@ -68,8 +68,13 @@ fun ConnectionListScreen(
     onNavigateToAdd: () -> Unit = {},
     onNavigateToEdit: (Long) -> Unit = {},
     onNavigateToProxmox: () -> Unit = {},
-    onOpenTerminal: (Long) -> Unit = {},
-    onOpenFileManager: (Long) -> Unit = {},
+    // PR 2 — sessionId placeholder. The detail sheet will fill these in
+    // via `sessionRegistry.connect(profileId).getOrThrow().id` in a
+    // follow-up chunk; for now we pass "" so the host's
+    // `sessionRegistry.focus(sessionId)` is a harmless no-op and the
+    // user still lands on the correct bottom-tab base route.
+    onOpenTerminal: (sessionId: String) -> Unit = {},
+    onOpenFileManager: (sessionId: String) -> Unit = {},
     viewModel: ConnectionListViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -144,12 +149,15 @@ fun ConnectionListScreen(
             onOpenTerminal = {
                 scope.launch { sheetState.hide() }
                 selectedProfile = null
-                onOpenTerminal(profile.id)
+                // PR 2 — empty sessionId until the sheet is rewired to
+                // perform `sessionRegistry.connect(profile.id)` up-front
+                // and forward the resulting session.id here.
+                onOpenTerminal("")
             },
             onOpenFileManager = {
                 scope.launch { sheetState.hide() }
                 selectedProfile = null
-                onOpenFileManager(profile.id)
+                onOpenFileManager("")
             },
         )
     }

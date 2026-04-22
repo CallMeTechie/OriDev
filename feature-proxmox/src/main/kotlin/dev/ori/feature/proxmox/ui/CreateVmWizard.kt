@@ -49,7 +49,11 @@ private const val TOTAL_STEPS = 4
 @Composable
 @Suppress("LongMethod")
 fun CreateVmWizard(
-    onNavigateToTerminal: (profileId: Long) -> Unit,
+    // PR 2 — the phantom `terminal/{profileId}` route is gone; callers
+    // now hop to the Terminal top-level tab and the user picks the
+    // freshly-provisioned VM from there. A follow-up chunk will restore
+    // the "jump straight into this VM" UX through sessionRegistry.connect.
+    onNavigateToTerminal: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: CreateVmWizardViewModel = hiltViewModel(),
@@ -87,7 +91,7 @@ fun CreateVmWizard(
                 WizardStep.CONNECTING -> ProgressStep("Waiting for SSH...")
                 WizardStep.DONE -> DoneStep(
                     state = state,
-                    onOpenTerminal = { profileId -> onNavigateToTerminal(profileId) },
+                    onOpenTerminal = onNavigateToTerminal,
                     onBack = onBack,
                 )
             }
@@ -346,7 +350,7 @@ private fun ProgressStep(message: String) {
 @Composable
 private fun DoneStep(
     state: CreateVmWizardState,
-    onOpenTerminal: (profileId: Long) -> Unit,
+    onOpenTerminal: () -> Unit,
     onBack: () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -373,9 +377,8 @@ private fun DoneStep(
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 Text("VM ready!", style = MaterialTheme.typography.titleMedium)
-                val profileId = state.resultSshProfileId
-                if (profileId != null) {
-                    Button(onClick = { onOpenTerminal(profileId) }) {
+                if (state.resultSshProfileId != null) {
+                    Button(onClick = onOpenTerminal) {
                         Text("Open Terminal")
                     }
                 }

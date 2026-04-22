@@ -16,8 +16,13 @@ const val EDIT_CONNECTION_ROUTE = "connections/edit/{profileId}"
 fun NavGraphBuilder.connectionsScreen(
     navController: NavController,
     onNavigateToProxmox: () -> Unit = {},
-    onOpenTerminal: (Long) -> Unit = {},
-    onOpenFileManager: (Long) -> Unit = {},
+    // PR 2 — future-proofing for the Chunk that rewires the detail sheet
+    // to `sessionRegistry.connect(profileId).getOrThrow().id`. The host
+    // (OriDevNavHost) calls `sessionRegistry.focus(sessionId)` + top-level
+    // nav when this fires, so the lambda deals in session ids, not
+    // profile ids.
+    onOpenTerminal: (sessionId: String) -> Unit = {},
+    onOpenFileManager: (sessionId: String) -> Unit = {},
 ) {
     composable(route = CONNECTIONS_ROUTE) {
         ConnectionListScreen(
