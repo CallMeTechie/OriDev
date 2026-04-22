@@ -6,15 +6,16 @@ import com.google.common.truth.Truth.assertThat
 import dev.ori.core.common.result.appSuccess
 import dev.ori.core.network.ssh.ShellHandle
 import dev.ori.core.network.ssh.SshClient
-import dev.ori.core.network.ssh.SshSession
 import dev.ori.core.security.clipboard.OriClipboard
 import dev.ori.domain.model.CommandSnippet
 import dev.ori.domain.model.KeyboardMode
+import dev.ori.domain.model.Session
 import dev.ori.domain.model.SessionRecording
 import dev.ori.domain.preferences.KeyboardPreferences
 import dev.ori.domain.repository.ClaudeRepository
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRecordingRepository
+import dev.ori.domain.repository.SessionRegistry
 import dev.ori.domain.usecase.AddSnippetUseCase
 import dev.ori.domain.usecase.DeleteSnippetUseCase
 import dev.ori.domain.usecase.ExportSessionRecordingUseCase
@@ -48,6 +49,7 @@ class TerminalViewModelTest {
 
     private val sshClient = mockk<SshClient>(relaxed = true)
     private val connectionRepository = mockk<ConnectionRepository>(relaxed = true)
+    private val sessionRegistry = mockk<SessionRegistry>(relaxed = true)
     private val getSnippetsUseCase = mockk<GetSnippetsUseCase>()
     private val addSnippetUseCase = mockk<AddSnippetUseCase>(relaxed = true)
     private val updateSnippetUseCase = mockk<UpdateSnippetUseCase>(relaxed = true)
@@ -87,6 +89,7 @@ class TerminalViewModelTest {
         return TerminalViewModel(
             sshClient = sshClient,
             connectionRepository = connectionRepository,
+            sessionRegistry = sessionRegistry,
             getSnippetsUseCase = getSnippetsUseCase,
             addSnippetUseCase = addSnippetUseCase,
             updateSnippetUseCase = updateSnippetUseCase,
@@ -114,24 +117,19 @@ class TerminalViewModelTest {
             onClose = {},
         )
 
-        // Phase 12 S1 — SshClient.connect now has two overloads (String +
-        // CharArray password). Disambiguate MockK's `any()` matchers by
-        // specifying the CharArray overload via explicit type on the
-        // password matcher.
-        coEvery {
-            sshClient.connect(
-                any<String>(),
-                any<Int>(),
-                any<String>(),
-                any<CharArray>(),
-                any(),
-            )
-        } returns SshSession(
-            sessionId = "session-1",
-            profileId = 1L,
-            host = "192.168.1.1",
-            port = 22,
-            connectedAt = System.currentTimeMillis(),
+        // PR session-registry — Terminal's createTab now routes through
+        // SessionRegistry.connect(profileId) instead of calling
+        // sshClient.connect directly. Stub the registry to return a
+        // domain Session; the shell channel still goes through SshClient.
+        coEvery { sessionRegistry.connect(any()) } returns kotlin.Result.success(
+            Session(
+                id = "session-1",
+                profileId = 1L,
+                profileName = "Server 1",
+                host = "192.168.1.1",
+                port = 22,
+                connectedAt = System.currentTimeMillis(),
+            ),
         )
         coEvery { sshClient.openShell(any(), any(), any()) } returns shellHandle
     }
@@ -535,7 +533,8 @@ class TerminalViewModelTest {
 
     @Test
     fun `clearError clears error`() = runTest {
-        coEvery { connectionRepository.getProfileById(any()) } returns null
+        coEvery { sessionRegistry.connect(any()) } returns
+            kotlin.Result.failure(IllegalStateException("Profile not found"))
 
         val viewModel = createViewModel()
 
