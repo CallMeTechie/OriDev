@@ -18,6 +18,7 @@ import dev.ori.domain.model.CommandSnippet
 import dev.ori.domain.preferences.KeyboardPreferences
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRecordingRepository
+import dev.ori.domain.repository.SessionRegistry
 import dev.ori.domain.usecase.AddSnippetUseCase
 import dev.ori.domain.usecase.DeleteSnippetUseCase
 import dev.ori.domain.usecase.ExportSessionRecordingUseCase
@@ -49,6 +50,7 @@ import kotlin.time.Duration.Companion.milliseconds
 class TerminalViewModel @Inject constructor(
     private val sshClient: SshClient,
     private val connectionRepository: ConnectionRepository,
+    private val sessionRegistry: SessionRegistry,
     private val getSnippetsUseCase: GetSnippetsUseCase,
     private val addSnippetUseCase: AddSnippetUseCase,
     private val updateSnippetUseCase: UpdateSnippetUseCase,
@@ -177,17 +179,14 @@ class TerminalViewModel @Inject constructor(
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val profile = connectionRepository.getProfileById(profileId)
-                    ?: throw IllegalStateException("Profile not found: $profileId")
+                val session = sessionRegistry.connect(profileId).getOrElse { cause ->
+                    throw IllegalStateException(
+                        "Session handshake failed for profileId=$profileId",
+                        cause,
+                    )
+                }
 
-                val session = sshClient.connect(
-                    host = profile.host,
-                    port = profile.port,
-                    username = profile.username,
-                    password = profile.credentialRef.toCharArray(),
-                )
-
-                val shellHandle = sshClient.openShell(session.sessionId)
+                val shellHandle = sshClient.openShell(session.id)
                 shellHandles[tabId] = shellHandle
 
                 val emulator = emulatorProvider.create(
