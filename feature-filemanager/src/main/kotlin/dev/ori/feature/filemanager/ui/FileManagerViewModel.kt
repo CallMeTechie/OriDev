@@ -13,6 +13,7 @@ import dev.ori.domain.repository.FileSystemRepository
 import dev.ori.domain.repository.LocalFileSystem
 import dev.ori.domain.repository.RemoteFileSystem
 import dev.ori.domain.repository.RemoteFileSystemSession
+import dev.ori.domain.repository.SessionRegistry
 import dev.ori.domain.repository.StorageAccessRepository
 import dev.ori.domain.usecase.ChmodUseCase
 import dev.ori.domain.usecase.CreateDirectoryUseCase
@@ -37,6 +38,7 @@ class FileManagerViewModel @Inject constructor(
     @LocalFileSystem private val localRepository: FileSystemRepository,
     @RemoteFileSystem private val remoteRepository: FileSystemRepository,
     private val remoteSession: RemoteFileSystemSession,
+    private val sessionRegistry: SessionRegistry,
     private val connectionRepository: ConnectionRepository,
     private val listFilesUseCase: ListFilesUseCase,
     private val deleteFileUseCase: DeleteFileUseCase,
@@ -79,6 +81,7 @@ class FileManagerViewModel @Inject constructor(
             val sessionId = connectionRepository.getActiveSessionId(profileId)
             if (sessionId != null) {
                 remoteSession.setActiveSession(sessionId)
+                sessionRegistry.markFilesUsed(sessionId)
                 // Prime the right pane with the remote root so the user
                 // doesn't have to tap an empty breadcrumb to kick off the
                 // first listing.
