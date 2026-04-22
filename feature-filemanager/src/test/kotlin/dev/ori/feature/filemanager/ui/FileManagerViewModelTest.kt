@@ -5,6 +5,7 @@ import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import dev.ori.domain.model.FileItem
 import dev.ori.domain.model.GrantedTree
+import dev.ori.domain.model.Session
 import dev.ori.domain.repository.BookmarkRepository
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.FileSystemRepository
@@ -81,6 +82,11 @@ class FileManagerViewModelTest {
         Dispatchers.setMain(testDispatcher)
         every { bookmarkRepository.getBookmarksForServer(any()) } returns flowOf(emptyList())
         every { storageAccessRepository.grantedTrees } returns grantedTreesFlow
+        // PR 3 — default registry flows so ViewModel.init's
+        // observeFocusedSession + exposed StateFlows have something to
+        // collect from. Individual tests can override.
+        every { sessionRegistry.focusedSessionId } returns MutableStateFlow<String?>(null)
+        every { sessionRegistry.openSessions } returns MutableStateFlow<List<Session>>(emptyList())
         coEvery { localRepository.listFiles(any()) } returns sampleFiles
         coEvery { remoteRepository.listFiles(any()) } returns emptyList()
     }
@@ -326,6 +332,41 @@ class FileManagerViewModelTest {
         assertThat(state.previewContent).isEqualTo("preview bytes")
         assertThat(state.previewLoading).isFalse()
         assertThat(state.previewError).isNull()
+    }
+
+    @Test
+    fun `SelectAll toggles — second tap clears selection`() = runTest {
+        grantedTreesFlow.value = listOf(sampleTree)
+        val viewModel = createViewModel()
+
+        viewModel.onEvent(FileManagerEvent.SelectAllFiles(ActivePane.LEFT))
+        assertThat(viewModel.uiState.value.leftPane.selectedFiles).hasSize(sampleFiles.size)
+
+        viewModel.onEvent(FileManagerEvent.SelectAllFiles(ActivePane.LEFT))
+        assertThat(viewModel.uiState.value.leftPane.selectedFiles).isEmpty()
+    }
+
+    @Test
+    fun `focus change with 300ms debounce triggers remote list reload`() = runTest {
+        val focusFlow = MutableStateFlow<String?>(null)
+        every { sessionRegistry.focusedSessionId } returns focusFlow
+        every { sessionRegistry.openSessions } returns MutableStateFlow(
+            listOf(Session("s-A", 1L, "NAS", "nas.local", 22, 1L)),
+        )
+        coEvery { remoteRepository.listFiles("/") } returns emptyList()
+
+        createViewModel()
+        focusFlow.value = "s-A"
+
+        testScheduler.advanceTimeBy(100L)
+        testScheduler.runCurrent()
+        // Below debounce — effect hasn't fired yet.
+        coVerify(exactly = 0) { remoteSession.setActiveSession("s-A") }
+
+        testScheduler.advanceTimeBy(300L)
+        testScheduler.advanceUntilIdle()
+        coVerify { remoteSession.setActiveSession("s-A") }
+        coVerify { sessionRegistry.markFilesUsed("s-A") }
     }
 
     @Test

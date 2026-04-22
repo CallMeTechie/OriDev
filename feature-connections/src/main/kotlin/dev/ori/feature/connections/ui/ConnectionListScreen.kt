@@ -242,6 +242,8 @@ fun ConnectionListScreen(
                 onToggleFavorite = { profile ->
                     viewModel.onEvent(ConnectionListEvent.ToggleFavorite(profile))
                 },
+                onReconnectAll = { viewModel.reconnectAll() },
+                onDismissReconnectBanner = { viewModel.dismissReconnectBanner() },
             )
         }
     }
@@ -280,6 +282,8 @@ private fun ConnectionListBody(
     onProfileTap: (ServerProfile) -> Unit,
     onQuickDisconnect: (Long) -> Unit,
     onToggleFavorite: (ServerProfile) -> Unit,
+    onReconnectAll: () -> Unit,
+    onDismissReconnectBanner: () -> Unit,
 ) {
     if (uiState.isLoading) {
         Box(
@@ -307,7 +311,14 @@ private fun ConnectionListBody(
         .filter(matches)
     val filteredAll = uiState.profiles.filter(matches)
 
-    if (filteredActive.isEmpty() && filteredFavorites.isEmpty() && filteredAll.isEmpty()) {
+    // PR 3 Section 11 — an active reconnect banner means non-empty
+    // persistence; in that case we always render the list even if the
+    // filtered sections collapse to empty, otherwise the banner (which
+    // is the whole point of this screen after a kill) would vanish.
+    val bannerVisible = uiState.reconnectBannerProfiles.isNotEmpty()
+    val allSectionsEmpty =
+        filteredActive.isEmpty() && filteredFavorites.isEmpty() && filteredAll.isEmpty()
+    if (!bannerVisible && allSectionsEmpty) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center,
@@ -330,6 +341,15 @@ private fun ConnectionListBody(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (bannerVisible) {
+            item(key = "reconnect-banner") {
+                ReconnectBanner(
+                    count = uiState.reconnectBannerProfiles.size,
+                    onReconnect = onReconnectAll,
+                    onDismiss = onDismissReconnectBanner,
+                )
+            }
+        }
         if (filteredActive.isNotEmpty()) {
             item(key = "section-active") { SectionHeader(text = "Aktiv") }
             items(

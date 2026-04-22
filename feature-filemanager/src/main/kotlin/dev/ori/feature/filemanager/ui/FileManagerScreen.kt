@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,6 +47,7 @@ import dev.ori.feature.premium.ui.AdSlotHost
 fun FileManagerScreen(
     viewModel: FileManagerViewModel = hiltViewModel(),
     onNavigateToEditor: (filePath: String, isRemote: Boolean) -> Unit = { _, _ -> },
+    onNavigateToConnections: () -> Unit = {},
 ) {
     // PR 2 — the phantom `filemanager/{profileId}` route is gone; entry via
     // registry focus + navigateToTopLevel means the ViewModel's
@@ -197,6 +199,12 @@ fun FileManagerScreen(
                 onShowChmod = { pane, file -> chmodTarget = pane to file },
                 onShowMkdir = { pane -> mkdirTarget = pane },
             )
+            // PR 3 — remote pane surfaces (header dropdown, empty state
+            // CTA) collect registry state here once and pass it down so
+            // both the folded and unfolded layouts see the same values.
+            val openSessions by viewModel.openSessions.collectAsStateWithLifecycle()
+            val focusedSessionId by viewModel.focusedSessionId.collectAsStateWithLifecycle()
+
             if (isFolded) {
                 // Single pane with tab switching
                 FoldedContent(
@@ -204,6 +212,10 @@ fun FileManagerScreen(
                     onEvent = viewModel::onEvent,
                     dialogCallbacks = dialogCallbacks,
                     onPickFolder = { safLauncher.launch(null) },
+                    openSessions = openSessions,
+                    focusedSessionId = focusedSessionId,
+                    onFocusSession = viewModel::focusSession,
+                    onNavigateToConnections = onNavigateToConnections,
                 )
             } else {
                 // Dual pane layout
@@ -213,6 +225,10 @@ fun FileManagerScreen(
                     viewModel = viewModel,
                     dialogCallbacks = dialogCallbacks,
                     onPickFolder = { safLauncher.launch(null) },
+                    openSessions = openSessions,
+                    focusedSessionId = focusedSessionId,
+                    onFocusSession = viewModel::focusSession,
+                    onNavigateToConnections = onNavigateToConnections,
                 )
             }
         }
@@ -319,6 +335,10 @@ private fun FoldedContent(
     onEvent: (FileManagerEvent) -> Unit,
     dialogCallbacks: FileOpCallbacks,
     onPickFolder: () -> Unit,
+    openSessions: List<dev.ori.domain.model.Session>,
+    focusedSessionId: String?,
+    onFocusSession: (String) -> Unit,
+    onNavigateToConnections: () -> Unit,
 ) {
     val selectedTabIndex = if (uiState.activePane == ActivePane.LEFT) 0 else 1
 
@@ -342,10 +362,21 @@ private fun FoldedContent(
     val pane = uiState.activePane
     val paneState = if (pane == ActivePane.LEFT) uiState.leftPane else uiState.rightPane
 
-    if (pane == ActivePane.LEFT && uiState.grantedTrees.isEmpty()) {
-        StorageAccessEmptyState(onPickFolder = onPickFolder)
-    } else {
-        PaneContent(
+    when {
+        pane == ActivePane.LEFT && uiState.grantedTrees.isEmpty() ->
+            StorageAccessEmptyState(onPickFolder = onPickFolder)
+
+        pane == ActivePane.RIGHT -> RemotePaneWithHeader(
+            paneState = paneState,
+            openSessions = openSessions,
+            focusedSessionId = focusedSessionId,
+            onFocusSession = onFocusSession,
+            onNavigateToConnections = onNavigateToConnections,
+            onEvent = onEvent,
+            dialogCallbacks = dialogCallbacks,
+        )
+
+        else -> PaneContent(
             paneState = paneState,
             pane = pane,
             onEvent = onEvent,
@@ -361,6 +392,10 @@ private fun UnfoldedContent(
     viewModel: FileManagerViewModel,
     dialogCallbacks: FileOpCallbacks,
     onPickFolder: () -> Unit,
+    openSessions: List<dev.ori.domain.model.Session>,
+    focusedSessionId: String?,
+    onFocusSession: (String) -> Unit,
+    onNavigateToConnections: () -> Unit,
 ) {
     DualPaneLayout(
         splitRatio = uiState.splitRatio,
@@ -380,15 +415,90 @@ private fun UnfoldedContent(
             }
         },
         rightPane = {
-            PaneContent(
+            RemotePaneWithHeader(
                 paneState = uiState.rightPane,
+                openSessions = openSessions,
+                focusedSessionId = focusedSessionId,
+                onFocusSession = onFocusSession,
+                onNavigateToConnections = onNavigateToConnections,
+                onEvent = onEvent,
+                dialogCallbacks = dialogCallbacks,
+                viewModel = viewModel,
+            )
+        },
+    )
+}
+
+/**
+ * PR 3 — composes the [RemotePaneHeader] dropdown on top of either a
+ * [RemoteEmptyState] (when no sessions are open) or the regular
+ * [PaneContent] for the RIGHT pane. Pulled into its own composable so
+ * both folded and unfolded layouts get identical behaviour without
+ * duplicating the header + empty-state split.
+ */
+@Composable
+private fun RemotePaneWithHeader(
+    paneState: PaneState,
+    openSessions: List<dev.ori.domain.model.Session>,
+    focusedSessionId: String?,
+    onFocusSession: (String) -> Unit,
+    onNavigateToConnections: () -> Unit,
+    onEvent: (FileManagerEvent) -> Unit,
+    dialogCallbacks: FileOpCallbacks,
+    viewModel: FileManagerViewModel? = null,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        RemotePaneHeader(
+            openSessions = openSessions,
+            focusedSessionId = focusedSessionId,
+            onFocusSession = onFocusSession,
+        )
+        if (openSessions.isEmpty()) {
+            RemoteEmptyState(onNavigateToConnections = onNavigateToConnections)
+        } else {
+            PaneContent(
+                paneState = paneState,
                 pane = ActivePane.RIGHT,
                 onEvent = onEvent,
                 viewModel = viewModel,
                 dialogCallbacks = dialogCallbacks,
             )
-        },
-    )
+        }
+    }
+}
+
+/**
+ * PR 3 — placeholder for the right pane when no SSH session is focused
+ * (fresh launch, user disconnected the last session, etc.). The CTA
+ * sends the user to Connections where they can open a server.
+ */
+@Composable
+private fun RemoteEmptyState(onNavigateToConnections: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "Keine aktive Verbindung",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Öffne einen Server in der Connections-Liste.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(16.dp))
+        Button(onClick = onNavigateToConnections) {
+            Text("Zu Connections")
+        }
+    }
 }
 
 /**

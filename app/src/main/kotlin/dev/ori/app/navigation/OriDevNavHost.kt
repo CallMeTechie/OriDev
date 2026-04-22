@@ -72,9 +72,18 @@ fun OriDevNavHost(
             onNavigateToEditor = { filePath, isRemote ->
                 navController.navigateToEditor(filePath, isRemote)
             },
+            // PR 3 — empty-state CTA on the remote pane.
+            onNavigateToConnections = {
+                navController.navigateToTopLevelRoute(CONNECTIONS_ROUTE)
+            },
         )
 
-        terminalScreen()
+        terminalScreen(
+            // PR 3 — empty-state CTA when no terminal sessions are open.
+            onNavigateToConnections = {
+                navController.navigateToTopLevelRoute(CONNECTIONS_ROUTE)
+            },
+        )
 
         transferQueueScreen()
 

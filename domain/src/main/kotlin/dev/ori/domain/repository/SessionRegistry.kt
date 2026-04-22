@@ -28,6 +28,18 @@ interface SessionRegistry {
     val focusedSessionId: StateFlow<String?>
 
     /**
+     * Set of profileIds that had open sessions at the last registry
+     * emission. Survives process death (persisted via DataStore).
+     * Consumed by UI surfaces that want to offer post-kill reconnect
+     * (spec Section 11 safety-net — devil's-advocate concern 4): if
+     * [openSessions] is empty but this set is non-empty, the OS killed
+     * the app mid-flight and the user's prior sessions are recoverable
+     * without a password prompt because credentials live in the
+     * Keystore (#171).
+     */
+    val persistedProfileIds: StateFlow<Set<Long>>
+
+    /**
      * Establish a session for [profileId]. Routes through
      * `CredentialStore.getPassword` (Keystore, post-PR #171) and the
      * TOFU host-key verifier. Coalesces concurrent callers for the
@@ -91,4 +103,13 @@ interface SessionRegistry {
 
     /** Cancel a pending grace disconnect for [sessionId], if any. */
     fun cancelGraceDisconnect(sessionId: String)
+
+    /**
+     * Clear the persisted profile-id set (spec Section 11). Invoked by
+     * the Connections reconnect banner's "Schließen" action so a
+     * dismissed banner does not reappear on the next app launch.
+     * Does not touch [openSessions] — those are the live registry
+     * entries for sessions that are already re-established.
+     */
+    suspend fun clearPersistedProfileIds()
 }

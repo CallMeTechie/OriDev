@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.ori.core.common.model.TransferDirection
 import dev.ori.core.common.result.getAppError
 import dev.ori.core.security.crash.NonFatalErrorLogger
+import dev.ori.domain.model.Session
 import dev.ori.domain.model.TransferRequest
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.FileSystemRepository
@@ -22,17 +23,24 @@ import dev.ori.domain.usecase.EnqueueTransferUseCase
 import dev.ori.domain.usecase.GetBookmarksUseCase
 import dev.ori.domain.usecase.ListFilesUseCase
 import dev.ori.domain.usecase.RenameFileUseCase
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
 private const val MAX_PATH_STACK_SIZE = 50
 
+@OptIn(FlowPreview::class)
 @HiltViewModel
 class FileManagerViewModel @Inject constructor(
     @LocalFileSystem private val localRepository: FileSystemRepository,
@@ -63,6 +71,29 @@ class FileManagerViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(FileManagerUiState())
     val uiState: StateFlow<FileManagerUiState> = _uiState.asStateFlow()
 
+    /**
+     * PR 3 — per-session memo of the last path visited in the remote
+     * (RIGHT) pane. When the user flips tabs between two open SSH
+     * sessions, [observeFocusedSession] reads this so the returning
+     * session lands back on "/data/projects" instead of being reset to
+     * the remote root.
+     */
+    private val lastRemotePath = ConcurrentHashMap<String, String>()
+
+    /**
+     * PR 3 — dropdown data for [RemotePaneHeader]. Hot StateFlow mirrors
+     * of the registry so the Compose layer can collect them via
+     * [androidx.lifecycle.compose.collectAsStateWithLifecycle] without
+     * having to hold a direct reference to the registry.
+     */
+    val openSessions: StateFlow<List<Session>> =
+        sessionRegistry.openSessions
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(FOCUS_SUBSCRIPTION_TIMEOUT_MS), emptyList())
+
+    val focusedSessionId: StateFlow<String?> =
+        sessionRegistry.focusedSessionId
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(FOCUS_SUBSCRIPTION_TIMEOUT_MS), null)
+
     init {
         // Phase 15 Task 15.6 — no more Environment.getExternalStorageDirectory.
         // The local pane stays empty until the user has granted at least
@@ -73,6 +104,36 @@ class FileManagerViewModel @Inject constructor(
         observeGrantedTrees()
         loadBookmarks()
         bindRemoteSession()
+        observeFocusedSession()
+    }
+
+    /**
+     * PR 3 — react to the user switching the focused session (via the
+     * RemotePaneHeader dropdown or the Connections sheet) by wiring the
+     * remote FS session and reloading the right pane. Debounced so rapid
+     * tab flipping doesn't thrash `listFiles` calls; [distinctUntilChanged]
+     * means a no-op re-emission (e.g. an unrelated [SessionRegistry]
+     * update that keeps `focusedSessionId` the same value) doesn't
+     * trigger an extra reload.
+     */
+    private fun observeFocusedSession() {
+        viewModelScope.launch {
+            sessionRegistry.focusedSessionId
+                .debounce(FOCUS_DEBOUNCE_MS)
+                .distinctUntilChanged()
+                .collect { sessionId ->
+                    if (sessionId != null) {
+                        remoteSession.setActiveSession(sessionId)
+                        sessionRegistry.markFilesUsed(sessionId)
+                        val path = lastRemotePath[sessionId] ?: "/"
+                        navigateToPath(ActivePane.RIGHT, path)
+                    } else {
+                        updatePaneState(ActivePane.RIGHT) {
+                            it.copy(currentPath = "", files = emptyList())
+                        }
+                    }
+                }
+        }
     }
 
     private fun bindRemoteSession() {
@@ -222,6 +283,15 @@ class FileManagerViewModel @Inject constructor(
 
     companion object {
         private const val MAX_PREVIEW_BYTES = 100_000
+
+        // PR 3 — 300 ms swallows rapid tab flipping between sessions
+        // without adding perceptible lag to a deliberate user switch.
+        private const val FOCUS_DEBOUNCE_MS = 300L
+
+        // Keep the upstream registry flow subscribed for 5 s after the
+        // last Compose collector leaves so configuration changes don't
+        // immediately drop and re-establish the subscription.
+        private const val FOCUS_SUBSCRIPTION_TIMEOUT_MS = 5_000L
     }
 
     private fun getRepository(pane: ActivePane): FileSystemRepository =
@@ -232,6 +302,14 @@ class FileManagerViewModel @Inject constructor(
 
     private fun navigateToPath(pane: ActivePane, path: String) {
         if (path.isEmpty()) return
+        // PR 3 — remember the last path the user visited on this remote
+        // session so a later focus-flip brings them back to it instead
+        // of resetting to the remote root.
+        if (pane == ActivePane.RIGHT) {
+            sessionRegistry.focusedSessionId.value?.let { sessionId ->
+                lastRemotePath[sessionId] = path
+            }
+        }
         viewModelScope.launch {
             updatePaneState(pane) { it.copy(isLoading = true, error = null) }
 
@@ -309,8 +387,18 @@ class FileManagerViewModel @Inject constructor(
 
     private fun selectAllFiles(pane: ActivePane) {
         updatePaneState(pane) { current ->
-            current.copy(selectedFiles = current.files.map { it.path }.toSet())
+            // PR 3 bugfix — a second tap on "Alle auswählen" now toggles
+            // the selection off again instead of re-setting it to the
+            // same full list (which looked like a dead button to the
+            // user because the UI didn't visibly change).
+            val allPaths = current.files.map { it.path }.toSet()
+            val next = if (current.selectedFiles == allPaths) emptySet() else allPaths
+            current.copy(selectedFiles = next)
         }
+    }
+
+    fun focusSession(sessionId: String) {
+        sessionRegistry.focus(sessionId)
     }
 
     private fun clearSelection(pane: ActivePane) {

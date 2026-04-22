@@ -15,8 +15,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
@@ -42,6 +44,7 @@ class SessionRegistryImpl(
     private val credentialStore: CredentialStore,
     private val serverProfileDao: ServerProfileDao,
     private val serviceLifecycleBinder: ServiceLifecycleBinder,
+    private val sessionPersistence: SessionPersistencePreferences,
     registryDispatcher: CoroutineDispatcher,
 ) : SessionRegistry {
 
@@ -60,7 +63,15 @@ class SessionRegistryImpl(
         credentialStore: CredentialStore,
         serverProfileDao: ServerProfileDao,
         serviceLifecycleBinder: ServiceLifecycleBinder,
-    ) : this(sshClient, credentialStore, serverProfileDao, serviceLifecycleBinder, Dispatchers.IO)
+        sessionPersistence: SessionPersistencePreferences,
+    ) : this(
+        sshClient,
+        credentialStore,
+        serverProfileDao,
+        serviceLifecycleBinder,
+        sessionPersistence,
+        Dispatchers.IO,
+    )
 
     fun interface ServiceLifecycleBinder {
         fun onOpenSessionsChanged(anyOpen: Boolean)
@@ -73,6 +84,19 @@ class SessionRegistryImpl(
 
     private val _focusedSessionId = MutableStateFlow<String?>(null)
     override val focusedSessionId: StateFlow<String?> = _focusedSessionId.asStateFlow()
+
+    /**
+     * Read-only projection of [SessionPersistencePreferences.profileIds]
+     * (spec Section 11). `SharingStarted.Eagerly` so the DataStore-backed
+     * flow starts collecting immediately on registry construction —
+     * consumers (the reconnect banner) must see the pre-kill set on the
+     * very first composition after process restart, not after a 5 s
+     * subscription grace. The registry scope lives for the whole process
+     * so this has no teardown concern.
+     */
+    override val persistedProfileIds: StateFlow<Set<Long>> =
+        sessionPersistence.profileIds
+            .stateIn(scope, SharingStarted.Eagerly, emptySet())
 
     /**
      * Pending connects keyed by profileId. Lets concurrent `connect()`
@@ -120,6 +144,7 @@ class SessionRegistryImpl(
         _openSessions.update { it + session }
         _focusedSessionId.value = session.id
         serviceLifecycleBinder.onOpenSessionsChanged(true)
+        persistCurrentProfileIds()
         session
     }
 
@@ -151,6 +176,15 @@ class SessionRegistryImpl(
             _focusedSessionId.value = _openSessions.value.firstOrNull()?.id
         }
         serviceLifecycleBinder.onOpenSessionsChanged(_openSessions.value.isNotEmpty())
+        persistCurrentProfileIds()
+    }
+
+    private fun persistCurrentProfileIds() {
+        scope.launch {
+            sessionPersistence.setProfileIds(
+                _openSessions.value.map { it.profileId }.toSet(),
+            )
+        }
     }
 
     override suspend fun cancelConnect(profileId: Long) {
@@ -177,6 +211,10 @@ class SessionRegistryImpl(
 
     override fun cancelGraceDisconnect(sessionId: String) {
         graceJobs.remove(sessionId)?.cancel()
+    }
+
+    override suspend fun clearPersistedProfileIds() {
+        sessionPersistence.clear()
     }
 
     private companion object {
