@@ -73,7 +73,15 @@ class SessionPersistencePreferences(
 
     override val focusedProfileId: Flow<Long?> =
         dataStore.data.map { prefs ->
-            prefs[Keys.focusedProfileId]?.toLongOrNull()
+            val raw = prefs[Keys.focusedProfileId] ?: return@map null
+            raw.toLongOrNull() ?: run {
+                NonFatalErrorLogger.log(
+                    category = "persist-corrupt",
+                    throwable = IllegalStateException("focused_profile_id not a Long: length=${raw.length}"),
+                    contextNote = "key=focused_profile_id",
+                )
+                null
+            }
         }
 
     override val remotePaths: Flow<Map<Long, String>> =

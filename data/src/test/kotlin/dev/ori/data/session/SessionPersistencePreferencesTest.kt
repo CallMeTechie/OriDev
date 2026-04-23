@@ -128,4 +128,46 @@ class SessionPersistencePreferencesTest {
             unmockkObject(NonFatalErrorLogger)
         }
     }
+
+    @Test
+    fun `corrupt remotePaths blob returns empty map and logs`() = runTest {
+        mockkObject(NonFatalErrorLogger)
+        every {
+            NonFatalErrorLogger.log(category = any(), throwable = any(), contextNote = any())
+        } returns Unit
+        try {
+            dataStore.edit { it[stringPreferencesKey("remote_paths")] = "not-json" }
+            assertThat(prefs.remotePaths.first()).isEmpty()
+            verify(exactly = 1) {
+                NonFatalErrorLogger.log(
+                    category = "persist-corrupt",
+                    throwable = any(),
+                    contextNote = any(),
+                )
+            }
+        } finally {
+            unmockkObject(NonFatalErrorLogger)
+        }
+    }
+
+    @Test
+    fun `malformed focusedProfileId returns null and logs`() = runTest {
+        mockkObject(NonFatalErrorLogger)
+        every {
+            NonFatalErrorLogger.log(category = any(), throwable = any(), contextNote = any())
+        } returns Unit
+        try {
+            dataStore.edit { it[stringPreferencesKey("focused_profile_id")] = "not-a-number" }
+            assertThat(prefs.focusedProfileId.first()).isNull()
+            verify(exactly = 1) {
+                NonFatalErrorLogger.log(
+                    category = "persist-corrupt",
+                    throwable = any(),
+                    contextNote = any(),
+                )
+            }
+        } finally {
+            unmockkObject(NonFatalErrorLogger)
+        }
+    }
 }
