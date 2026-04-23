@@ -73,7 +73,7 @@ interface SessionRegistryEntryPoint {
 }
 
 @Composable
-fun OriDevApp() {
+fun OriDevApp(startDestination: String = CONNECTIONS_ROUTE) {
     OriDevTheme {
         val navController = rememberNavController()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -101,6 +101,7 @@ fun OriDevApp() {
                     OriDevNavHost(
                         navController = navController,
                         sessionRegistry = sessionRegistry,
+                        startDestination = startDestination,
                         modifier = Modifier.padding(innerPadding),
                     )
                 }
@@ -120,6 +121,7 @@ fun OriDevApp() {
                 OriDevNavHost(
                     navController = navController,
                     sessionRegistry = sessionRegistry,
+                    startDestination = startDestination,
                     modifier = Modifier.padding(innerPadding),
                 )
             }

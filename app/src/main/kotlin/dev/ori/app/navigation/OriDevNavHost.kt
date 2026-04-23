@@ -18,20 +18,42 @@ import dev.ori.feature.filemanager.navigation.fileManagerScreen
 import dev.ori.feature.proxmox.navigation.navigateToCreateVm
 import dev.ori.feature.proxmox.navigation.navigateToProxmox
 import dev.ori.feature.proxmox.navigation.proxmoxDashboardScreen
+import dev.ori.feature.settings.navigation.SETTINGS_ROUTE
 import dev.ori.feature.settings.navigation.settingsScreen
 import dev.ori.feature.terminal.navigation.TERMINAL_ROUTE
 import dev.ori.feature.terminal.navigation.terminalScreen
+import dev.ori.feature.transfers.navigation.TRANSFERS_ROUTE
 import dev.ori.feature.transfers.navigation.transferQueueScreen
+
+/**
+ * Top-level tab routes we accept as a cold-start `startDestination`.
+ * Restored from [SessionResumePreferences.lastTopLevelRoute]; anything
+ * outside this allowlist falls back to [CONNECTIONS_ROUTE] so a stale
+ * preferences value can never crash the NavHost with an unknown route.
+ */
+private val KNOWN_TOP_LEVEL_ROUTES = setOf(
+    CONNECTIONS_ROUTE,
+    FILE_MANAGER_ROUTE,
+    TERMINAL_ROUTE,
+    TRANSFERS_ROUTE,
+    SETTINGS_ROUTE,
+)
 
 @Composable
 fun OriDevNavHost(
     navController: NavHostController,
     sessionRegistry: SessionRegistry,
+    startDestination: String = CONNECTIONS_ROUTE,
     modifier: Modifier = Modifier,
 ) {
+    val safeStart = if (startDestination in KNOWN_TOP_LEVEL_ROUTES) {
+        startDestination
+    } else {
+        CONNECTIONS_ROUTE
+    }
     NavHost(
         navController = navController,
-        startDestination = CONNECTIONS_ROUTE,
+        startDestination = safeStart,
         modifier = modifier,
     ) {
         connectionsScreen(
