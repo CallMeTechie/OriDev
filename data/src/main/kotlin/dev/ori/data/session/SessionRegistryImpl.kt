@@ -213,10 +213,6 @@ class SessionRegistryImpl(
         graceJobs.remove(sessionId)?.cancel()
     }
 
-    override suspend fun clearPersistedProfileIds() {
-        sessionPersistence.clear()
-    }
-
     private companion object {
         const val GRACE_MILLIS = 5_000L
     }

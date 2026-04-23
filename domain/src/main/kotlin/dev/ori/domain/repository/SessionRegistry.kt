@@ -103,13 +103,4 @@ interface SessionRegistry {
 
     /** Cancel a pending grace disconnect for [sessionId], if any. */
     fun cancelGraceDisconnect(sessionId: String)
-
-    /**
-     * Clear the persisted profile-id set (spec Section 11). Invoked by
-     * the Connections reconnect banner's "Schließen" action so a
-     * dismissed banner does not reappear on the next app launch.
-     * Does not touch [openSessions] — those are the live registry
-     * entries for sessions that are already re-established.
-     */
-    suspend fun clearPersistedProfileIds()
 }

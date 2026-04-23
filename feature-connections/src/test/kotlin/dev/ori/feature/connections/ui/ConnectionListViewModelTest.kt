@@ -8,6 +8,7 @@ import dev.ori.core.common.result.appSuccess
 import dev.ori.core.security.biometric.CredentialUnlockGate
 import dev.ori.domain.model.ServerProfile
 import dev.ori.domain.model.Session
+import dev.ori.domain.preferences.SessionResumePreferences
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRegistry
 import dev.ori.domain.usecase.ConnectUseCase
@@ -66,6 +67,7 @@ class ConnectionListViewModelTest {
         // deterministic. Tests that exercise the banner override this.
         every { it.persistedProfileIds } returns MutableStateFlow(emptySet<Long>()).asStateFlow()
     }
+    private val sessionResumePrefs = mockk<SessionResumePreferences>(relaxed = true)
 
     private val testProfile = ServerProfile(
         id = 1L,
@@ -101,6 +103,7 @@ class ConnectionListViewModelTest {
             credentialUnlockGate = credentialUnlockGate,
             connectionRepository = connectionRepository,
             sessionRegistry = sessionRegistry,
+            sessionResumePrefs = sessionResumePrefs,
         )
     }
 
@@ -355,12 +358,12 @@ class ConnectionListViewModelTest {
             MutableStateFlow(emptySet<Long>()).asStateFlow()
         every { sessionRegistry.openSessions } returns
             MutableStateFlow<List<Session>>(emptyList()).asStateFlow()
-        coEvery { sessionRegistry.clearPersistedProfileIds() } just Runs
+        coEvery { sessionResumePrefs.clearResumeSubset() } just Runs
 
         val viewModel = createViewModel()
         viewModel.dismissReconnectBanner()
         advanceUntilIdle()
 
-        coVerify { sessionRegistry.clearPersistedProfileIds() }
+        coVerify { sessionResumePrefs.clearResumeSubset() }
     }
 }

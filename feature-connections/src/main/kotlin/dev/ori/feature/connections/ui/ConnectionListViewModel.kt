@@ -9,6 +9,7 @@ import dev.ori.core.common.result.getAppError
 import dev.ori.core.security.biometric.CredentialUnlockGate
 import dev.ori.core.security.crash.NonFatalErrorLogger
 import dev.ori.domain.model.ServerProfile
+import dev.ori.domain.preferences.SessionResumePreferences
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRegistry
 import dev.ori.domain.usecase.ConnectUseCase
@@ -44,6 +45,7 @@ class ConnectionListViewModel @Inject constructor(
     private val credentialUnlockGate: CredentialUnlockGate,
     private val connectionRepository: ConnectionRepository,
     private val sessionRegistry: SessionRegistry,
+    private val sessionResumePrefs: SessionResumePreferences,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ConnectionListUiState())
@@ -235,13 +237,16 @@ class ConnectionListViewModel @Inject constructor(
 
     /**
      * PR 3 Section 11 — "Schließen" on the banner. Clears the persisted
-     * profile-id set so the banner stays hidden across subsequent app
-     * launches until new sessions are opened. Does not disconnect any
-     * live sessions (there are none by definition in the banner path).
+     * profile-id set (plus the rest of the resume subset —
+     * tabMemos / focusedProfileId / remotePaths) so the banner stays
+     * hidden across subsequent app launches until new sessions are
+     * opened. Does not disconnect any live sessions (there are none by
+     * definition in the banner path) and leaves `lastTopLevelRoute`
+     * alone so cold start still returns to the user's last tab.
      */
     fun dismissReconnectBanner() {
         viewModelScope.launch {
-            sessionRegistry.clearPersistedProfileIds()
+            sessionResumePrefs.clearResumeSubset()
         }
     }
 
