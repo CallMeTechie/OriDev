@@ -12,7 +12,9 @@ import dev.ori.domain.model.CommandSnippet
 import dev.ori.domain.model.KeyboardMode
 import dev.ori.domain.model.Session
 import dev.ori.domain.model.SessionRecording
+import dev.ori.domain.model.TabMemo
 import dev.ori.domain.preferences.KeyboardPreferences
+import dev.ori.domain.preferences.SessionResumePreferences
 import dev.ori.domain.repository.ClaudeRepository
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRecordingRepository
@@ -34,10 +36,13 @@ import io.mockk.unmockkStatic
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
@@ -45,6 +50,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class TerminalViewModelTest {
@@ -54,6 +60,8 @@ class TerminalViewModelTest {
     private val sshClient = mockk<SshClient>(relaxed = true)
     private val connectionRepository = mockk<ConnectionRepository>(relaxed = true)
     private val sessionRegistry = mockk<SessionRegistry>(relaxed = true)
+    private val openSessionsFlow = MutableStateFlow<List<Session>>(emptyList())
+    private val sessionResumePrefs = FakeSessionResumePreferences()
     private val getSnippetsUseCase = mockk<GetSnippetsUseCase>()
     private val addSnippetUseCase = mockk<AddSnippetUseCase>(relaxed = true)
     private val updateSnippetUseCase = mockk<UpdateSnippetUseCase>(relaxed = true)
@@ -91,6 +99,7 @@ class TerminalViewModelTest {
         every { getSnippetsUseCase(any()) } returns flowOf(emptyList())
         every { context.packageName } returns "dev.ori.app"
         every { connectionRepository.getAllProfiles() } returns flowOf(emptyList())
+        every { sessionRegistry.openSessions } returns openSessionsFlow
     }
 
     @AfterEach
@@ -116,9 +125,19 @@ class TerminalViewModelTest {
             sendToClaudeUseCase = sendToClaudeUseCase,
             oriClipboard = oriClipboard,
             keyboardPreferences = keyboardPreferences,
+            sessionResumePrefs = sessionResumePrefs,
             context = context,
         )
     }
+
+    private fun makeSession(profileId: Long, id: String): Session = Session(
+        id = id,
+        profileId = profileId,
+        profileName = "Server $profileId",
+        host = "host-$profileId",
+        port = 22,
+        connectedAt = 0L,
+    )
 
     private fun stubSshConnection() {
         val shellInputStream = ByteArrayInputStream(ByteArray(0))
@@ -670,5 +689,183 @@ class TerminalViewModelTest {
         viewModel.onEvent(TerminalEvent.DismissProfilePicker)
 
         assertThat(viewModel.uiState.value.showProfilePicker).isFalse()
+    }
+
+    // --- Full Session Persistence Task 8: snapshot writer + restore observer ---
+
+    @Test
+    fun `tabMemos snapshot is written after debounce`() = runTest {
+        stubSshConnection()
+        val viewModel = createViewModel()
+        openSessionsFlow.value = listOf(makeSession(profileId = 1L, id = "session-1"))
+
+        viewModel.openNewTab(profileId = 1L)
+        // Run non-delayed continuations (including the openNewTab coroutine
+        // body that builds the tab + schedules the snapshot) without
+        // advancing the virtual clock — this leaves the 1 s debounce
+        // intact so we can verify the snapshot has NOT yet been written.
+        runCurrent()
+
+        advanceTimeBy(999.milliseconds)
+        runCurrent()
+        assertThat(sessionResumePrefs.tabMemosValue.value).isEmpty()
+
+        advanceTimeBy(2.milliseconds)
+        runCurrent()
+        assertThat(sessionResumePrefs.tabMemosValue.value)
+            .containsExactly(TabMemo(profileId = 1L, tabCount = 1, focusedWithinProfile = 0))
+    }
+
+    @Test
+    fun `restore observer opens missing tabs once per profile`() = runTest {
+        stubSshConnection()
+        sessionResumePrefs.tabMemosValue.value = listOf(
+            TabMemo(profileId = 1L, tabCount = 3, focusedWithinProfile = 0),
+        )
+        val viewModel = createViewModel()
+
+        openSessionsFlow.value = listOf(makeSession(profileId = 1L, id = "session-1"))
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.tabs.filter { it.profileId == 1L }).hasSize(3)
+
+        // Re-emission with same profile+memo: observer distinctUntilChangedBy
+        // suppresses duplicate emission so the latch is irrelevant; either
+        // way the tab count must not grow.
+        openSessionsFlow.value = listOf(makeSession(profileId = 1L, id = "session-1"))
+        advanceUntilIdle()
+        assertThat(viewModel.uiState.value.tabs.filter { it.profileId == 1L }).hasSize(3)
+    }
+
+    @Test
+    fun `cancelled restore leaves latch resettable (re-tries on next emission)`() = runTest {
+        // Fail the first openShell call (so the first PTY open throws and
+        // restore aborts mid-way), then succeed from call 2 onwards.
+        val shellInputStream = ByteArrayInputStream(ByteArray(0))
+        val shellOutputStream = ByteArrayOutputStream()
+        val shellHandle = ShellHandle(
+            shellId = "shell-1",
+            inputStream = shellInputStream,
+            outputStream = shellOutputStream,
+            onResize = { _, _ -> },
+            onClose = {},
+        )
+        coEvery { sessionRegistry.connect(1L) } returns kotlin.Result.success(
+            makeSession(profileId = 1L, id = "session-1"),
+        )
+        coEvery {
+            sshClient.openShell(any(), any(), any())
+        } throws java.io.IOException("boom") andThen shellHandle
+
+        sessionResumePrefs.tabMemosValue.value = listOf(
+            TabMemo(profileId = 1L, tabCount = 3, focusedWithinProfile = 0),
+        )
+        val viewModel = createViewModel()
+
+        openSessionsFlow.value = listOf(makeSession(profileId = 1L, id = "session-1"))
+        advanceUntilIdle()
+        // Partial: zero tabs opened because the first openShell throws
+        // before adding to state. Latch is NOT set because restore did not
+        // complete.
+        assertThat(viewModel.uiState.value.tabs.filter { it.profileId == 1L }).hasSize(0)
+
+        // New emission with a different session id — distinctUntilChangedBy
+        // still distinguishes by profileId set, so re-emit with a profile id
+        // change is not possible without a second profile. Flip memo instead
+        // to re-trigger the observer.
+        sessionResumePrefs.tabMemosValue.value = listOf(
+            TabMemo(profileId = 1L, tabCount = 3, focusedWithinProfile = 0),
+        )
+        openSessionsFlow.value = emptyList()
+        openSessionsFlow.value = listOf(makeSession(profileId = 1L, id = "session-1"))
+        advanceUntilIdle()
+        assertThat(viewModel.uiState.value.tabs.filter { it.profileId == 1L }).hasSize(3)
+    }
+
+    @Test
+    fun `user-opened tab during restore is additive (option B)`() = runTest {
+        stubSshConnection()
+        sessionResumePrefs.tabMemosValue.value = listOf(
+            TabMemo(profileId = 1L, tabCount = 2, focusedWithinProfile = 0),
+        )
+        val viewModel = createViewModel()
+
+        openSessionsFlow.value = listOf(makeSession(profileId = 1L, id = "session-1"))
+        // User-action mid-restore: observer is additive, so this does not
+        // collide with restore — the final tab count is >= 2.
+        viewModel.openNewTab(profileId = 1L)
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.tabs.filter { it.profileId == 1L }.size).isAtLeast(2)
+    }
+
+    @Test
+    fun `snapshot writer removes orphan memo when profile disconnects`() = runTest {
+        stubSshConnection()
+        val viewModel = createViewModel()
+        openSessionsFlow.value = listOf(makeSession(profileId = 1L, id = "session-1"))
+
+        viewModel.openNewTab(profileId = 1L)
+        advanceUntilIdle()
+        advanceTimeBy(1_001.milliseconds)
+        advanceUntilIdle()
+        assertThat(sessionResumePrefs.tabMemosValue.value.map { it.profileId }).contains(1L)
+
+        viewModel.disconnectProfile(profileId = 1L)
+        openSessionsFlow.value = emptyList()
+        advanceUntilIdle()
+        advanceTimeBy(1_001.milliseconds)
+        advanceUntilIdle()
+
+        assertThat(sessionResumePrefs.tabMemosValue.value.map { it.profileId }).doesNotContain(1L)
+    }
+}
+
+/**
+ * Minimal in-memory fake of [SessionResumePreferences] for unit tests of
+ * the Terminal snapshot-writer + restore observer. Each flow is backed by
+ * a [MutableStateFlow] so tests can both observe (via `first()` /
+ * `.value`) and prime values. The mutating setters update the state-flow
+ * directly; no DataStore / coroutine glue is involved, so emissions are
+ * synchronous under any TestDispatcher.
+ */
+private class FakeSessionResumePreferences : SessionResumePreferences {
+    val profileIdsValue = MutableStateFlow<Set<Long>>(emptySet())
+    val tabMemosValue = MutableStateFlow<List<TabMemo>>(emptyList())
+    val focusedProfileIdValue = MutableStateFlow<Long?>(null)
+    val remotePathsValue = MutableStateFlow<Map<Long, String>>(emptyMap())
+    val lastTopLevelRouteValue = MutableStateFlow("connections")
+
+    override val profileIds = profileIdsValue
+    override val tabMemos = tabMemosValue
+    override val focusedProfileId = focusedProfileIdValue
+    override val remotePaths = remotePathsValue
+    override val lastTopLevelRoute = lastTopLevelRouteValue
+
+    override suspend fun setProfileIds(ids: Set<Long>) {
+        profileIdsValue.value = ids
+    }
+
+    override suspend fun setTabMemos(memos: List<TabMemo>) {
+        tabMemosValue.value = memos
+    }
+
+    override suspend fun setFocusedProfileId(id: Long?) {
+        focusedProfileIdValue.value = id
+    }
+
+    override suspend fun setRemotePath(profileId: Long, path: String) {
+        remotePathsValue.value = remotePathsValue.value + (profileId to path)
+    }
+
+    override suspend fun setLastTopLevelRoute(route: String) {
+        lastTopLevelRouteValue.value = route
+    }
+
+    override suspend fun clearResumeSubset() {
+        profileIdsValue.value = emptySet()
+        tabMemosValue.value = emptyList()
+        focusedProfileIdValue.value = null
+        remotePathsValue.value = emptyMap()
     }
 }

@@ -16,7 +16,10 @@ import dev.ori.core.ui.theme.TerminalBackground
 import dev.ori.core.ui.theme.TerminalText
 import dev.ori.domain.model.CommandSnippet
 import dev.ori.domain.model.ServerProfile
+import dev.ori.domain.model.Session
+import dev.ori.domain.model.TabMemo
 import dev.ori.domain.preferences.KeyboardPreferences
+import dev.ori.domain.preferences.SessionResumePreferences
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRecordingRepository
 import dev.ori.domain.repository.SessionRegistry
@@ -30,14 +33,20 @@ import dev.ori.domain.usecase.StopSessionRecordingUseCase
 import dev.ori.domain.usecase.UpdateSnippetUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -45,6 +54,7 @@ import org.connectbot.terminal.TerminalEmulator
 import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -66,6 +76,7 @@ class TerminalViewModel @Inject constructor(
     private val sendToClaudeUseCase: SendToClaudeUseCase,
     private val oriClipboard: OriClipboard,
     private val keyboardPreferences: KeyboardPreferences,
+    private val sessionResumePrefs: SessionResumePreferences,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -88,6 +99,27 @@ class TerminalViewModel @Inject constructor(
     private val codeBlockDetectors = ConcurrentHashMap<String, CodeBlockDetector>()
 
     /**
+     * Full Session Persistence Task 8 — per-profile restore latches. The
+     * restore observer fires `restoreMissingTabs` only when the profile's
+     * latch is still `false`, and flips it to `true` **after** all
+     * requested PTYs have been opened. If the restore throws mid-way,
+     * the latch stays `false` and the next emission retries.
+     *
+     * Tracked outside [TerminalUiState] because it is pure bookkeeping
+     * (no UI representation) and must survive state snapshots.
+     */
+    private val restoreLatches = ConcurrentHashMap<Long, AtomicBoolean>()
+
+    /**
+     * Full Session Persistence Task 8 — debounced writer job. Cancelled
+     * and replaced on every tab-mutating event so only the most recent
+     * snapshot is actually written to DataStore. The 1 s debounce
+     * collapses bursty events (opening three tabs quickly, switching
+     * rapidly between tabs) into a single write.
+     */
+    private var tabMemoWriteJob: Job? = null
+
+    /**
      * Phase 14 Task 14.5 — incoming [TerminalEvent.ResizeTerminal]
      * dimensions are funneled through this [MutableSharedFlow] and
      * debounced before dispatch. See [debouncedResizes] for the
@@ -100,6 +132,72 @@ class TerminalViewModel @Inject constructor(
         loadSnippets()
         collectKeyboardMode()
         collectDebouncedResizes()
+        installRestoreObserver()
+    }
+
+    /**
+     * Full Session Persistence Task 8 — restore observer. Joins live
+     * [SessionRegistry.openSessions] with the persisted [TabMemo] list
+     * so whenever both streams have a value for the same profile id,
+     * the missing PTYs are opened exactly once (per-profile latch). The
+     * `distinctUntilChangedBy` keeps the observer from re-firing on
+     * unrelated ticks (e.g. grace-timer toggles that preserve the
+     * profile set), and the latch set **inside** [restoreMissingTabs]
+     * *after* successful completion means a cancelled restore leaves
+     * the latch resettable for the next emission (test:
+     * `cancelled restore leaves latch resettable`).
+     */
+    private fun installRestoreObserver() {
+        sessionRegistry.openSessions
+            .combine(sessionResumePrefs.tabMemos) { sessions, memos -> sessions to memos }
+            .distinctUntilChangedBy { (sessions, memos) ->
+                sessions.map { it.profileId }.toSet() to memos
+            }
+            .onEach { (sessions, memos) -> restoreMissingTabs(sessions, memos) }
+            .launchIn(viewModelScope)
+    }
+
+    /**
+     * Full Session Persistence Task 8 — open any missing PTYs per
+     * persisted [TabMemo], once per profile. The per-profile latch is
+     * checked before any work and flipped to `true` only after
+     * [openNewTabInternal] has successfully completed `tabCount -
+     * currentPtys` iterations, so a mid-restore failure leaves the
+     * latch `false` and the observer retries on the next qualifying
+     * emission. Option B: user-opened tabs during restore are additive
+     * — the `max(0, ...)` subtraction means the restore path only
+     * tops up tabs, never closes anything.
+     */
+    private suspend fun restoreMissingTabs(sessions: List<Session>, memos: List<TabMemo>) {
+        val byProfile = sessions.groupBy { it.profileId }
+        for (memo in memos) {
+            val sessionsForProfile = byProfile[memo.profileId] ?: continue
+            val latch = restoreLatches.computeIfAbsent(memo.profileId) { AtomicBoolean(false) }
+            if (latch.get()) continue
+
+            val session = sessionsForProfile.first()
+            val currentPtys = _uiState.value.tabs.count { it.profileId == memo.profileId }
+            val toOpen = (memo.tabCount - currentPtys).coerceAtLeast(0)
+            try {
+                repeat(toOpen) {
+                    openNewTabInternal(session)
+                }
+                // Latch ONLY after full completion — if openNewTabInternal
+                // threw mid-way, we skip the set() below and the next
+                // qualifying emission retries.
+                latch.set(true)
+            } catch (e: IOException) {
+                // Swallow here so the outer observer coroutine stays
+                // alive; the latch is intentionally left `false` so
+                // the next emission retries the restore. The error
+                // state is already surfaced by openNewTabInternal.
+                NonFatalErrorLogger.log(
+                    category = "terminal-restore",
+                    throwable = e,
+                    contextNote = "profileId=${memo.profileId}",
+                )
+            }
+        }
     }
 
     fun onEvent(event: TerminalEvent) {
@@ -204,62 +302,90 @@ class TerminalViewModel @Inject constructor(
             // scheduled.
             sessionRegistry.cancelGraceDisconnect(session.id)
 
-            val shellHandle = try {
-                sshClient.openShell(session.id)
-            } catch (e: IOException) {
-                NonFatalErrorLogger.log(
-                    category = "terminal-open-shell",
-                    throwable = e,
-                    contextNote = "sessionId=${session.id}",
-                )
-                _uiState.update { it.copy(error = "Failed to open shell: ${e.message}") }
-                return@launch
+            try {
+                openNewTabInternal(session)
+            } catch (_: IOException) {
+                // Error state already set inside openNewTabInternal.
+                // Swallowing keeps the user-facing openNewTab coroutine
+                // from failing its parent scope.
             }
-
-            val tabId = UUID.randomUUID().toString()
-            codeBlockDetectors[tabId] = CodeBlockDetector()
-            shellHandles[tabId] = shellHandle
-
-            val emulator = emulatorProvider.create(
-                looper = Looper.getMainLooper(),
-                initialRows = DEFAULT_ROWS,
-                initialCols = DEFAULT_COLS,
-                defaultForeground = TerminalText,
-                defaultBackground = TerminalBackground,
-                onKeyboardInput = { bytes ->
-                    viewModelScope.launch(Dispatchers.IO) {
-                        try {
-                            shellHandle.outputStream.write(bytes)
-                            shellHandle.outputStream.flush()
-                        } catch (_: IOException) { /* connection lost */ }
-                    }
-                },
-                onResize = { dimensions ->
-                    shellHandle.onResize(dimensions.columns, dimensions.rows)
-                },
-                onClipboardCopy = { text ->
-                    onEvent(TerminalEvent.CopyToClipboard(text))
-                },
-            )
-            terminalEmulators[tabId] = emulator
-
-            _uiState.update { state ->
-                val newTab = TerminalTabState(
-                    id = tabId,
-                    sessionId = session.id,
-                    profileId = session.profileId,
-                    serverName = session.profileName,
-                    isConnected = true,
-                    shellId = shellHandle.shellId,
-                )
-                state.copy(
-                    tabs = state.tabs + newTab,
-                    activeTabIndex = state.tabs.size,
-                )
-            }
-
-            startReaderCoroutine(tabId, shellHandle)
         }
+    }
+
+    /**
+     * Full Session Persistence Task 8 — shared PTY-adding core used by
+     * both the user-facing [openNewTab] (after it has resolved the
+     * [Session] via the registry) and the restore observer (which
+     * already has an open [Session] in hand from
+     * [SessionRegistry.openSessions]). Keeps the SSH `openShell`,
+     * emulator construction, state-update, reader-coroutine, and
+     * snapshot-write in one place so restore and user paths cannot
+     * drift apart.
+     *
+     * On `openShell` failure the error is surfaced via
+     * [TerminalUiState.error] *and* rethrown as [IOException] so the
+     * restore observer's `repeat(toOpen)` loop aborts before flipping
+     * the per-profile latch. User-facing [openNewTab] wraps this call
+     * in a try/catch so the exception does not tear down the launched
+     * coroutine (and therefore doesn't bubble to the uncaught handler).
+     */
+    private suspend fun openNewTabInternal(session: Session) {
+        val shellHandle = try {
+            sshClient.openShell(session.id)
+        } catch (e: IOException) {
+            NonFatalErrorLogger.log(
+                category = "terminal-open-shell",
+                throwable = e,
+                contextNote = "sessionId=${session.id}",
+            )
+            _uiState.update { it.copy(error = "Failed to open shell: ${e.message}") }
+            throw e
+        }
+
+        val tabId = UUID.randomUUID().toString()
+        codeBlockDetectors[tabId] = CodeBlockDetector()
+        shellHandles[tabId] = shellHandle
+
+        val emulator = emulatorProvider.create(
+            looper = Looper.getMainLooper(),
+            initialRows = DEFAULT_ROWS,
+            initialCols = DEFAULT_COLS,
+            defaultForeground = TerminalText,
+            defaultBackground = TerminalBackground,
+            onKeyboardInput = { bytes ->
+                viewModelScope.launch(Dispatchers.IO) {
+                    try {
+                        shellHandle.outputStream.write(bytes)
+                        shellHandle.outputStream.flush()
+                    } catch (_: IOException) { /* connection lost */ }
+                }
+            },
+            onResize = { dimensions ->
+                shellHandle.onResize(dimensions.columns, dimensions.rows)
+            },
+            onClipboardCopy = { text ->
+                onEvent(TerminalEvent.CopyToClipboard(text))
+            },
+        )
+        terminalEmulators[tabId] = emulator
+
+        _uiState.update { state ->
+            val newTab = TerminalTabState(
+                id = tabId,
+                sessionId = session.id,
+                profileId = session.profileId,
+                serverName = session.profileName,
+                isConnected = true,
+                shellId = shellHandle.shellId,
+            )
+            state.copy(
+                tabs = state.tabs + newTab,
+                activeTabIndex = state.tabs.size,
+            )
+        }
+
+        startReaderCoroutine(tabId, shellHandle)
+        scheduleTabMemoSnapshot()
     }
 
     private fun startReaderCoroutine(tabId: String, shellHandle: ShellHandle) {
@@ -403,6 +529,26 @@ class TerminalViewModel @Inject constructor(
         if (remainingForSession == 0) {
             sessionRegistry.scheduleGraceDisconnect(tab.sessionId)
         }
+        scheduleTabMemoSnapshot()
+    }
+
+    /**
+     * Full Session Persistence Task 8 — tear down every PTY for
+     * [profileId] locally and trigger the snapshot writer so the memo
+     * for that profile does not survive as an orphan. The actual SSH
+     * session teardown is the caller's responsibility (Connections
+     * surface invokes `SessionRegistry.disconnect` separately); this
+     * method is limited to the local tab list + snapshot refresh so it
+     * can be unit-tested without the registry fake.
+     */
+    fun disconnectProfile(profileId: Long) {
+        val toClose = _uiState.value.tabs.filter { it.profileId == profileId }.map { it.id }
+        toClose.forEach { closeTab(it) }
+        // closeTab already schedules the snapshot, but call here defensively
+        // in case [toClose] was empty and the caller still wants the write
+        // (e.g. to flush an in-flight memo from a different path).
+        scheduleTabMemoSnapshot()
+        restoreLatches.remove(profileId)
     }
 
     /**
@@ -421,6 +567,44 @@ class TerminalViewModel @Inject constructor(
             it.copy(
                 activeTabIndex = idx,
                 modifierState = it.modifierState.copy(ctrl = false, alt = false),
+            )
+        }
+        scheduleTabMemoSnapshot()
+    }
+
+    /**
+     * Full Session Persistence Task 8 — debounced snapshot writer. On
+     * every tab-mutating event this is called; the 1 s debounce
+     * collapses bursts into a single write. The snapshot is recomputed
+     * from the **live** tab list (not from an incremental delta), so
+     * orphan memos from a previous run cannot survive a profile
+     * disconnect — the recomputed list simply does not contain the
+     * disconnected profile's entry.
+     *
+     * `focusedWithinProfile` is computed as the active tab's index
+     * within its own profile's tab list (not the global
+     * [TerminalUiState.activeTabIndex]), per the [TabMemo] contract.
+     */
+    private fun scheduleTabMemoSnapshot() {
+        tabMemoWriteJob?.cancel()
+        tabMemoWriteJob = viewModelScope.launch {
+            delay(TAB_MEMO_DEBOUNCE_MS)
+            val state = _uiState.value
+            val focusedTabId = state.tabs.getOrNull(state.activeTabIndex)?.id
+            val snapshot = state.tabs
+                .groupBy { it.profileId }
+                .map { (profileId, profileTabs) ->
+                    val focusedIdx = profileTabs.indexOfFirst { it.id == focusedTabId }
+                        .coerceAtLeast(0)
+                    TabMemo(
+                        profileId = profileId,
+                        tabCount = profileTabs.size,
+                        focusedWithinProfile = focusedIdx,
+                    )
+                }
+            sessionResumePrefs.setTabMemos(snapshot)
+            sessionResumePrefs.setFocusedProfileId(
+                state.tabs.firstOrNull { it.id == focusedTabId }?.profileId,
             )
         }
     }
@@ -633,6 +817,14 @@ class TerminalViewModel @Inject constructor(
         private const val DEFAULT_COLS = 80
         private const val MAX_CODE_BLOCKS = 20
         private const val PROFILES_SHARING_TIMEOUT_MS = 5_000L
+
+        /**
+         * Full Session Persistence Task 8 — debounce window for the
+         * tab-memo snapshot writer. Picked so a burst of "open three
+         * tabs, then switch between them" coalesces into a single
+         * DataStore commit (one commit ≈ one disk sync).
+         */
+        private const val TAB_MEMO_DEBOUNCE_MS = 1_000L
 
         /**
          * Phase 14 Task 14.5 — ring-buffer for resize events between the
