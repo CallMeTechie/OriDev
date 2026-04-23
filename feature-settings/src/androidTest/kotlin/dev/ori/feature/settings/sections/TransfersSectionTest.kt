@@ -61,6 +61,8 @@ class TransfersSectionTest {
         notifyConnection = true,
         notifyClaude = false,
         notifyWear = true,
+        blockScreenshotsWhileConnected = false,
+        autoResumeSessions = false,
     )
 
     @Test
