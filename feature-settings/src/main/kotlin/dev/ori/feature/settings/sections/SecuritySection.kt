@@ -1,5 +1,6 @@
 package dev.ori.feature.settings.sections
 
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -12,6 +13,7 @@ import dev.ori.core.ui.icons.lucide.Clock
 import dev.ori.core.ui.icons.lucide.EyeOff
 import dev.ori.core.ui.icons.lucide.FingerprintPattern
 import dev.ori.core.ui.icons.lucide.LucideIcons
+import dev.ori.core.ui.icons.lucide.RefreshCw
 import dev.ori.core.ui.theme.Gray500
 import dev.ori.feature.settings.components.PremiumBadge
 import dev.ori.feature.settings.components.SettingsCard
@@ -27,6 +29,7 @@ internal fun SecuritySection(
     onAutoLockTimeoutChanged: (Int) -> Unit = {},
     onClipboardClearSecondsChanged: (Int) -> Unit = {},
     onBlockScreenshotsChanged: (Boolean) -> Unit = {},
+    onAutoResumeSessionsChanged: (Boolean) -> Unit = {},
 ) {
     var showAutoLockPicker by remember { mutableStateOf(false) }
     var showClipboardPicker by remember { mutableStateOf(false) }
@@ -62,6 +65,18 @@ internal fun SecuritySection(
                 OriToggle(
                     checked = prefs.blockScreenshotsWhileConnected,
                     onCheckedChange = onBlockScreenshotsChanged,
+                )
+            },
+        )
+        SettingsRow(
+            icon = LucideIcons.RefreshCw,
+            title = "Sessions automatisch wiederherstellen",
+            subtitle = "Verbindungen, Tabs und Pfade nach App-Neustart wiederherstellen. " +
+                "Off: Banner fragt vor Reconnect.",
+            trailing = {
+                Switch(
+                    checked = prefs.autoResumeSessions,
+                    onCheckedChange = onAutoResumeSessionsChanged,
                 )
             },
         )

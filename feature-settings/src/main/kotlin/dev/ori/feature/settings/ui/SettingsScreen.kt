@@ -76,6 +76,7 @@ public fun SettingsScreen(
         onAutoLockTimeoutChanged = viewModel::setAutoLockTimeoutMinutes,
         onClipboardClearSecondsChanged = viewModel::setClipboardClearSeconds,
         onBlockScreenshotsChanged = viewModel::setBlockScreenshotsWhileConnected,
+        onAutoResumeSessionsChanged = viewModel::setAutoResumeSessions,
         onTransferDoneNotificationChanged = viewModel::setNotifyTransferDone,
         onConnectionNotificationChanged = viewModel::setNotifyConnection,
         onClaudeNotificationChanged = viewModel::setNotifyClaude,
@@ -108,6 +109,7 @@ internal fun SettingsContent(
     onAutoLockTimeoutChanged: (Int) -> Unit = {},
     onClipboardClearSecondsChanged: (Int) -> Unit = {},
     onBlockScreenshotsChanged: (Boolean) -> Unit = {},
+    onAutoResumeSessionsChanged: (Boolean) -> Unit = {},
     onTransferDoneNotificationChanged: (Boolean) -> Unit = {},
     onConnectionNotificationChanged: (Boolean) -> Unit = {},
     onClaudeNotificationChanged: (Boolean) -> Unit = {},
@@ -172,6 +174,7 @@ internal fun SettingsContent(
                     onAutoLockTimeoutChanged = onAutoLockTimeoutChanged,
                     onClipboardClearSecondsChanged = onClipboardClearSecondsChanged,
                     onBlockScreenshotsChanged = onBlockScreenshotsChanged,
+                    onAutoResumeSessionsChanged = onAutoResumeSessionsChanged,
                 )
                 StorageAccessSection(
                     grantedTrees = state.grantedTrees,
