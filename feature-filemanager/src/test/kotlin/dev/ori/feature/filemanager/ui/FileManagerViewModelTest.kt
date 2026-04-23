@@ -6,6 +6,8 @@ import com.google.common.truth.Truth.assertThat
 import dev.ori.domain.model.FileItem
 import dev.ori.domain.model.GrantedTree
 import dev.ori.domain.model.Session
+import dev.ori.domain.model.TabMemo
+import dev.ori.domain.preferences.SessionResumePreferences
 import dev.ori.domain.repository.BookmarkRepository
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.FileSystemRepository
@@ -54,6 +56,7 @@ class FileManagerViewModelTest {
     private val sessionRegistry: SessionRegistry = mockk(relaxed = true)
     private val connectionRepository: ConnectionRepository = mockk(relaxed = true)
     private val grantedTreesFlow = MutableStateFlow<List<GrantedTree>>(emptyList())
+    private val sessionResumePrefs = FakeSessionResumePreferences()
 
     // Use real use cases with mocked repositories to avoid MockK Result<T> issues
     private val listFilesUseCase = ListFilesUseCase()
@@ -111,6 +114,7 @@ class FileManagerViewModelTest {
             getBookmarksUseCase = getBookmarksUseCase,
             enqueueTransferUseCase = enqueueTransferUseCase,
             storageAccessRepository = storageAccessRepository,
+            sessionResumePrefs = sessionResumePrefs,
             savedStateHandle = SavedStateHandle(
                 if (profileId != null) mapOf("profileId" to profileId) else emptyMap(),
             ),
@@ -383,5 +387,101 @@ class FileManagerViewModelTest {
         val state = viewModel.uiState.value
         assertThat(state.previewFile).isNull()
         assertThat(state.previewContent).isNull()
+    }
+
+    @Test
+    fun `navigateToPath writes remotePaths after debounce`() = runTest {
+        val focusFlow = MutableStateFlow<String?>(null)
+        every { sessionRegistry.focusedSessionId } returns focusFlow
+        every { sessionRegistry.openSessions } returns MutableStateFlow(
+            listOf(Session("s1", 1L, "NAS", "nas.local", 22, 1L)),
+        )
+        coEvery { remoteRepository.listFiles(any()) } returns emptyList()
+
+        val viewModel = createViewModel()
+        focusFlow.value = "s1"
+        testScheduler.advanceTimeBy(500L)
+        testScheduler.runCurrent()
+
+        viewModel.onEvent(FileManagerEvent.NavigateToPath(ActivePane.RIGHT, "/tmp"))
+        viewModel.onEvent(FileManagerEvent.NavigateToPath(ActivePane.RIGHT, "/var/log"))
+
+        testScheduler.advanceTimeBy(REMOTE_PATH_DEBOUNCE_MS - 1L)
+        testScheduler.runCurrent()
+        assertThat(sessionResumePrefs.remotePathsValue.value[1L]).isNull()
+
+        testScheduler.advanceTimeBy(2L)
+        testScheduler.runCurrent()
+        assertThat(sessionResumePrefs.remotePathsValue.value[1L]).isEqualTo("/var/log")
+    }
+
+    @Test
+    fun `focus change reads persisted path when in-memory memo empty`() = runTest {
+        val focusFlow = MutableStateFlow<String?>(null)
+        every { sessionRegistry.focusedSessionId } returns focusFlow
+        every { sessionRegistry.openSessions } returns MutableStateFlow(
+            listOf(Session("s42", 42L, "NAS", "nas.local", 22, 1L)),
+        )
+        sessionResumePrefs.remotePathsValue.value = mapOf(42L to "/persisted")
+        coEvery { remoteRepository.listFiles("/persisted") } returns emptyList()
+
+        val viewModel = createViewModel()
+        focusFlow.value = "s42"
+        testScheduler.advanceTimeBy(FOCUS_DEBOUNCE_ADVANCE_MS)
+        testScheduler.advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.rightPane.currentPath).isEqualTo("/persisted")
+    }
+
+    companion object {
+        private const val REMOTE_PATH_DEBOUNCE_MS = 1_000L
+        private const val FOCUS_DEBOUNCE_ADVANCE_MS = 500L
+    }
+}
+
+/**
+ * Minimal in-memory fake of [SessionResumePreferences] for unit tests of
+ * the File Manager remote-path persistence. Mirrors the one in
+ * `feature-terminal`'s TerminalViewModelTest — intentionally duplicated
+ * to keep the two feature modules' test graphs independent.
+ */
+private class FakeSessionResumePreferences : SessionResumePreferences {
+    val profileIdsValue = MutableStateFlow<Set<Long>>(emptySet())
+    val tabMemosValue = MutableStateFlow<List<TabMemo>>(emptyList())
+    val focusedProfileIdValue = MutableStateFlow<Long?>(null)
+    val remotePathsValue = MutableStateFlow<Map<Long, String>>(emptyMap())
+    val lastTopLevelRouteValue = MutableStateFlow("connections")
+
+    override val profileIds = profileIdsValue
+    override val tabMemos = tabMemosValue
+    override val focusedProfileId = focusedProfileIdValue
+    override val remotePaths = remotePathsValue
+    override val lastTopLevelRoute = lastTopLevelRouteValue
+
+    override suspend fun setProfileIds(ids: Set<Long>) {
+        profileIdsValue.value = ids
+    }
+
+    override suspend fun setTabMemos(memos: List<TabMemo>) {
+        tabMemosValue.value = memos
+    }
+
+    override suspend fun setFocusedProfileId(id: Long?) {
+        focusedProfileIdValue.value = id
+    }
+
+    override suspend fun setRemotePath(profileId: Long, path: String) {
+        remotePathsValue.value = remotePathsValue.value + (profileId to path)
+    }
+
+    override suspend fun setLastTopLevelRoute(route: String) {
+        lastTopLevelRouteValue.value = route
+    }
+
+    override suspend fun clearResumeSubset() {
+        profileIdsValue.value = emptySet()
+        tabMemosValue.value = emptyList()
+        focusedProfileIdValue.value = null
+        remotePathsValue.value = emptyMap()
     }
 }
