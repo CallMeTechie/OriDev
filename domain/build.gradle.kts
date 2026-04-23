@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 dependencies {
@@ -12,6 +13,9 @@ dependencies {
     // The Android-specific Hilt binding that materialises a DataStore from
     // an ApplicationContext lives downstream (see Task 14.6).
     implementation(libs.datastore.preferences.core)
+    // kotlinx.serialization is pure Kotlin (no Android deps) — used by the
+    // resume-state types (TabMemo) that round-trip through DataStore.
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit5.api)
     testRuntimeOnly(libs.junit5.engine)
