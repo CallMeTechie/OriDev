@@ -1,5 +1,6 @@
 package dev.ori.feature.connections.ui
 
+import dev.ori.data.session.FailedResume
 import dev.ori.domain.model.Connection
 import dev.ori.domain.model.ServerProfile
 
@@ -25,6 +26,15 @@ data class ConnectionListUiState(
      * banner is an after-kill recovery affordance, not live state.
      */
     val reconnectBannerProfiles: List<ServerProfile> = emptyList(),
+    /**
+     * Task 15 — entries from [dev.ori.data.session.FailedResumeRegistry]
+     * mirrored into uiState. When non-empty the [ConnectionListScreen]
+     * renders a [FailedResumeBanner] so the user can jump to the
+     * affected profile or dismiss the whole batch. The banner takes
+     * precedence over [reconnectBannerProfiles] — a failed auto-resume
+     * pass is "newer news" than the safety-net reconnect affordance.
+     */
+    val failedResume: List<FailedResume> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
     val searchQuery: String = "",
@@ -46,6 +56,15 @@ data class HostKeyPrompt(
     val fingerprint: String,
     val keyType: String,
     val expectedFingerprint: String? = null,
+    /**
+     * Task 15 — when non-null this prompt originated from
+     * [dev.ori.data.session.ResumeCoordinator.hostKeyPrompts] rather than
+     * the manual-connect failure path. The accept / reject handlers must
+     * call [dev.ori.data.session.ResumeCoordinator.respondToPrompt] with
+     * this id so the coordinator's `promptResponses` channel receives a
+     * matching ack (stale ids are treated as decline).
+     */
+    val coordinatorPromptId: String? = null,
 )
 
 sealed class ConnectionListEvent {

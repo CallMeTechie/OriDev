@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.ori.domain.preferences.AutoResumePreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -37,7 +38,7 @@ private val Context.appPrefsDataStore: DataStore<Preferences> by preferencesData
 @Singleton
 public open class AppPreferences(
     private val dataStore: DataStore<Preferences>,
-) {
+) : AutoResumePreferences {
     @Inject
     public constructor(@ApplicationContext context: Context) : this(context.appPrefsDataStore)
 
@@ -143,6 +144,19 @@ public open class AppPreferences(
         dataStore.edit { it[blockScreenshotsKey] = value }
     }
 
+    // ---- Session resume ----------------------------------------------------
+    // Full Session Persistence (Phase X) — opt-in toggle that drives
+    // ResumeCoordinator. Exposed via `AutoResumePreferences` so :data-layer
+    // consumers can inject the interface without pulling in :feature-settings.
+    private val autoResumeSessionsKey = booleanPreferencesKey("auto_resume_sessions")
+
+    public override val autoResumeSessions: Flow<Boolean> =
+        dataStore.data.map { it[autoResumeSessionsKey] ?: false }
+
+    public override suspend fun setAutoResumeSessions(value: Boolean) {
+        dataStore.edit { it[autoResumeSessionsKey] = value }
+    }
+
     // ---- Notifications -----------------------------------------------------
     private val notifyTransferDoneKey = booleanPreferencesKey("notify_transfer_done")
     private val notifyConnectionKey = booleanPreferencesKey("notify_connection")
@@ -191,6 +205,7 @@ public open class AppPreferences(
             notifyConnection = prefs[notifyConnectionKey] ?: true,
             notifyClaude = prefs[notifyClaudeKey] ?: false,
             notifyWear = prefs[notifyWearKey] ?: true,
+            autoResumeSessions = prefs[autoResumeSessionsKey] ?: false,
         )
     }
 
@@ -230,4 +245,5 @@ public data class AppPreferencesSnapshot(
     val notifyConnection: Boolean,
     val notifyClaude: Boolean,
     val notifyWear: Boolean,
+    val autoResumeSessions: Boolean = false,
 )

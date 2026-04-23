@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.room)
@@ -52,6 +53,10 @@ dependencies {
     // KeyboardPreferencesModule (the domain module only pulls in the
     // pure-JVM core variant, which has no preferencesDataStore() delegate).
     implementation(libs.datastore.preferences)
+
+    // Full Session Persistence Task 3 — SessionPersistencePreferences
+    // JSON-encodes TabMemo/remote-paths via kotlinx.serialization.
+    implementation(libs.kotlinx.serialization.json)
 
     // Phase 15 Task 15.6 — Storage Access Framework DocumentFile wrapper
     // for LocalFileSystemRepository and StorageAccessRepositoryImpl.

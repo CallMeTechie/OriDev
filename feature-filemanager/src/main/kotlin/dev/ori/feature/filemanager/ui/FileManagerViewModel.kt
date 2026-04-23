@@ -9,6 +9,7 @@ import dev.ori.core.common.result.getAppError
 import dev.ori.core.security.crash.NonFatalErrorLogger
 import dev.ori.domain.model.Session
 import dev.ori.domain.model.TransferRequest
+import dev.ori.domain.preferences.SessionResumePreferences
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.FileSystemRepository
 import dev.ori.domain.repository.LocalFileSystem
@@ -24,6 +25,8 @@ import dev.ori.domain.usecase.GetBookmarksUseCase
 import dev.ori.domain.usecase.ListFilesUseCase
 import dev.ori.domain.usecase.RenameFileUseCase
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +34,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -42,6 +46,7 @@ private const val MAX_PATH_STACK_SIZE = 50
 
 @OptIn(FlowPreview::class)
 @HiltViewModel
+@Suppress("LongParameterList")
 class FileManagerViewModel @Inject constructor(
     @LocalFileSystem private val localRepository: FileSystemRepository,
     @RemoteFileSystem private val remoteRepository: FileSystemRepository,
@@ -56,6 +61,7 @@ class FileManagerViewModel @Inject constructor(
     private val getBookmarksUseCase: GetBookmarksUseCase,
     private val enqueueTransferUseCase: EnqueueTransferUseCase,
     private val storageAccessRepository: StorageAccessRepository,
+    private val sessionResumePrefs: SessionResumePreferences,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -79,6 +85,14 @@ class FileManagerViewModel @Inject constructor(
      * the remote root.
      */
     private val lastRemotePath = ConcurrentHashMap<String, String>()
+
+    /**
+     * Task 9 — debounced write job for `SessionResumePreferences.remotePaths`.
+     * Coalesces rapid navigations into a single write 1 s after the last
+     * `navigateToPath(RIGHT, …)` call so we don't thrash DataStore when
+     * the user drills into a deep directory tree.
+     */
+    private var remotePathWriteJob: Job? = null
 
     /**
      * PR 3 — dropdown data for [RemotePaneHeader]. Hot StateFlow mirrors
@@ -125,7 +139,23 @@ class FileManagerViewModel @Inject constructor(
                     if (sessionId != null) {
                         remoteSession.setActiveSession(sessionId)
                         sessionRegistry.markFilesUsed(sessionId)
-                        val path = lastRemotePath[sessionId] ?: "/"
+                        // Task 9 — prefer the in-session memo. If empty
+                        // (first focus after process start), fall back to
+                        // the persisted per-profile remote path so
+                        // session-resume lands the user back in the
+                        // directory they were browsing, rather than "/".
+                        val inMemory = lastRemotePath[sessionId]
+                        val path = when {
+                            inMemory != null -> inMemory
+                            else -> {
+                                val profileId = sessionRegistry.openSessions.value
+                                    .firstOrNull { it.id == sessionId }
+                                    ?.profileId
+                                profileId?.let {
+                                    sessionResumePrefs.remotePaths.first()[it]
+                                } ?: "/"
+                            }
+                        }
                         navigateToPath(ActivePane.RIGHT, path)
                     } else {
                         updatePaneState(ActivePane.RIGHT) {
@@ -292,6 +322,11 @@ class FileManagerViewModel @Inject constructor(
         // last Compose collector leaves so configuration changes don't
         // immediately drop and re-establish the subscription.
         private const val FOCUS_SUBSCRIPTION_TIMEOUT_MS = 5_000L
+
+        // Task 9 — debounce window for the remote-path DataStore write
+        // triggered by `navigateToPath(RIGHT, …)`. 1 s matches the
+        // TerminalViewModel snapshot writer.
+        private const val REMOTE_PATH_DEBOUNCE_MS = 1_000L
     }
 
     private fun getRepository(pane: ActivePane): FileSystemRepository =
@@ -308,6 +343,19 @@ class FileManagerViewModel @Inject constructor(
         if (pane == ActivePane.RIGHT) {
             sessionRegistry.focusedSessionId.value?.let { sessionId ->
                 lastRemotePath[sessionId] = path
+                // Task 9 — debounced persistence of the remote path keyed
+                // by profileId so a cold start (or session-resume) can
+                // hydrate the remote pane to the last-visited directory.
+                val profileId = sessionRegistry.openSessions.value
+                    .firstOrNull { it.id == sessionId }
+                    ?.profileId
+                if (profileId != null) {
+                    remotePathWriteJob?.cancel()
+                    remotePathWriteJob = viewModelScope.launch {
+                        delay(REMOTE_PATH_DEBOUNCE_MS)
+                        sessionResumePrefs.setRemotePath(profileId, path)
+                    }
+                }
             }
         }
         viewModelScope.launch {

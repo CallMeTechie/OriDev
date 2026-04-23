@@ -36,6 +36,10 @@ dependencies {
     // connection-tap → credential-fetch. See ConnectionListViewModel.
     implementation(project(":core:core-security"))
     implementation(project(":domain"))
+    // Task 15 (session-resume) — FailedResumeRegistry + ResumeCoordinator
+    // live in `:data/session`; the ConnectionListViewModel observes them
+    // for the FailedResumeBanner and auto-resume TOFU prompts.
+    implementation(project(":data"))
     implementation(project(":feature-premium"))
 
     implementation(platform(libs.compose.bom))

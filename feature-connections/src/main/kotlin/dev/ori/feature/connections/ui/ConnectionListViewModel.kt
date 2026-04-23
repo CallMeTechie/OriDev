@@ -8,7 +8,11 @@ import dev.ori.core.common.error.AppError
 import dev.ori.core.common.result.getAppError
 import dev.ori.core.security.biometric.CredentialUnlockGate
 import dev.ori.core.security.crash.NonFatalErrorLogger
+import dev.ori.data.session.FailedResume
+import dev.ori.data.session.FailedResumeRegistry
+import dev.ori.data.session.ResumeCoordinator
 import dev.ori.domain.model.ServerProfile
+import dev.ori.domain.preferences.SessionResumePreferences
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRegistry
 import dev.ori.domain.usecase.ConnectUseCase
@@ -44,10 +48,22 @@ class ConnectionListViewModel @Inject constructor(
     private val credentialUnlockGate: CredentialUnlockGate,
     private val connectionRepository: ConnectionRepository,
     private val sessionRegistry: SessionRegistry,
+    private val sessionResumePrefs: SessionResumePreferences,
+    private val failedRegistry: FailedResumeRegistry,
+    private val resumeCoordinator: ResumeCoordinator,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ConnectionListUiState())
     val uiState: StateFlow<ConnectionListUiState> = _uiState.asStateFlow()
+
+    /**
+     * Task 15 — direct pass-through of the process-wide
+     * [FailedResumeRegistry]. Entries auto-clear once the corresponding
+     * profile re-enters [SessionRegistry.openSessions] (handled inside
+     * the registry itself), so the VM does not own dismissal logic
+     * beyond the explicit [dismissFailedResume] affordance.
+     */
+    val failedResume: StateFlow<List<FailedResume>> = failedRegistry.failed
 
     /**
      * PR 2 Section 8 — profiles with an open session, derived by joining
@@ -212,6 +228,43 @@ class ConnectionListViewModel @Inject constructor(
                 _uiState.update { it.copy(reconnectBannerProfiles = profiles) }
             }
         }
+        // Task 15 — mirror the FailedResumeRegistry so the screen can
+        // render the FailedResumeBanner off uiState. Auto-cleanup on
+        // successful retry happens inside the registry itself
+        // (openSessions observer in FailedResumeRegistry.init), so no
+        // further bookkeeping is owed here.
+        viewModelScope.launch {
+            failedRegistry.failed.collect { entries ->
+                _uiState.update { it.copy(failedResume = entries) }
+            }
+        }
+        // Task 15 — the ResumeCoordinator serialises TOFU prompts from
+        // auto-resume via its own Mutex + Channel. We surface the active
+        // prompt through the same uiState.hostKeyPrompt field the
+        // manual-connect failure path uses so the screen renders a
+        // single dialog regardless of origin. The `coordinatorPromptId`
+        // discriminator tells `acceptHostKey`/`rejectHostKey` to ack the
+        // coordinator in addition to (or instead of) the
+        // TrustHostUseCase round-trip.
+        viewModelScope.launch {
+            resumeCoordinator.hostKeyPrompts.collect { coordinatorPrompt ->
+                if (coordinatorPrompt != null) {
+                    _uiState.update {
+                        it.copy(
+                            hostKeyPrompt = HostKeyPrompt(
+                                profileId = coordinatorPrompt.profileId,
+                                host = coordinatorPrompt.host,
+                                port = portForHost(coordinatorPrompt.host),
+                                fingerprint = coordinatorPrompt.fingerprint,
+                                keyType = "unknown",
+                                expectedFingerprint = null,
+                                coordinatorPromptId = coordinatorPrompt.id,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -235,14 +288,29 @@ class ConnectionListViewModel @Inject constructor(
 
     /**
      * PR 3 Section 11 — "Schließen" on the banner. Clears the persisted
-     * profile-id set so the banner stays hidden across subsequent app
-     * launches until new sessions are opened. Does not disconnect any
-     * live sessions (there are none by definition in the banner path).
+     * profile-id set (plus the rest of the resume subset —
+     * tabMemos / focusedProfileId / remotePaths) so the banner stays
+     * hidden across subsequent app launches until new sessions are
+     * opened. Does not disconnect any live sessions (there are none by
+     * definition in the banner path) and leaves `lastTopLevelRoute`
+     * alone so cold start still returns to the user's last tab.
      */
     fun dismissReconnectBanner() {
         viewModelScope.launch {
-            sessionRegistry.clearPersistedProfileIds()
+            sessionResumePrefs.clearResumeSubset()
         }
+    }
+
+    /**
+     * Task 15 — "Schließen" on the [FailedResumeBanner]. Clears the
+     * in-memory [FailedResumeRegistry] (process-scoped) so the banner
+     * disappears for the rest of the session. Entries are not
+     * persisted, so subsequent app launches start with an empty
+     * registry regardless of this call; dismissal is purely for the
+     * current session's UI affordance.
+     */
+    fun dismissFailedResume() {
+        failedRegistry.clear()
     }
 
     /**
@@ -273,9 +341,7 @@ class ConnectionListViewModel @Inject constructor(
                 _uiState.update { it.copy(error = null) }
             }
             is ConnectionListEvent.AcceptHostKey -> acceptHostKey()
-            is ConnectionListEvent.RejectHostKey -> {
-                _uiState.update { it.copy(hostKeyPrompt = null) }
-            }
+            is ConnectionListEvent.RejectHostKey -> rejectHostKey()
         }
     }
 
@@ -332,6 +398,17 @@ class ConnectionListViewModel @Inject constructor(
 
     private fun acceptHostKey() {
         val prompt = _uiState.value.hostKeyPrompt ?: return
+        // Task 15 — coordinator-originated prompts are acked directly
+        // through `respondToPrompt`; the coordinator itself will call
+        // `TrustHostUseCase` + retry the connect on the accept path
+        // (see `ResumeCoordinator.enqueueHostKeyPrompt`). Running the
+        // manual-connect trust-then-retry pipeline in that case would
+        // double-trust and double-connect.
+        prompt.coordinatorPromptId?.let { id ->
+            resumeCoordinator.respondToPrompt(id, accept = true)
+            _uiState.update { it.copy(hostKeyPrompt = null) }
+            return
+        }
         viewModelScope.launch {
             val result = trustHostUseCase(
                 host = prompt.host,
@@ -351,6 +428,21 @@ class ConnectionListViewModel @Inject constructor(
             _uiState.update { it.copy(hostKeyPrompt = null) }
             connect(prompt.profileId)
         }
+    }
+
+    /**
+     * Task 15 — reject the current TOFU dialog. Manual-connect prompts
+     * merely clear the uiState field; coordinator-originated prompts
+     * additionally send a `respondToPrompt(id, accept=false)` so the
+     * coordinator's `promptResponses` channel can deliver the decline
+     * ack instead of timing out (30 s).
+     */
+    private fun rejectHostKey() {
+        val prompt = _uiState.value.hostKeyPrompt
+        prompt?.coordinatorPromptId?.let { id ->
+            resumeCoordinator.respondToPrompt(id, accept = false)
+        }
+        _uiState.update { it.copy(hostKeyPrompt = null) }
     }
 
     /**

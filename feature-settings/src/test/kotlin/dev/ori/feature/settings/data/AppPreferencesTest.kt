@@ -92,6 +92,15 @@ class AppPreferencesTest {
     }
 
     @Test
+    fun autoResumeSessions_defaultFalse_andToggle() = runTest {
+        assertThat(prefs.autoResumeSessions.first()).isFalse()
+        prefs.setAutoResumeSessions(true)
+        assertThat(prefs.autoResumeSessions.first()).isTrue()
+        prefs.setAutoResumeSessions(false)
+        assertThat(prefs.autoResumeSessions.first()).isFalse()
+    }
+
+    @Test
     fun all_snapshotReflectsIndividualSetters() = runTest {
         prefs.setTheme("dark")
         prefs.setMaxParallelTransfers(5)
@@ -139,6 +148,7 @@ class AppPreferencesTest {
             notifyConnection = true,
             notifyClaude = false,
             notifyWear = true,
+            autoResumeSessions = false,
         )
 
         assertThat(prefs.all.first()).isEqualTo(expected)

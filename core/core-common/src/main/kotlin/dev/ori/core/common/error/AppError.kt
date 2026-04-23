@@ -14,4 +14,7 @@ sealed class AppError(val message: String, val cause: Throwable? = null) {
     class ProxmoxApiError(val statusCode: Int, message: String) : AppError(message)
     class PremiumRequired(val feature: String) : AppError("Premium required for $feature")
     class LimitReached(val resource: String, val limit: Int) : AppError("Limit of $limit reached for $resource")
+    class CredentialMissing : AppError("credentials missing")
+    class ProfileNotFound(val profileId: Long) : AppError("profile $profileId not found")
+    class Unknown(cause: Throwable? = null) : AppError(cause?.message ?: "unknown error", cause)
 }

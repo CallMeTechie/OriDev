@@ -6,8 +6,12 @@ import dev.ori.core.common.model.AuthMethod
 import dev.ori.core.common.model.Protocol
 import dev.ori.core.common.result.appSuccess
 import dev.ori.core.security.biometric.CredentialUnlockGate
+import dev.ori.data.session.FailedResume
+import dev.ori.data.session.FailedResumeRegistry
+import dev.ori.data.session.ResumeCoordinator
 import dev.ori.domain.model.ServerProfile
 import dev.ori.domain.model.Session
+import dev.ori.domain.preferences.SessionResumePreferences
 import dev.ori.domain.repository.ConnectionRepository
 import dev.ori.domain.repository.SessionRegistry
 import dev.ori.domain.usecase.ConnectUseCase
@@ -23,8 +27,10 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -36,6 +42,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import dev.ori.data.session.HostKeyPrompt as CoordinatorHostKeyPrompt
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ConnectionListViewModelTest {
@@ -66,6 +73,25 @@ class ConnectionListViewModelTest {
         // deterministic. Tests that exercise the banner override this.
         every { it.persistedProfileIds } returns MutableStateFlow(emptySet<Long>()).asStateFlow()
     }
+    private val sessionResumePrefs = mockk<SessionResumePreferences>(relaxed = true)
+
+    // Task 15 — real [FailedResumeRegistry] built via the Hilt `@Inject`
+    // constructor. The internal test-scope constructor would give us
+    // virtual-time control over the openSessions observer, but it is
+    // only visible within `:data`, so cross-module tests use the public
+    // constructor. That is safe here: our tests drive `add` / `clear`
+    // directly on the registry and never depend on the openSessions
+    // observer (the default mock emits an empty list, so the observer
+    // filters nothing).
+    private lateinit var failedRegistry: FailedResumeRegistry
+
+    // Task 15 — `ResumeCoordinator` has no easy test-constructor path
+    // (constructor is internal but requires ServerProfileDao, TrustHost,
+    // AutoResume prefs etc.), so we mock it with relaxed = true and
+    // stub the only two observable surfaces the VM touches:
+    // `hostKeyPrompts` (StateFlow) and `respondToPrompt` (fire-and-forget).
+    private val resumeCoordinator = mockk<ResumeCoordinator>(relaxed = true)
+    private val coordinatorPrompts = MutableStateFlow<CoordinatorHostKeyPrompt?>(null)
 
     private val testProfile = ServerProfile(
         id = 1L,
@@ -82,6 +108,11 @@ class ConnectionListViewModelTest {
     @BeforeEach
     fun setup() {
         Dispatchers.setMain(testDispatcher)
+        // Coordinator stub: empty prompts flow by default so the init
+        // observer does not flip `uiState.hostKeyPrompt` under the
+        // feet of tests that exercise the manual-connect path.
+        every { resumeCoordinator.hostKeyPrompts } returns coordinatorPrompts.asStateFlow()
+        every { resumeCoordinator.snackbarEvents } returns MutableSharedFlow()
     }
 
     @AfterEach
@@ -90,6 +121,9 @@ class ConnectionListViewModelTest {
     }
 
     private fun createViewModel(): ConnectionListViewModel {
+        // Registry must be created lazily per-test so each test gets a
+        // fresh openSessions-observer Job.
+        failedRegistry = FailedResumeRegistry(sessionRegistry)
         return ConnectionListViewModel(
             getConnections = getConnections,
             getFavorites = getFavorites,
@@ -101,6 +135,9 @@ class ConnectionListViewModelTest {
             credentialUnlockGate = credentialUnlockGate,
             connectionRepository = connectionRepository,
             sessionRegistry = sessionRegistry,
+            sessionResumePrefs = sessionResumePrefs,
+            failedRegistry = failedRegistry,
+            resumeCoordinator = resumeCoordinator,
         )
     }
 
@@ -355,12 +392,109 @@ class ConnectionListViewModelTest {
             MutableStateFlow(emptySet<Long>()).asStateFlow()
         every { sessionRegistry.openSessions } returns
             MutableStateFlow<List<Session>>(emptyList()).asStateFlow()
-        coEvery { sessionRegistry.clearPersistedProfileIds() } just Runs
+        coEvery { sessionResumePrefs.clearResumeSubset() } just Runs
 
         val viewModel = createViewModel()
         viewModel.dismissReconnectBanner()
         advanceUntilIdle()
 
-        coVerify { sessionRegistry.clearPersistedProfileIds() }
+        coVerify { sessionResumePrefs.clearResumeSubset() }
+    }
+
+    @Test
+    fun `banner state mirrors FailedResumeRegistry`() = runTest {
+        every { getConnections() } returns flowOf(emptyList())
+        every { getFavorites() } returns flowOf(emptyList())
+
+        val viewModel = createViewModel()
+        failedRegistry.add(FailedResume(1L, "A", "timeout"))
+        advanceUntilIdle()
+
+        assertThat(viewModel.uiState.value.failedResume).hasSize(1)
+        assertThat(viewModel.uiState.value.failedResume.single().profileId).isEqualTo(1L)
+    }
+
+    @Test
+    fun `dismissFailedResume clears registry`() = runTest {
+        every { getConnections() } returns flowOf(emptyList())
+        every { getFavorites() } returns flowOf(emptyList())
+
+        val viewModel = createViewModel()
+        failedRegistry.add(FailedResume(1L, "A", "x"))
+        advanceUntilIdle()
+
+        viewModel.dismissFailedResume()
+        advanceUntilIdle()
+
+        assertThat(failedRegistry.failed.value).isEmpty()
+    }
+
+    @Test
+    fun `coordinator hostKeyPrompt surfaces on uiState with coordinatorPromptId`() = runTest {
+        every { getConnections() } returns flowOf(emptyList())
+        every { getFavorites() } returns flowOf(emptyList())
+
+        val viewModel = createViewModel()
+        coordinatorPrompts.value = CoordinatorHostKeyPrompt(
+            id = "prompt-1",
+            profileId = 1L,
+            profileName = "A",
+            host = "a.local",
+            fingerprint = "SHA256:xyz",
+        )
+        advanceUntilIdle()
+
+        val prompt = viewModel.uiState.value.hostKeyPrompt
+        assertThat(prompt).isNotNull()
+        assertThat(prompt?.coordinatorPromptId).isEqualTo("prompt-1")
+        assertThat(prompt?.profileId).isEqualTo(1L)
+    }
+
+    @Test
+    fun `acceptHostKey for coordinator prompt routes through respondToPrompt`() = runTest {
+        every { getConnections() } returns flowOf(emptyList())
+        every { getFavorites() } returns flowOf(emptyList())
+
+        val viewModel = createViewModel()
+        coordinatorPrompts.value = CoordinatorHostKeyPrompt(
+            id = "prompt-2",
+            profileId = 1L,
+            profileName = "A",
+            host = "a.local",
+            fingerprint = "SHA256:xyz",
+        )
+        advanceUntilIdle()
+
+        viewModel.onEvent(ConnectionListEvent.AcceptHostKey)
+        advanceUntilIdle()
+
+        verify { resumeCoordinator.respondToPrompt("prompt-2", accept = true) }
+        // Manual trust path must NOT fire for coordinator-originated
+        // prompts — the coordinator itself calls TrustHostUseCase on
+        // accept (see ResumeCoordinator.enqueueHostKeyPrompt).
+        coVerify(exactly = 0) { trustHostUseCase(any(), any(), any(), any()) }
+        assertThat(viewModel.uiState.value.hostKeyPrompt).isNull()
+    }
+
+    @Test
+    fun `rejectHostKey for coordinator prompt routes through respondToPrompt`() = runTest {
+        every { getConnections() } returns flowOf(emptyList())
+        every { getFavorites() } returns flowOf(emptyList())
+
+        val viewModel = createViewModel()
+        coordinatorPrompts.value = CoordinatorHostKeyPrompt(
+            id = "prompt-3",
+            profileId = 1L,
+            profileName = "A",
+            host = "a.local",
+            fingerprint = "SHA256:xyz",
+        )
+        advanceUntilIdle()
+
+        viewModel.onEvent(ConnectionListEvent.RejectHostKey)
+        advanceUntilIdle()
+
+        verify { resumeCoordinator.respondToPrompt("prompt-3", accept = false) }
+        assertThat(viewModel.uiState.value.hostKeyPrompt).isNull()
     }
 }

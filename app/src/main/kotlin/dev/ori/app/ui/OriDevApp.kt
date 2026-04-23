@@ -10,10 +10,16 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
@@ -28,6 +34,8 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import dev.ori.app.di.AppEntryPoint
+import dev.ori.app.navigation.KNOWN_TOP_LEVEL_ROUTES
 import dev.ori.app.navigation.OriDevNavHost
 import dev.ori.core.ui.icons.lucide.ArrowLeftRight
 import dev.ori.core.ui.icons.lucide.Folder
@@ -41,6 +49,9 @@ import dev.ori.feature.connections.navigation.CONNECTIONS_ROUTE
 import dev.ori.feature.filemanager.navigation.FILE_MANAGER_ROUTE
 import dev.ori.feature.terminal.navigation.TERMINAL_ROUTE
 import dev.ori.feature.transfers.navigation.TRANSFERS_ROUTE
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private const val WIDE_SCREEN_BREAKPOINT_DP = 600
 
@@ -73,11 +84,12 @@ interface SessionRegistryEntryPoint {
 }
 
 @Composable
-fun OriDevApp() {
+fun OriDevApp(startDestination: String = CONNECTIONS_ROUTE) {
     OriDevTheme {
         val navController = rememberNavController()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentDestination = navBackStackEntry?.destination
+        val currentRoute = currentDestination?.route
 
         val configuration = LocalConfiguration.current
         val isWideScreen = configuration.screenWidthDp >= WIDE_SCREEN_BREAKPOINT_DP
@@ -88,6 +100,31 @@ fun OriDevApp() {
                 .fromApplication(context.applicationContext, SessionRegistryEntryPoint::class.java)
                 .sessionRegistry()
         }
+        val resumePrefs = remember(context) {
+            EntryPointAccessors
+                .fromApplication(context.applicationContext, AppEntryPoint::class.java)
+                .sessionResumePrefs()
+        }
+
+        // Task 13 — debounced (1 s) write of the last top-level route so a
+        // cold start can restore the tab the user was on. Only tab-root
+        // routes are persisted; deep-links (editor, add-connection, …) are
+        // ignored so restart never lands on a modal screen. The 1 s debounce
+        // collapses rapid tab-switching into a single DataStore write.
+        val coroutineScope = rememberCoroutineScope()
+        var writeJob by remember { mutableStateOf<Job?>(null) }
+        LaunchedEffect(currentRoute) {
+            val route = currentRoute
+            if (route != null && route in KNOWN_TOP_LEVEL_ROUTES) {
+                writeJob?.cancel()
+                writeJob = coroutineScope.launch {
+                    delay(ROUTE_WRITE_DEBOUNCE_MS)
+                    resumePrefs.setLastTopLevelRoute(route)
+                }
+            }
+        }
+
+        val snackbarHostState = remember { SnackbarHostState() }
 
         if (isWideScreen) {
             // Foldable unfolded (>= 600dp): NavigationRail on the leading edge,
@@ -97,10 +134,14 @@ fun OriDevApp() {
                     navController = navController,
                     currentDestination = currentDestination,
                 )
-                Scaffold(modifier = Modifier.weight(1f)) { innerPadding ->
+                Scaffold(
+                    modifier = Modifier.weight(1f),
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                ) { innerPadding ->
                     OriDevNavHost(
                         navController = navController,
                         sessionRegistry = sessionRegistry,
+                        startDestination = startDestination,
                         modifier = Modifier.padding(innerPadding),
                     )
                 }
@@ -116,16 +157,29 @@ fun OriDevApp() {
                         currentDestination = currentDestination,
                     )
                 },
+                snackbarHost = { SnackbarHost(snackbarHostState) },
             ) { innerPadding ->
                 OriDevNavHost(
                     navController = navController,
                     sessionRegistry = sessionRegistry,
+                    startDestination = startDestination,
                     modifier = Modifier.padding(innerPadding),
                 )
             }
         }
+
+        // Task 14 — app-level snackbar/dialog host. Lives outside the
+        // Scaffold so it receives ResumeCoordinator events regardless of
+        // which tab the user is on (a non-Connections landing tab would
+        // otherwise mean ConnectionListViewModel is not subscribed yet).
+        SnackbarHostEffect(
+            snackbarHostState = snackbarHostState,
+            navController = navController,
+        )
     }
 }
+
+private const val ROUTE_WRITE_DEBOUNCE_MS = 1_000L
 
 @Composable
 private fun AppNavigationBar(
