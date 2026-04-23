@@ -244,6 +244,16 @@ fun ConnectionListScreen(
                 },
                 onReconnectAll = { viewModel.reconnectAll() },
                 onDismissReconnectBanner = { viewModel.dismissReconnectBanner() },
+                onOpenFailedProfile = { profileId ->
+                    // Task 15 — the banner's per-row "Öffnen" CTA routes
+                    // to the same detail sheet as a row tap. If the
+                    // profile has since been deleted (registry entries
+                    // survive deletion until dismissed), no-op.
+                    uiState.profiles.firstOrNull { it.id == profileId }?.let {
+                        selectedProfile = it
+                    }
+                },
+                onDismissFailedResume = { viewModel.dismissFailedResume() },
             )
         }
     }
@@ -284,6 +294,8 @@ private fun ConnectionListBody(
     onToggleFavorite: (ServerProfile) -> Unit,
     onReconnectAll: () -> Unit,
     onDismissReconnectBanner: () -> Unit,
+    onOpenFailedProfile: (Long) -> Unit,
+    onDismissFailedResume: () -> Unit,
 ) {
     if (uiState.isLoading) {
         Box(
@@ -311,11 +323,17 @@ private fun ConnectionListBody(
         .filter(matches)
     val filteredAll = uiState.profiles.filter(matches)
 
-    // PR 3 Section 11 — an active reconnect banner means non-empty
-    // persistence; in that case we always render the list even if the
-    // filtered sections collapse to empty, otherwise the banner (which
-    // is the whole point of this screen after a kill) would vanish.
-    val bannerVisible = uiState.reconnectBannerProfiles.isNotEmpty()
+    // PR 3 Section 11 + Task 15 — an active banner (failed-resume or
+    // reconnect) means we always render the list even if the filtered
+    // sections collapse to empty, otherwise the banner (which is the
+    // whole point of this screen after a failed auto-resume or a kill)
+    // would vanish. The failed-resume banner takes precedence over the
+    // reconnect banner: a fresh auto-resume failure is "newer news"
+    // than the safety-net reconnect affordance, and showing both at
+    // once would be visual noise.
+    val failedVisible = uiState.failedResume.isNotEmpty()
+    val reconnectVisible = !failedVisible && uiState.reconnectBannerProfiles.isNotEmpty()
+    val bannerVisible = failedVisible || reconnectVisible
     val allSectionsEmpty =
         filteredActive.isEmpty() && filteredFavorites.isEmpty() && filteredAll.isEmpty()
     if (!bannerVisible && allSectionsEmpty) {
@@ -341,7 +359,15 @@ private fun ConnectionListBody(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        if (bannerVisible) {
+        if (failedVisible) {
+            item(key = "failed-resume-banner") {
+                FailedResumeBanner(
+                    failed = uiState.failedResume,
+                    onOpenProfile = onOpenFailedProfile,
+                    onDismiss = onDismissFailedResume,
+                )
+            }
+        } else if (reconnectVisible) {
             item(key = "reconnect-banner") {
                 ReconnectBanner(
                     count = uiState.reconnectBannerProfiles.size,
