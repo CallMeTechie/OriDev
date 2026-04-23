@@ -31,7 +31,7 @@ import dev.ori.feature.transfers.navigation.transferQueueScreen
  * outside this allowlist falls back to [CONNECTIONS_ROUTE] so a stale
  * preferences value can never crash the NavHost with an unknown route.
  */
-private val KNOWN_TOP_LEVEL_ROUTES = setOf(
+internal val KNOWN_TOP_LEVEL_ROUTES = setOf(
     CONNECTIONS_ROUTE,
     FILE_MANAGER_ROUTE,
     TERMINAL_ROUTE,

@@ -12,8 +12,12 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
@@ -28,6 +32,8 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import dev.ori.app.di.AppEntryPoint
+import dev.ori.app.navigation.KNOWN_TOP_LEVEL_ROUTES
 import dev.ori.app.navigation.OriDevNavHost
 import dev.ori.core.ui.icons.lucide.ArrowLeftRight
 import dev.ori.core.ui.icons.lucide.Folder
@@ -41,6 +47,9 @@ import dev.ori.feature.connections.navigation.CONNECTIONS_ROUTE
 import dev.ori.feature.filemanager.navigation.FILE_MANAGER_ROUTE
 import dev.ori.feature.terminal.navigation.TERMINAL_ROUTE
 import dev.ori.feature.transfers.navigation.TRANSFERS_ROUTE
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private const val WIDE_SCREEN_BREAKPOINT_DP = 600
 
@@ -78,6 +87,7 @@ fun OriDevApp(startDestination: String = CONNECTIONS_ROUTE) {
         val navController = rememberNavController()
         val navBackStackEntry by navController.currentBackStackEntryAsState()
         val currentDestination = navBackStackEntry?.destination
+        val currentRoute = currentDestination?.route
 
         val configuration = LocalConfiguration.current
         val isWideScreen = configuration.screenWidthDp >= WIDE_SCREEN_BREAKPOINT_DP
@@ -87,6 +97,29 @@ fun OriDevApp(startDestination: String = CONNECTIONS_ROUTE) {
             EntryPointAccessors
                 .fromApplication(context.applicationContext, SessionRegistryEntryPoint::class.java)
                 .sessionRegistry()
+        }
+        val resumePrefs = remember(context) {
+            EntryPointAccessors
+                .fromApplication(context.applicationContext, AppEntryPoint::class.java)
+                .sessionResumePrefs()
+        }
+
+        // Task 13 — debounced (1 s) write of the last top-level route so a
+        // cold start can restore the tab the user was on. Only tab-root
+        // routes are persisted; deep-links (editor, add-connection, …) are
+        // ignored so restart never lands on a modal screen. The 1 s debounce
+        // collapses rapid tab-switching into a single DataStore write.
+        val coroutineScope = rememberCoroutineScope()
+        var writeJob by remember { mutableStateOf<Job?>(null) }
+        LaunchedEffect(currentRoute) {
+            val route = currentRoute
+            if (route != null && route in KNOWN_TOP_LEVEL_ROUTES) {
+                writeJob?.cancel()
+                writeJob = coroutineScope.launch {
+                    delay(ROUTE_WRITE_DEBOUNCE_MS)
+                    resumePrefs.setLastTopLevelRoute(route)
+                }
+            }
         }
 
         if (isWideScreen) {
@@ -128,6 +161,8 @@ fun OriDevApp(startDestination: String = CONNECTIONS_ROUTE) {
         }
     }
 }
+
+private const val ROUTE_WRITE_DEBOUNCE_MS = 1_000L
 
 @Composable
 private fun AppNavigationBar(
