@@ -10,6 +10,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -122,6 +124,8 @@ fun OriDevApp(startDestination: String = CONNECTIONS_ROUTE) {
             }
         }
 
+        val snackbarHostState = remember { SnackbarHostState() }
+
         if (isWideScreen) {
             // Foldable unfolded (>= 600dp): NavigationRail on the leading edge,
             // Scaffold hosts the content without a bottom bar.
@@ -130,7 +134,10 @@ fun OriDevApp(startDestination: String = CONNECTIONS_ROUTE) {
                     navController = navController,
                     currentDestination = currentDestination,
                 )
-                Scaffold(modifier = Modifier.weight(1f)) { innerPadding ->
+                Scaffold(
+                    modifier = Modifier.weight(1f),
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                ) { innerPadding ->
                     OriDevNavHost(
                         navController = navController,
                         sessionRegistry = sessionRegistry,
@@ -150,6 +157,7 @@ fun OriDevApp(startDestination: String = CONNECTIONS_ROUTE) {
                         currentDestination = currentDestination,
                     )
                 },
+                snackbarHost = { SnackbarHost(snackbarHostState) },
             ) { innerPadding ->
                 OriDevNavHost(
                     navController = navController,
@@ -159,6 +167,15 @@ fun OriDevApp(startDestination: String = CONNECTIONS_ROUTE) {
                 )
             }
         }
+
+        // Task 14 — app-level snackbar/dialog host. Lives outside the
+        // Scaffold so it receives ResumeCoordinator events regardless of
+        // which tab the user is on (a non-Connections landing tab would
+        // otherwise mean ConnectionListViewModel is not subscribed yet).
+        SnackbarHostEffect(
+            snackbarHostState = snackbarHostState,
+            navController = navController,
+        )
     }
 }
 
