@@ -58,4 +58,5 @@ private val DEFAULT_PREFERENCES = AppPreferencesSnapshot(
     notifyConnection = true,
     notifyClaude = false,
     notifyWear = true,
+    autoResumeSessions = false,
 )
