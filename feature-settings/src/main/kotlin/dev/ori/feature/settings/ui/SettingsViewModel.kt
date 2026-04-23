@@ -135,6 +135,9 @@ public class SettingsViewModel @Inject constructor(
     public fun setBlockScreenshotsWhileConnected(value: Boolean) {
         viewModelScope.launch { appPreferences.setBlockScreenshotsWhileConnected(value) }
     }
+    public fun setAutoResumeSessions(value: Boolean) {
+        viewModelScope.launch { appPreferences.setAutoResumeSessions(value) }
+    }
 
     // ---- Storage Access (Phase 15 Task 15.6) -------------------------------
 
