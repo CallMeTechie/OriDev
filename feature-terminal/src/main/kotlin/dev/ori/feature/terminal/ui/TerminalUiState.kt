@@ -83,6 +83,9 @@ data class TerminalUiState(
      * first emits (which is ~instant on subsequent launches).
      */
     val keyboardMode: KeyboardMode = KeyboardMode.CUSTOM,
+    val leftPaneTabId: String? = null,
+    val rightPaneTabId: String? = null,
+    val activePaneIndex: Int = 0,
 )
 
 sealed class TerminalEvent {
