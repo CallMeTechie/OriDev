@@ -926,6 +926,58 @@ class TerminalViewModelTest {
         advanceTimeBy(1_001)
         assertThat(vm.isRestoringPanesForTest()).isFalse()
     }
+
+    // --- Foldable split terminal Task 7: reducer runs after every tab mutation ---
+
+    @Test
+    fun `opening second tab fills right pane when left already populated`() = runTest {
+        stubSshConnection()
+        coEvery { sessionRegistry.connect(1L) } returns kotlin.Result.success(
+            makeSession(profileId = 1L, id = "session-1"),
+        )
+        coEvery { sessionRegistry.connect(2L) } returns kotlin.Result.success(
+            makeSession(profileId = 2L, id = "session-2"),
+        )
+        sessionResumePrefs.activePaneIndexValue.value = 0
+        val vm = createViewModel()
+        // Phase 1 preload only; avoid triggering the 60 s restore-gate
+        // timeout so the reducer's null-sweep of preloaded ids does not
+        // interfere.
+        runCurrent()
+
+        vm.openNewTab(profileId = 1L)
+        advanceUntilIdle()
+        vm.openNewTab(profileId = 2L)
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.leftPaneTabId).isNotNull()
+        assertThat(vm.uiState.value.rightPaneTabId).isNotNull()
+        assertThat(vm.uiState.value.leftPaneTabId).isNotEqualTo(vm.uiState.value.rightPaneTabId)
+    }
+
+    @Test
+    fun `closing tab in left-slot refills slot from remaining tabs`() = runTest {
+        stubSshConnection()
+        coEvery { sessionRegistry.connect(1L) } returns kotlin.Result.success(
+            makeSession(profileId = 1L, id = "session-1"),
+        )
+        coEvery { sessionRegistry.connect(2L) } returns kotlin.Result.success(
+            makeSession(profileId = 2L, id = "session-2"),
+        )
+        val vm = createViewModel()
+        runCurrent()
+        vm.openNewTab(profileId = 1L)
+        vm.openNewTab(profileId = 2L)
+        advanceUntilIdle()
+        val leftId = vm.uiState.value.leftPaneTabId!!
+        val rightId = vm.uiState.value.rightPaneTabId!!
+
+        vm.onEvent(TerminalEvent.CloseTab(leftId))
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.leftPaneTabId).isEqualTo(rightId)
+        assertThat(vm.uiState.value.rightPaneTabId).isNull()
+    }
 }
 
 /**

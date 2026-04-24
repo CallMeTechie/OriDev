@@ -503,6 +503,7 @@ class TerminalViewModel @Inject constructor(
                 activeTabIndex = state.tabs.size,
             )
         }
+        runReducer()
 
         startReaderCoroutine(tabId, shellHandle)
         scheduleTabMemoSnapshot()
@@ -649,6 +650,7 @@ class TerminalViewModel @Inject constructor(
         if (remainingForSession == 0) {
             sessionRegistry.scheduleGraceDisconnect(tab.sessionId)
         }
+        runReducer()
         scheduleTabMemoSnapshot()
     }
 
@@ -667,6 +669,7 @@ class TerminalViewModel @Inject constructor(
         // closeTab already schedules the snapshot, but call here defensively
         // in case [toClose] was empty and the caller still wants the write
         // (e.g. to flush an in-flight memo from a different path).
+        runReducer()
         scheduleTabMemoSnapshot()
         restoreLatches.remove(profileId)
     }
@@ -689,6 +692,7 @@ class TerminalViewModel @Inject constructor(
                 modifierState = it.modifierState.copy(ctrl = false, alt = false),
             )
         }
+        runReducer()
         scheduleTabMemoSnapshot()
     }
 
