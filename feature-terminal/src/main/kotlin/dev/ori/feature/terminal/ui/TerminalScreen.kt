@@ -93,6 +93,13 @@ fun TerminalScreen(
     val isSplitAvailable = configuration.screenWidthDp >= SPLIT_THRESHOLD_DP
     val isSplitActive = isSplitAvailable && uiState.tabs.size >= 2
 
+    // Foldable split-terminal Task 13 — keep the ViewModel's runtime
+    // split-flag in sync so [TerminalViewModel.getActiveTab] can route
+    // keystrokes and resizes through [computeActiveTabId].
+    LaunchedEffect(isSplitActive) {
+        viewModel.setSplitActive(isSplitActive)
+    }
+
     var showClipboardHistory by remember { mutableStateOf(false) }
 
     // Phase 14 Task 14.5 — ONE FocusRequester hoisted to the screen
@@ -295,6 +302,7 @@ fun TerminalScreen(
                         uiState = uiState,
                         imeFocusRequester = imeFocusRequester,
                         viewModel = viewModel,
+                        isSplitActive = isSplitActive,
                         customModeModifier = if (isWideScreen) {
                             Modifier
                                 .fillMaxWidth()
@@ -542,6 +550,7 @@ private fun TerminalKeyboardHostSlot(
     uiState: TerminalUiState,
     imeFocusRequester: FocusRequester,
     viewModel: TerminalViewModel,
+    isSplitActive: Boolean,
     customModeModifier: Modifier,
 ) {
     val isCustomMode = uiState.keyboardMode == KeyboardMode.CUSTOM
@@ -554,6 +563,8 @@ private fun TerminalKeyboardHostSlot(
                 onInput = { bytes -> viewModel.onEvent(TerminalEvent.SendInput(bytes)) },
                 onEvent = viewModel::onEvent,
                 modifier = customModeModifier,
+                activePaneIndex = uiState.activePaneIndex,
+                isSplitActive = isSplitActive,
             )
         }
         !isCustomMode -> {
@@ -564,6 +575,8 @@ private fun TerminalKeyboardHostSlot(
                 onInput = { bytes -> viewModel.onEvent(TerminalEvent.SendInput(bytes)) },
                 onEvent = viewModel::onEvent,
                 modifier = Modifier.fillMaxWidth(),
+                activePaneIndex = uiState.activePaneIndex,
+                isSplitActive = isSplitActive,
             )
         }
         // CUSTOM + isKeyboardVisible=false → render nothing.

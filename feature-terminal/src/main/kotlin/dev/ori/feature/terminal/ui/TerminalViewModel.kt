@@ -163,6 +163,29 @@ class TerminalViewModel @Inject constructor(
      */
     private val resizeRequests = MutableSharedFlow<Pair<Int, Int>>(extraBufferCapacity = BUFFER_CAPACITY)
 
+    /**
+     * Foldable split-terminal Task 13 — Compose-side notion of "is the
+     * horizontal split currently rendered". Flipped by [TerminalScreen]
+     * whenever [configuration.screenWidthDp] + [tabs.size] crosses the
+     * threshold. Keystrokes and resizes consult this via
+     * [computeActiveTabId] so that in split mode the ACTIVE-PANE slot
+     * wins over the classic [activeTabIndex] lookup. Backed by an
+     * [AtomicBoolean] so the Compose reader and IO writer paths do not
+     * race.
+     */
+    private val isSplitActive = AtomicBoolean(false)
+
+    /**
+     * Foldable split-terminal Task 13 — called from [TerminalScreen] on
+     * every recomposition with the current split state. A wrapping
+     * [AtomicBoolean.set] is cheap enough to call unconditionally; we
+     * do not re-run the reducer or persist anything — this flag is
+     * purely runtime routing metadata.
+     */
+    fun setSplitActive(active: Boolean) {
+        isSplitActive.set(active)
+    }
+
     init {
         loadSnippets()
         collectKeyboardMode()
@@ -985,9 +1008,19 @@ class TerminalViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Foldable split-terminal Task 13 — routing helper. In split mode
+     * (>=600 dp + >=2 tabs) the active-pane slot wins; otherwise the
+     * classic single-pane [activeTabIndex] lookup runs. Every call-site
+     * that previously reached for `state.tabs.getOrNull(activeTabIndex)`
+     * should go through here so keystrokes, resizes, and recordings
+     * follow the focused-pane semantic without each call-site
+     * re-implementing the check.
+     */
     private fun getActiveTab(): TerminalTabState? {
         val state = _uiState.value
-        return state.tabs.getOrNull(state.activeTabIndex)
+        val activeTabId = computeActiveTabId(state, isSplitActive.get()) ?: return null
+        return state.tabs.firstOrNull { it.id == activeTabId }
     }
 
     private fun loadSnippets() {
