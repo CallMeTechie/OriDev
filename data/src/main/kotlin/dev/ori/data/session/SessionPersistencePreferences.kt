@@ -3,6 +3,7 @@ package dev.ori.data.session
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import dev.ori.core.security.crash.NonFatalErrorLogger
@@ -51,6 +52,9 @@ class SessionPersistencePreferences(
         val focusedProfileId = stringPreferencesKey("focused_profile_id")
         val remotePaths = stringPreferencesKey("remote_paths")
         val lastTopLevelRoute = stringPreferencesKey("last_top_level_route")
+        val leftPaneTabId = stringPreferencesKey("left_pane_tab_id")
+        val rightPaneTabId = stringPreferencesKey("right_pane_tab_id")
+        val activePaneIndex = intPreferencesKey("active_pane_index")
     }
 
     private val json = Json {
@@ -94,6 +98,15 @@ class SessionPersistencePreferences(
             prefs[Keys.lastTopLevelRoute] ?: DEFAULT_TOP_LEVEL_ROUTE
         }
 
+    override val leftPaneTabId: Flow<String?> =
+        dataStore.data.map { prefs -> prefs[Keys.leftPaneTabId] }
+
+    override val rightPaneTabId: Flow<String?> =
+        dataStore.data.map { prefs -> prefs[Keys.rightPaneTabId] }
+
+    override val activePaneIndex: Flow<Int> =
+        dataStore.data.map { prefs -> prefs[Keys.activePaneIndex]?.coerceIn(0, 1) ?: 0 }
+
     override suspend fun setProfileIds(ids: Set<Long>) {
         dataStore.edit { it[Keys.profileIds] = ids.map(Long::toString).toSet() }
     }
@@ -129,12 +142,31 @@ class SessionPersistencePreferences(
         dataStore.edit { it[Keys.lastTopLevelRoute] = route }
     }
 
+    override suspend fun setLeftPaneTabId(tabId: String?) {
+        dataStore.edit {
+            if (tabId == null) it.remove(Keys.leftPaneTabId) else it[Keys.leftPaneTabId] = tabId
+        }
+    }
+
+    override suspend fun setRightPaneTabId(tabId: String?) {
+        dataStore.edit {
+            if (tabId == null) it.remove(Keys.rightPaneTabId) else it[Keys.rightPaneTabId] = tabId
+        }
+    }
+
+    override suspend fun setActivePaneIndex(index: Int) {
+        dataStore.edit { it[Keys.activePaneIndex] = index.coerceIn(0, 1) }
+    }
+
     override suspend fun clearResumeSubset() {
         dataStore.edit {
             it.remove(Keys.profileIds)
             it.remove(Keys.tabMemos)
             it.remove(Keys.focusedProfileId)
             it.remove(Keys.remotePaths)
+            it.remove(Keys.leftPaneTabId)
+            it.remove(Keys.rightPaneTabId)
+            it.remove(Keys.activePaneIndex)
         }
     }
 

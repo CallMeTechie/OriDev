@@ -474,15 +474,27 @@ class ResumeCoordinatorTest {
         override val tabMemos: Flow<List<TabMemo>> = MutableStateFlow(emptyList())
         override val remotePaths: Flow<Map<Long, String>> = MutableStateFlow(emptyMap())
         override val lastTopLevelRoute: Flow<String> = MutableStateFlow("connections")
+        private val _leftPaneTabId = MutableStateFlow<String?>(null)
+        override val leftPaneTabId: Flow<String?> = _leftPaneTabId
+        private val _rightPaneTabId = MutableStateFlow<String?>(null)
+        override val rightPaneTabId: Flow<String?> = _rightPaneTabId
+        private val _activePaneIndex = MutableStateFlow(0)
+        override val activePaneIndex: Flow<Int> = _activePaneIndex
 
         override suspend fun setProfileIds(ids: Set<Long>) { _profileIds.value = ids }
         override suspend fun setTabMemos(memos: List<TabMemo>) { /* no-op */ }
         override suspend fun setFocusedProfileId(id: Long?) { _focusedProfileId.value = id }
         override suspend fun setRemotePath(profileId: Long, path: String) { /* no-op */ }
         override suspend fun setLastTopLevelRoute(route: String) { /* no-op */ }
+        override suspend fun setLeftPaneTabId(tabId: String?) { _leftPaneTabId.value = tabId }
+        override suspend fun setRightPaneTabId(tabId: String?) { _rightPaneTabId.value = tabId }
+        override suspend fun setActivePaneIndex(index: Int) { _activePaneIndex.value = index.coerceIn(0, 1) }
         override suspend fun clearResumeSubset() {
             _profileIds.value = emptySet()
             _focusedProfileId.value = null
+            _leftPaneTabId.value = null
+            _rightPaneTabId.value = null
+            _activePaneIndex.value = 0
         }
     }
 

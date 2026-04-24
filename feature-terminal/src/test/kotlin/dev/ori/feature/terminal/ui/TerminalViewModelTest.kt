@@ -835,12 +835,18 @@ private class FakeSessionResumePreferences : SessionResumePreferences {
     val focusedProfileIdValue = MutableStateFlow<Long?>(null)
     val remotePathsValue = MutableStateFlow<Map<Long, String>>(emptyMap())
     val lastTopLevelRouteValue = MutableStateFlow("connections")
+    val leftPaneTabIdValue = MutableStateFlow<String?>(null)
+    val rightPaneTabIdValue = MutableStateFlow<String?>(null)
+    val activePaneIndexValue = MutableStateFlow(0)
 
     override val profileIds = profileIdsValue
     override val tabMemos = tabMemosValue
     override val focusedProfileId = focusedProfileIdValue
     override val remotePaths = remotePathsValue
     override val lastTopLevelRoute = lastTopLevelRouteValue
+    override val leftPaneTabId = leftPaneTabIdValue
+    override val rightPaneTabId = rightPaneTabIdValue
+    override val activePaneIndex = activePaneIndexValue
 
     override suspend fun setProfileIds(ids: Set<Long>) {
         profileIdsValue.value = ids
@@ -862,10 +868,25 @@ private class FakeSessionResumePreferences : SessionResumePreferences {
         lastTopLevelRouteValue.value = route
     }
 
+    override suspend fun setLeftPaneTabId(tabId: String?) {
+        leftPaneTabIdValue.value = tabId
+    }
+
+    override suspend fun setRightPaneTabId(tabId: String?) {
+        rightPaneTabIdValue.value = tabId
+    }
+
+    override suspend fun setActivePaneIndex(index: Int) {
+        activePaneIndexValue.value = index.coerceIn(0, 1)
+    }
+
     override suspend fun clearResumeSubset() {
         profileIdsValue.value = emptySet()
         tabMemosValue.value = emptyList()
         focusedProfileIdValue.value = null
         remotePathsValue.value = emptyMap()
+        leftPaneTabIdValue.value = null
+        rightPaneTabIdValue.value = null
+        activePaneIndexValue.value = 0
     }
 }
