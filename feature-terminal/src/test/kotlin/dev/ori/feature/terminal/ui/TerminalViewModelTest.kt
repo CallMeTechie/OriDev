@@ -799,6 +799,51 @@ class TerminalViewModelTest {
         assertThat(viewModel.uiState.value.tabs.filter { it.profileId == 1L }.size).isAtLeast(2)
     }
 
+    // --- Foldable split terminal Task 5: computeActiveTabId helper ---
+
+    private fun tab(id: String) = TerminalTabState(
+        id = id,
+        sessionId = "session-$id",
+        profileId = 1L,
+        serverName = "Server $id",
+    )
+
+    @Test
+    fun `computeActiveTabId returns left-pane tab in split active=0`() {
+        val state = TerminalUiState(
+            tabs = listOf(tab("T1"), tab("T2")),
+            activeTabIndex = 0,
+            leftPaneTabId = "T1",
+            rightPaneTabId = "T2",
+            activePaneIndex = 0,
+        )
+        assertThat(computeActiveTabId(state, isSplitActive = true)).isEqualTo("T1")
+    }
+
+    @Test
+    fun `computeActiveTabId returns right-pane tab in split active=1`() {
+        val state = TerminalUiState(
+            tabs = listOf(tab("T1"), tab("T2")),
+            activeTabIndex = 0,
+            leftPaneTabId = "T1",
+            rightPaneTabId = "T2",
+            activePaneIndex = 1,
+        )
+        assertThat(computeActiveTabId(state, isSplitActive = true)).isEqualTo("T2")
+    }
+
+    @Test
+    fun `computeActiveTabId returns activeTabIndex tab in single-pane`() {
+        val state = TerminalUiState(
+            tabs = listOf(tab("T1"), tab("T2")),
+            activeTabIndex = 1,
+            leftPaneTabId = "T1",
+            rightPaneTabId = "T2",
+            activePaneIndex = 0,
+        )
+        assertThat(computeActiveTabId(state, isSplitActive = false)).isEqualTo("T2")
+    }
+
     @Test
     fun `snapshot writer removes orphan memo when profile disconnects`() = runTest {
         stubSshConnection()

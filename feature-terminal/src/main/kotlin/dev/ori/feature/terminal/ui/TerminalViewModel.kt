@@ -58,6 +58,21 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 
+/**
+ * Resolves which tab ID should receive keystrokes + output. In split
+ * mode (>=600dp + >=2 tabs) the active-pane slot wins; otherwise the
+ * classic single-pane activeTabIndex applies.
+ */
+internal fun computeActiveTabId(state: TerminalUiState, isSplitActive: Boolean): String? =
+    if (isSplitActive) {
+        when (state.activePaneIndex) {
+            1 -> state.rightPaneTabId
+            else -> state.leftPaneTabId
+        }
+    } else {
+        state.tabs.getOrNull(state.activeTabIndex)?.id
+    }
+
 @HiltViewModel
 @Suppress("TooManyFunctions", "LongParameterList")
 class TerminalViewModel @Inject constructor(
