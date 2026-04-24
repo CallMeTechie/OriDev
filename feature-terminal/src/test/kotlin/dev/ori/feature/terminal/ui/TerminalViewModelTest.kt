@@ -8,6 +8,7 @@ import dev.ori.core.common.result.appSuccess
 import dev.ori.core.network.ssh.ShellHandle
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.core.security.clipboard.OriClipboard
+import dev.ori.data.session.ResumeCoordinator
 import dev.ori.domain.model.CommandSnippet
 import dev.ori.domain.model.KeyboardMode
 import dev.ori.domain.model.Session
@@ -53,6 +54,7 @@ import java.io.ByteArrayOutputStream
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass")
 class TerminalViewModelTest {
 
     private val testDispatcher = UnconfinedTestDispatcher()
@@ -84,6 +86,20 @@ class TerminalViewModelTest {
         every { keyboardModeFlow } returns flowOf(KeyboardMode.CUSTOM)
     }
     private val context = mockk<Context>(relaxed = true)
+
+    /**
+     * Foldable split-terminal Task 6 — MockK stand-in for the real
+     * `ResumeCoordinator`. The real class has an `internal` primary
+     * ctor + `@Inject` secondary ctor with 6 collaborators, so
+     * subclassing across the `:data` module boundary isn't reachable.
+     * The restore-gate only reads [ResumeCoordinator.restoreState], so
+     * a `mockk(relaxed = true)` with that single flow overridden is
+     * sufficient; tests drive the latch by flipping [restoreStateFlow].
+     */
+    private val restoreStateFlow = MutableStateFlow(ResumeCoordinator.RestoreState.Idle)
+    private val resumeCoordinator = mockk<ResumeCoordinator>(relaxed = true).apply {
+        every { restoreState } returns restoreStateFlow
+    }
 
     @BeforeEach
     fun setup() {
@@ -126,6 +142,7 @@ class TerminalViewModelTest {
             oriClipboard = oriClipboard,
             keyboardPreferences = keyboardPreferences,
             sessionResumePrefs = sessionResumePrefs,
+            resumeCoordinator = resumeCoordinator,
             context = context,
         )
     }
@@ -863,6 +880,51 @@ class TerminalViewModelTest {
         advanceUntilIdle()
 
         assertThat(sessionResumePrefs.tabMemosValue.value.map { it.profileId }).doesNotContain(1L)
+    }
+
+    // --- Foldable split terminal Task 6: cold-start restore-gate latch ---
+
+    @Test
+    fun `restore phase 1 preloads pane IDs from preferences before tabs arrive`() = runTest {
+        sessionResumePrefs.leftPaneTabIdValue.value = "tab-left"
+        sessionResumePrefs.rightPaneTabIdValue.value = "tab-right"
+        sessionResumePrefs.activePaneIndexValue.value = 1
+
+        val vm = createViewModel()
+        // Hold the coordinator in InProgress and only tick forward enough
+        // to let Phase 1's preload + latch set run, WITHOUT letting the
+        // 60 s timeout fire. `advanceUntilIdle()` would fast-forward past
+        // the withTimeoutOrNull deadline and the finally-block reducer
+        // would null-sweep the preloaded IDs via Rule 1 (no matching tabs).
+        restoreStateFlow.value = ResumeCoordinator.RestoreState.InProgress
+        runCurrent()
+
+        val state = vm.uiState.value
+        assertThat(state.leftPaneTabId).isEqualTo("tab-left")
+        assertThat(state.rightPaneTabId).isEqualTo("tab-right")
+        assertThat(state.activePaneIndex).isEqualTo(1)
+    }
+
+    @Test
+    fun `restore latch clears after Coordinator reaches Settled`() = runTest {
+        val vm = createViewModel()
+        restoreStateFlow.value = ResumeCoordinator.RestoreState.InProgress
+        advanceTimeBy(1_000)
+        assertThat(vm.isRestoringPanesForTest()).isTrue()
+
+        restoreStateFlow.value = ResumeCoordinator.RestoreState.Settled
+        advanceUntilIdle()
+        assertThat(vm.isRestoringPanesForTest()).isFalse()
+    }
+
+    @Test
+    fun `restore latch clears via 60s timeout if Coordinator never settles`() = runTest {
+        val vm = createViewModel()
+        restoreStateFlow.value = ResumeCoordinator.RestoreState.InProgress
+        advanceTimeBy(59_000)
+        assertThat(vm.isRestoringPanesForTest()).isTrue()
+        advanceTimeBy(1_001)
+        assertThat(vm.isRestoringPanesForTest()).isFalse()
     }
 }
 
