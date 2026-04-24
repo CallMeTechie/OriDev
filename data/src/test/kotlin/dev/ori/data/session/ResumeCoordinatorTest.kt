@@ -320,6 +320,63 @@ class ResumeCoordinatorTest {
         // Compile-time regression marker; see KDoc above.
     }
 
+    @Test
+    fun `restoreState transitions Idle to InProgress to Settled on full run`() = runTest {
+        val sessionRegistry = FakeSessionRegistry()
+        val resumePrefs = FakeResumePreferences(profileIds = setOf(1L, 2L))
+        val autoResumePrefs = FakeAutoResumePreferences(enabled = true)
+        val profileDao = fakeProfileDao(1L to "A", 2L to "B")
+        val coordinator = buildCoordinator(
+            sessionRegistry = sessionRegistry,
+            resumePrefs = resumePrefs,
+            autoResumePrefs = autoResumePrefs,
+            failedRegistry = FailedResumeRegistry(sessionRegistry, collectorScope()),
+            trustHostUseCase = relaxedTrustHost(),
+            profileDao = profileDao,
+            scope = collectorScope(),
+        )
+
+        val states = mutableListOf<ResumeCoordinator.RestoreState>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            coordinator.restoreState.toList(states)
+        }
+
+        assertThat(coordinator.restoreState.value)
+            .isEqualTo(ResumeCoordinator.RestoreState.Idle)
+        coordinator.start()
+        advanceUntilIdle()
+
+        assertThat(states).containsAtLeast(
+            ResumeCoordinator.RestoreState.Idle,
+            ResumeCoordinator.RestoreState.InProgress,
+            ResumeCoordinator.RestoreState.Settled,
+        ).inOrder()
+    }
+
+    @Test
+    fun `restoreState reaches Settled even on all-failure`() = runTest {
+        val sessionRegistry = FakeSessionRegistry()
+        sessionRegistry.failConnectFor(1L, IllegalStateException("timeout"))
+        val resumePrefs = FakeResumePreferences(profileIds = setOf(1L))
+        val autoResumePrefs = FakeAutoResumePreferences(enabled = true)
+        val profileDao = fakeProfileDao(1L to "A")
+        val coordinator = buildCoordinator(
+            sessionRegistry = sessionRegistry,
+            resumePrefs = resumePrefs,
+            autoResumePrefs = autoResumePrefs,
+            failedRegistry = FailedResumeRegistry(sessionRegistry, collectorScope()),
+            trustHostUseCase = relaxedTrustHost(),
+            profileDao = profileDao,
+            scope = collectorScope(),
+        )
+
+        coordinator.start()
+        advanceUntilIdle()
+
+        assertThat(coordinator.restoreState.value)
+            .isEqualTo(ResumeCoordinator.RestoreState.Settled)
+    }
+
     // --- Fakes ---------------------------------------------------------
 
     private fun fakeProfileDao(vararg profiles: Pair<Long, String>): ServerProfileDao {
