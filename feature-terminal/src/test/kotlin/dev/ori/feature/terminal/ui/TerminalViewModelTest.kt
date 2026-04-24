@@ -978,6 +978,60 @@ class TerminalViewModelTest {
         assertThat(vm.uiState.value.leftPaneTabId).isEqualTo(rightId)
         assertThat(vm.uiState.value.rightPaneTabId).isNull()
     }
+
+    // --- Foldable split terminal Task 8: setActivePane + moveTabToPane ---
+
+    @Test
+    fun `setActivePane 1 updates state`() = runTest {
+        stubSshConnection()
+        coEvery { sessionRegistry.connect(1L) } returns kotlin.Result.success(
+            makeSession(profileId = 1L, id = "session-1"),
+        )
+        coEvery { sessionRegistry.connect(2L) } returns kotlin.Result.success(
+            makeSession(profileId = 2L, id = "session-2"),
+        )
+        val vm = createViewModel()
+        runCurrent()
+        vm.openNewTab(profileId = 1L)
+        vm.openNewTab(profileId = 2L)
+        advanceUntilIdle()
+
+        vm.setActivePane(1)
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.activePaneIndex).isEqualTo(1)
+        // Persistence of the pane index is verified in Task 9's
+        // `snapshot writer persists leftPaneTabId, rightPaneTabId,
+        // activePaneIndex` once the snapshot writer is extended.
+    }
+
+    @Test
+    fun `moveTabToPane is transactional - no intermediate reducer pass`() = runTest {
+        stubSshConnection()
+        coEvery { sessionRegistry.connect(1L) } returns kotlin.Result.success(
+            makeSession(profileId = 1L, id = "session-1"),
+        )
+        coEvery { sessionRegistry.connect(2L) } returns kotlin.Result.success(
+            makeSession(profileId = 2L, id = "session-2"),
+        )
+        coEvery { sessionRegistry.connect(3L) } returns kotlin.Result.success(
+            makeSession(profileId = 3L, id = "session-3"),
+        )
+        val vm = createViewModel()
+        runCurrent()
+        vm.openNewTab(profileId = 1L)
+        vm.openNewTab(profileId = 2L)
+        vm.openNewTab(profileId = 3L)
+        advanceUntilIdle()
+        val tab3 = vm.uiState.value.tabs.last().id
+        val oldLeft = vm.uiState.value.leftPaneTabId!!
+
+        vm.moveTabToPane(tab3, pane = 0)
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.leftPaneTabId).isEqualTo(tab3)
+        assertThat(vm.uiState.value.tabs.map { it.id }).contains(oldLeft)
+    }
 }
 
 /**

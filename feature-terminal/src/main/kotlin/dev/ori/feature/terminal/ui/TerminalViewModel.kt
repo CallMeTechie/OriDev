@@ -663,6 +663,70 @@ class TerminalViewModel @Inject constructor(
      * method is limited to the local tab list + snapshot refresh so it
      * can be unit-tested without the registry fake.
      */
+    /**
+     * Foldable split-terminal Task 8 — user-driven active-pane switch.
+     * Flips [TerminalUiState.activePaneIndex] (clamped to 0..1), runs
+     * the pane reducer so Phase B's sanitization-clamp can rescue an
+     * impossible combo (e.g. active=1 with right=null), and schedules
+     * the debounced snapshot writer so the choice survives process
+     * death.
+     */
+    fun setActivePane(index: Int) {
+        val clamped = index.coerceIn(0, 1)
+        _uiState.update { it.copy(activePaneIndex = clamped) }
+        runReducer()
+        scheduleTabMemoSnapshot()
+    }
+
+    /**
+     * Foldable split-terminal Task 8 — move a tab into a specific pane
+     * slot in a single, transactional [_uiState.update] so the reducer
+     * does not see an intermediate (half-assigned) snapshot. If the tab
+     * is currently in the other slot, its old slot is cleared; if the
+     * target slot already holds a different tab, that tab is bumped to
+     * the opposite slot when empty, otherwise the incoming assignment
+     * wins and the displaced tab falls back into the tab list (Rule 3/4
+     * will pick it back up on the next reducer pass).
+     *
+     * The [activePaneIndex] always follows the move — if the user drags
+     * a tab to the right pane, focus goes with it. Callers don't need
+     * to call [setActivePane] separately.
+     */
+    fun moveTabToPane(tabId: String, pane: Int) {
+        val target = pane.coerceIn(0, 1)
+        _uiState.update { state ->
+            val currentLeft = state.leftPaneTabId
+            val currentRight = state.rightPaneTabId
+            val (newLeft, newRight) = when (target) {
+                0 -> {
+                    val displaced = if (currentLeft != null && currentLeft != tabId) currentLeft else null
+                    val right = when {
+                        currentRight == tabId -> displaced
+                        currentRight == null -> displaced
+                        else -> currentRight
+                    }
+                    tabId to right
+                }
+                else -> {
+                    val displaced = if (currentRight != null && currentRight != tabId) currentRight else null
+                    val left = when {
+                        currentLeft == tabId -> displaced
+                        currentLeft == null -> displaced
+                        else -> currentLeft
+                    }
+                    left to tabId
+                }
+            }
+            state.copy(
+                leftPaneTabId = newLeft,
+                rightPaneTabId = newRight,
+                activePaneIndex = target,
+            )
+        }
+        runReducer()
+        scheduleTabMemoSnapshot()
+    }
+
     fun disconnectProfile(profileId: Long) {
         val toClose = _uiState.value.tabs.filter { it.profileId == profileId }.map { it.id }
         toClose.forEach { closeTab(it) }
