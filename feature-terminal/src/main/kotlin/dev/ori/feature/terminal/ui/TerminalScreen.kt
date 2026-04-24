@@ -216,6 +216,11 @@ fun TerminalScreen(
                 onAddTab = {
                     viewModel.onEvent(TerminalEvent.OpenProfilePicker)
                 },
+                leftPaneTabId = uiState.leftPaneTabId,
+                rightPaneTabId = uiState.rightPaneTabId,
+                activePaneIndex = uiState.activePaneIndex,
+                isSplitActive = isSplitActive,
+                onMoveTabToPane = viewModel::moveTabToPane,
             )
 
             if (uiState.tabs.isEmpty()) {
