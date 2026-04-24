@@ -186,6 +186,31 @@ class TerminalViewModel @Inject constructor(
         isSplitActive.set(active)
     }
 
+    /**
+     * Foldable split-terminal Task 14 — per-[tabId] resize debounce. In
+     * split mode both panes resize within the same fold animation frame,
+     * and the previous single-slot debounce ([debouncedResizes]) would
+     * coalesce them so only the last emission wins — silently clobbering
+     * the other pane. Each pane now has its own cancel-replace [Job]
+     * keyed by [tabId], so a burst on pane A cannot cancel a pending
+     * resize on pane B.
+     *
+     * Called from [TerminalScreen] after a fold transition with a 30 ms
+     * stagger between the two panes. The debounce window matches the
+     * one in [debouncedResizes] (200 ms) so IME wobble is still
+     * throttled.
+     */
+    fun scheduleResize(tabId: String, cols: Int, rows: Int) {
+        if (rows < MIN_ROWS_FLOOR) return
+        resizeJobs[tabId]?.cancel()
+        resizeJobs[tabId] = viewModelScope.launch {
+            delay(DEBOUNCE_MILLIS)
+            terminalEmulators[tabId]?.resize(cols, rows)
+        }
+    }
+
+    private val resizeJobs = ConcurrentHashMap<String, Job>()
+
     init {
         loadSnippets()
         collectKeyboardMode()

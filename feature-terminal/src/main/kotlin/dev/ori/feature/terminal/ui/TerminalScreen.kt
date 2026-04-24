@@ -76,6 +76,20 @@ import org.connectbot.terminal.TerminalEmulator
  */
 private const val SPLIT_THRESHOLD_DP = 600
 
+/**
+ * Foldable split-terminal Task 14 — 30 ms stagger between the two
+ * pane resizes on a fold transition. Matches the plan's "defence in
+ * depth" rationale: the per-tabId debounce already prevents cross-tab
+ * clobbering, but staggering the calls makes sure two SSH window-change
+ * packets don't end up in the same kernel tick in the first place.
+ */
+private const val FOLD_STAGGER_MS = 30L
+
+/** Pragmatic term-metric stubs — see Task 14's `LaunchedEffect` KDoc. */
+private const val TERM_COL_DP = 8
+private const val DEFAULT_TERM_ROWS = 24
+private const val MIN_COLS = 10
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalScreen(
@@ -98,6 +112,32 @@ fun TerminalScreen(
     // keystrokes and resizes through [computeActiveTabId].
     LaunchedEffect(isSplitActive) {
         viewModel.setSplitActive(isSplitActive)
+    }
+
+    // Foldable split-terminal Task 14 — fold transition. When the device
+    // enters or leaves split mode, each pane gets its own resize call
+    // with a 30 ms stagger between the two so SSH window-change packets
+    // do not ship in the same kernel tick and race on the termlib
+    // reader. The per-tabId debounce in [TerminalViewModel.scheduleResize]
+    // is the primary defence; the stagger is belt-and-suspenders for
+    // the "both panes resize in the exact same frame" case.
+    LaunchedEffect(isSplitActive, uiState.leftPaneTabId, uiState.rightPaneTabId) {
+        val screenWidthDp = configuration.screenWidthDp
+        if (isSplitActive) {
+            val splitCols = (((screenWidthDp - 1) / 2) / TERM_COL_DP).coerceAtLeast(MIN_COLS)
+            uiState.leftPaneTabId?.let {
+                viewModel.scheduleResize(it, splitCols, DEFAULT_TERM_ROWS)
+            }
+            kotlinx.coroutines.delay(FOLD_STAGGER_MS)
+            uiState.rightPaneTabId?.let {
+                viewModel.scheduleResize(it, splitCols, DEFAULT_TERM_ROWS)
+            }
+        } else {
+            val singleCols = (screenWidthDp / TERM_COL_DP).coerceAtLeast(MIN_COLS)
+            uiState.tabs.getOrNull(uiState.activeTabIndex)?.id?.let {
+                viewModel.scheduleResize(it, singleCols, DEFAULT_TERM_ROWS)
+            }
+        }
     }
 
     var showClipboardHistory by remember { mutableStateOf(false) }
