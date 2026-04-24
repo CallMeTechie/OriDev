@@ -6,12 +6,15 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -26,6 +29,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -63,6 +67,29 @@ import dev.ori.domain.model.KeyboardMode
 import org.connectbot.terminal.Terminal
 import org.connectbot.terminal.TerminalEmulator
 
+/**
+ * Foldable split-terminal Task 11 — device-width threshold in dp above
+ * which the horizontal terminal split is available. Anything below this
+ * (phones in portrait, folded Pixel Fold outer screen) falls back to
+ * single-pane rendering. 600 dp matches the existing [isWideScreen]
+ * heuristic for landscape/unfolded layouts.
+ */
+private const val SPLIT_THRESHOLD_DP = 600
+
+/**
+ * Foldable split-terminal Task 14 — 30 ms stagger between the two
+ * pane resizes on a fold transition. Matches the plan's "defence in
+ * depth" rationale: the per-tabId debounce already prevents cross-tab
+ * clobbering, but staggering the calls makes sure two SSH window-change
+ * packets don't end up in the same kernel tick in the first place.
+ */
+private const val FOLD_STAGGER_MS = 30L
+
+/** Pragmatic term-metric stubs — see Task 14's `LaunchedEffect` KDoc. */
+private const val TERM_COL_DP = 8
+private const val DEFAULT_TERM_ROWS = 24
+private const val MIN_COLS = 10
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalScreen(
@@ -72,7 +99,46 @@ fun TerminalScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val configuration = LocalConfiguration.current
-    val isWideScreen = configuration.screenWidthDp >= 600
+    val isWideScreen = configuration.screenWidthDp >= SPLIT_THRESHOLD_DP
+
+    // Foldable split-terminal Task 11 — horizontal terminal split kicks in
+    // when the device is wide enough AND the user has at least two tabs.
+    // Below either threshold the single-pane rendering path runs unchanged.
+    val isSplitAvailable = configuration.screenWidthDp >= SPLIT_THRESHOLD_DP
+    val isSplitActive = isSplitAvailable && uiState.tabs.size >= 2
+
+    // Foldable split-terminal Task 13 — keep the ViewModel's runtime
+    // split-flag in sync so [TerminalViewModel.getActiveTab] can route
+    // keystrokes and resizes through [computeActiveTabId].
+    LaunchedEffect(isSplitActive) {
+        viewModel.setSplitActive(isSplitActive)
+    }
+
+    // Foldable split-terminal Task 14 — fold transition. When the device
+    // enters or leaves split mode, each pane gets its own resize call
+    // with a 30 ms stagger between the two so SSH window-change packets
+    // do not ship in the same kernel tick and race on the termlib
+    // reader. The per-tabId debounce in [TerminalViewModel.scheduleResize]
+    // is the primary defence; the stagger is belt-and-suspenders for
+    // the "both panes resize in the exact same frame" case.
+    LaunchedEffect(isSplitActive, uiState.leftPaneTabId, uiState.rightPaneTabId) {
+        val screenWidthDp = configuration.screenWidthDp
+        if (isSplitActive) {
+            val splitCols = (((screenWidthDp - 1) / 2) / TERM_COL_DP).coerceAtLeast(MIN_COLS)
+            uiState.leftPaneTabId?.let {
+                viewModel.scheduleResize(it, splitCols, DEFAULT_TERM_ROWS)
+            }
+            kotlinx.coroutines.delay(FOLD_STAGGER_MS)
+            uiState.rightPaneTabId?.let {
+                viewModel.scheduleResize(it, splitCols, DEFAULT_TERM_ROWS)
+            }
+        } else {
+            val singleCols = (screenWidthDp / TERM_COL_DP).coerceAtLeast(MIN_COLS)
+            uiState.tabs.getOrNull(uiState.activeTabIndex)?.id?.let {
+                viewModel.scheduleResize(it, singleCols, DEFAULT_TERM_ROWS)
+            }
+        }
+    }
 
     var showClipboardHistory by remember { mutableStateOf(false) }
 
@@ -120,9 +186,6 @@ fun TerminalScreen(
             }
         }
     }
-
-    val activeTab = uiState.tabs.getOrNull(uiState.activeTabIndex)
-    val activeEmulator = activeTab?.let { viewModel.getEmulator(it.id) }
 
     Scaffold(
         topBar = {
@@ -200,6 +263,11 @@ fun TerminalScreen(
                 onAddTab = {
                     viewModel.onEvent(TerminalEvent.OpenProfilePicker)
                 },
+                leftPaneTabId = uiState.leftPaneTabId,
+                rightPaneTabId = uiState.rightPaneTabId,
+                activePaneIndex = uiState.activePaneIndex,
+                isSplitActive = isSplitActive,
+                onMoveTabToPane = viewModel::moveTabToPane,
             )
 
             if (uiState.tabs.isEmpty()) {
@@ -229,24 +297,26 @@ fun TerminalScreen(
                         Text("Zu Connections")
                     }
                 }
-            } else if (isWideScreen) {
-                // Landscape/unfolded: terminal + keyboard side-by-side vertically with split.
-                // In HYBRID / SYSTEM_ONLY the split-weight logic no longer makes sense because
-                // the system IME provides its own height — the terminal gets weight(1f) and
-                // the KeyboardHost is inserted after with its own imePadding().
+            } else {
+                // Foldable split-terminal Task 11 — unified split-or-single body.
+                // Terminal-area is either ONE [PaneContent] (single-pane) or TWO
+                // side-by-side [PaneContent]s (split mode @ >=600dp + >=2 tabs).
+                // The keyboard host is ALWAYS rendered underneath and keeps the
+                // existing Phase 14 drag-divider / IME / weight semantics.
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // Terminal content area
-                    TerminalContentArea(
-                        emulator = activeEmulator,
-                        fontSize = uiState.terminalFontSize,
-                        onTap = { imeFocusRequester.requestFocus() },
+                    TerminalBody(
+                        uiState = uiState,
+                        viewModel = viewModel,
+                        isSplitActive = isSplitActive,
+                        onTerminalTap = { imeFocusRequester.requestFocus() },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(if (isCustomMode) uiState.splitRatio else 1f),
+                            .weight(if (isWideScreen && isCustomMode) uiState.splitRatio else 1f),
                     )
 
-                    // Draggable divider — only meaningful in CUSTOM where both halves are ours.
-                    if (isCustomMode) {
+                    // Draggable divider — only meaningful in wide-screen CUSTOM where
+                    // both halves (terminal + in-app keyboard) are ours to weight.
+                    if (isWideScreen && isCustomMode) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -263,35 +333,23 @@ fun TerminalScreen(
                         )
                     }
 
-                    // Keyboard host (3 modes) — only in CUSTOM is the weighted slice applied;
-                    // HYBRID / SYSTEM_ONLY size themselves via the system IME + imePadding().
-                    // See [TerminalKeyboardHostSlot] for the anchor-persistence invariant.
+                    // Keyboard host (3 modes). In wide-screen CUSTOM it gets the
+                    // bottom split; in portrait / HYBRID / SYSTEM_ONLY it sizes
+                    // itself via the system IME + imePadding(). See
+                    // [TerminalKeyboardHostSlot] for the anchor-persistence
+                    // invariant.
                     TerminalKeyboardHostSlot(
                         uiState = uiState,
                         imeFocusRequester = imeFocusRequester,
                         viewModel = viewModel,
-                        customModeModifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f - uiState.splitRatio),
-                    )
-                }
-            } else {
-                // Portrait: terminal fullscreen, keyboard as bottom section
-                Column(modifier = Modifier.fillMaxSize()) {
-                    TerminalContentArea(
-                        emulator = activeEmulator,
-                        fontSize = uiState.terminalFontSize,
-                        onTap = { imeFocusRequester.requestFocus() },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                    )
-
-                    TerminalKeyboardHostSlot(
-                        uiState = uiState,
-                        imeFocusRequester = imeFocusRequester,
-                        viewModel = viewModel,
-                        customModeModifier = Modifier.fillMaxWidth(),
+                        isSplitActive = isSplitActive,
+                        customModeModifier = if (isWideScreen) {
+                            Modifier
+                                .fillMaxWidth()
+                                .weight(1f - uiState.splitRatio)
+                        } else {
+                            Modifier.fillMaxWidth()
+                        },
                     )
                 }
             }
@@ -389,6 +447,130 @@ fun TerminalScreen(
 }
 
 /**
+ * Foldable split-terminal Task 11 — body of the terminal column
+ * between [TerminalTabBar] and [TerminalKeyboardHostSlot]. Renders
+ * either ONE [PaneContent] (single-pane) or TWO side-by-side
+ * [PaneContent]s (split mode) depending on [isSplitActive].
+ *
+ * [PaneContent] owns the empty-state picker + focus chrome; this
+ * composable's only job is wiring the correct tab into each slot,
+ * dispatching pane-move events to [TerminalViewModel], and supplying
+ * the [sessionBodyForTab] renderer to each pane's `sessionBody` slot.
+ */
+@Composable
+private fun TerminalBody(
+    uiState: TerminalUiState,
+    viewModel: TerminalViewModel,
+    isSplitActive: Boolean,
+    onTerminalTap: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (isSplitActive) {
+        val leftTab = uiState.tabs.firstOrNull { it.id == uiState.leftPaneTabId }
+        val rightTab = uiState.tabs.firstOrNull { it.id == uiState.rightPaneTabId }
+        val isLeftActive = uiState.activePaneIndex == 0
+
+        Row(modifier = modifier.fillMaxSize()) {
+            PaneContent(
+                tab = leftTab,
+                isFocused = isLeftActive,
+                isSplitActive = true,
+                allTabs = uiState.tabs,
+                leftPaneTabId = uiState.leftPaneTabId,
+                rightPaneTabId = uiState.rightPaneTabId,
+                paneContentDescription = "Terminal links",
+                traversalPriority = if (isLeftActive) 0f else 1f,
+                onTap = { viewModel.setActivePane(0) },
+                onPickTab = { tabId -> viewModel.moveTabToPane(tabId, pane = 0) },
+                onNewTabInThisSlot = { viewModel.onEvent(TerminalEvent.OpenProfilePicker) },
+                modifier = Modifier.fillMaxHeight().weight(1f),
+                sessionBody = { tab ->
+                    sessionBodyForTab(
+                        tab = tab,
+                        viewModel = viewModel,
+                        uiState = uiState,
+                        onTap = onTerminalTap,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                },
+            )
+            VerticalDivider(modifier = Modifier.width(1.dp))
+            PaneContent(
+                tab = rightTab,
+                isFocused = !isLeftActive,
+                isSplitActive = true,
+                allTabs = uiState.tabs,
+                leftPaneTabId = uiState.leftPaneTabId,
+                rightPaneTabId = uiState.rightPaneTabId,
+                paneContentDescription = "Terminal rechts",
+                traversalPriority = if (isLeftActive) 1f else 0f,
+                onTap = { viewModel.setActivePane(1) },
+                onPickTab = { tabId -> viewModel.moveTabToPane(tabId, pane = 1) },
+                onNewTabInThisSlot = { viewModel.onEvent(TerminalEvent.OpenProfilePicker) },
+                modifier = Modifier.fillMaxHeight().weight(1f),
+                sessionBody = { tab ->
+                    sessionBodyForTab(
+                        tab = tab,
+                        viewModel = viewModel,
+                        uiState = uiState,
+                        onTap = onTerminalTap,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                },
+            )
+        }
+    } else {
+        val singleTab = uiState.tabs.getOrNull(uiState.activeTabIndex)
+        PaneContent(
+            tab = singleTab,
+            isFocused = true,
+            isSplitActive = false,
+            allTabs = uiState.tabs,
+            leftPaneTabId = uiState.leftPaneTabId,
+            rightPaneTabId = uiState.rightPaneTabId,
+            paneContentDescription = "Terminal",
+            traversalPriority = 0f,
+            onTap = {},
+            onPickTab = { /* single-pane ignores the picker */ },
+            onNewTabInThisSlot = { viewModel.onEvent(TerminalEvent.OpenProfilePicker) },
+            modifier = modifier.fillMaxSize(),
+            sessionBody = { tab ->
+                sessionBodyForTab(
+                    tab = tab,
+                    viewModel = viewModel,
+                    uiState = uiState,
+                    onTap = onTerminalTap,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            },
+        )
+    }
+}
+
+/**
+ * Foldable split-terminal Task 11 — terminal-buffer renderer for a
+ * specific [tab]. Extracted so [PaneContent]'s `sessionBody` slot can
+ * reuse the exact same code path in both single-pane and split mode.
+ * Delegates to [TerminalContentArea] (the existing Phase 14 renderer).
+ */
+@Composable
+private fun sessionBodyForTab(
+    tab: TerminalTabState,
+    viewModel: TerminalViewModel,
+    uiState: TerminalUiState,
+    onTap: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val emulator = viewModel.getEmulator(tab.id)
+    TerminalContentArea(
+        emulator = emulator,
+        fontSize = uiState.terminalFontSize,
+        onTap = onTap,
+        modifier = modifier,
+    )
+}
+
+/**
  * Phase 14 Task 14.5 review fix — HYBRID/SYSTEM_ONLY must keep
  * [KeyboardHost] mounted even when `isKeyboardVisible = false` so the
  * single [TerminalImeAnchor] stays alive across the keyboard-toggle.
@@ -408,6 +590,7 @@ private fun TerminalKeyboardHostSlot(
     uiState: TerminalUiState,
     imeFocusRequester: FocusRequester,
     viewModel: TerminalViewModel,
+    isSplitActive: Boolean,
     customModeModifier: Modifier,
 ) {
     val isCustomMode = uiState.keyboardMode == KeyboardMode.CUSTOM
@@ -420,6 +603,8 @@ private fun TerminalKeyboardHostSlot(
                 onInput = { bytes -> viewModel.onEvent(TerminalEvent.SendInput(bytes)) },
                 onEvent = viewModel::onEvent,
                 modifier = customModeModifier,
+                activePaneIndex = uiState.activePaneIndex,
+                isSplitActive = isSplitActive,
             )
         }
         !isCustomMode -> {
@@ -430,6 +615,8 @@ private fun TerminalKeyboardHostSlot(
                 onInput = { bytes -> viewModel.onEvent(TerminalEvent.SendInput(bytes)) },
                 onEvent = viewModel::onEvent,
                 modifier = Modifier.fillMaxWidth(),
+                activePaneIndex = uiState.activePaneIndex,
+                isSplitActive = isSplitActive,
             )
         }
         // CUSTOM + isKeyboardVisible=false → render nothing.

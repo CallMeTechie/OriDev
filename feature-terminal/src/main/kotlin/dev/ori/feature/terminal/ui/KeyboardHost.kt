@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -74,7 +75,24 @@ fun KeyboardHost(
     onInput: (ByteArray) -> Unit,
     onEvent: (TerminalEvent) -> Unit,
     modifier: Modifier = Modifier,
+    activePaneIndex: Int = 0,
+    isSplitActive: Boolean = false,
 ) {
+    // Foldable split-terminal Task 13 — guarded IME re-focus on
+    // active-pane switches. In HYBRID / SYSTEM_ONLY the single
+    // TerminalImeAnchor owns focus for the whole screen, so when the
+    // user taps into the other pane we re-assert focus so the IME does
+    // not close. We GATE on (a) non-CUSTOM mode (the anchor is not
+    // rendered in CUSTOM), (b) an already-visible IME (don't summon the
+    // keyboard on every pane switch — only keep it alive), and (c)
+    // split-active (a pane switch is meaningless otherwise).
+    val imeVisible = WindowInsets.isImeVisible
+    LaunchedEffect(activePaneIndex) {
+        if (isSplitActive && mode != KeyboardMode.CUSTOM && imeVisible) {
+            runCatching { imeFocusRequester.requestFocus() }
+        }
+    }
+
     when (mode) {
         KeyboardMode.CUSTOM -> {
             CustomKeyboard(

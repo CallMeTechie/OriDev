@@ -43,6 +43,11 @@ dependencies {
     implementation(project(":core:core-network"))
     implementation(project(":core:core-security"))
     implementation(project(":domain"))
+    // Foldable split-terminal Task 6 — ResumeCoordinator (restoreState gate)
+    // is a concrete class in `:data/session`; TerminalViewModel's cold-start
+    // restore-gate waits for `RestoreState.Settled` before running the pane
+    // reducer.
+    implementation(project(":data"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

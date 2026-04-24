@@ -8,6 +8,7 @@ import dev.ori.core.common.result.appSuccess
 import dev.ori.core.network.ssh.ShellHandle
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.core.security.clipboard.OriClipboard
+import dev.ori.data.session.ResumeCoordinator
 import dev.ori.domain.model.CommandSnippet
 import dev.ori.domain.model.KeyboardMode
 import dev.ori.domain.model.Session
@@ -53,6 +54,7 @@ import java.io.ByteArrayOutputStream
 import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass")
 class TerminalViewModelTest {
 
     private val testDispatcher = UnconfinedTestDispatcher()
@@ -84,6 +86,20 @@ class TerminalViewModelTest {
         every { keyboardModeFlow } returns flowOf(KeyboardMode.CUSTOM)
     }
     private val context = mockk<Context>(relaxed = true)
+
+    /**
+     * Foldable split-terminal Task 6 — MockK stand-in for the real
+     * `ResumeCoordinator`. The real class has an `internal` primary
+     * ctor + `@Inject` secondary ctor with 6 collaborators, so
+     * subclassing across the `:data` module boundary isn't reachable.
+     * The restore-gate only reads [ResumeCoordinator.restoreState], so
+     * a `mockk(relaxed = true)` with that single flow overridden is
+     * sufficient; tests drive the latch by flipping [restoreStateFlow].
+     */
+    private val restoreStateFlow = MutableStateFlow(ResumeCoordinator.RestoreState.Idle)
+    private val resumeCoordinator = mockk<ResumeCoordinator>(relaxed = true).apply {
+        every { restoreState } returns restoreStateFlow
+    }
 
     @BeforeEach
     fun setup() {
@@ -126,6 +142,7 @@ class TerminalViewModelTest {
             oriClipboard = oriClipboard,
             keyboardPreferences = keyboardPreferences,
             sessionResumePrefs = sessionResumePrefs,
+            resumeCoordinator = resumeCoordinator,
             context = context,
         )
     }
@@ -799,6 +816,51 @@ class TerminalViewModelTest {
         assertThat(viewModel.uiState.value.tabs.filter { it.profileId == 1L }.size).isAtLeast(2)
     }
 
+    // --- Foldable split terminal Task 5: computeActiveTabId helper ---
+
+    private fun tab(id: String) = TerminalTabState(
+        id = id,
+        sessionId = "session-$id",
+        profileId = 1L,
+        serverName = "Server $id",
+    )
+
+    @Test
+    fun `computeActiveTabId returns left-pane tab in split active=0`() {
+        val state = TerminalUiState(
+            tabs = listOf(tab("T1"), tab("T2")),
+            activeTabIndex = 0,
+            leftPaneTabId = "T1",
+            rightPaneTabId = "T2",
+            activePaneIndex = 0,
+        )
+        assertThat(computeActiveTabId(state, isSplitActive = true)).isEqualTo("T1")
+    }
+
+    @Test
+    fun `computeActiveTabId returns right-pane tab in split active=1`() {
+        val state = TerminalUiState(
+            tabs = listOf(tab("T1"), tab("T2")),
+            activeTabIndex = 0,
+            leftPaneTabId = "T1",
+            rightPaneTabId = "T2",
+            activePaneIndex = 1,
+        )
+        assertThat(computeActiveTabId(state, isSplitActive = true)).isEqualTo("T2")
+    }
+
+    @Test
+    fun `computeActiveTabId returns activeTabIndex tab in single-pane`() {
+        val state = TerminalUiState(
+            tabs = listOf(tab("T1"), tab("T2")),
+            activeTabIndex = 1,
+            leftPaneTabId = "T1",
+            rightPaneTabId = "T2",
+            activePaneIndex = 0,
+        )
+        assertThat(computeActiveTabId(state, isSplitActive = false)).isEqualTo("T2")
+    }
+
     @Test
     fun `snapshot writer removes orphan memo when profile disconnects`() = runTest {
         stubSshConnection()
@@ -819,6 +881,181 @@ class TerminalViewModelTest {
 
         assertThat(sessionResumePrefs.tabMemosValue.value.map { it.profileId }).doesNotContain(1L)
     }
+
+    // --- Foldable split terminal Task 6: cold-start restore-gate latch ---
+
+    @Test
+    fun `restore phase 1 preloads pane IDs from preferences before tabs arrive`() = runTest {
+        sessionResumePrefs.leftPaneTabIdValue.value = "tab-left"
+        sessionResumePrefs.rightPaneTabIdValue.value = "tab-right"
+        sessionResumePrefs.activePaneIndexValue.value = 1
+
+        val vm = createViewModel()
+        // Hold the coordinator in InProgress and only tick forward enough
+        // to let Phase 1's preload + latch set run, WITHOUT letting the
+        // 60 s timeout fire. `advanceUntilIdle()` would fast-forward past
+        // the withTimeoutOrNull deadline and the finally-block reducer
+        // would null-sweep the preloaded IDs via Rule 1 (no matching tabs).
+        restoreStateFlow.value = ResumeCoordinator.RestoreState.InProgress
+        runCurrent()
+
+        val state = vm.uiState.value
+        assertThat(state.leftPaneTabId).isEqualTo("tab-left")
+        assertThat(state.rightPaneTabId).isEqualTo("tab-right")
+        assertThat(state.activePaneIndex).isEqualTo(1)
+    }
+
+    @Test
+    fun `restore latch clears after Coordinator reaches Settled`() = runTest {
+        val vm = createViewModel()
+        restoreStateFlow.value = ResumeCoordinator.RestoreState.InProgress
+        advanceTimeBy(1_000)
+        assertThat(vm.isRestoringPanesForTest()).isTrue()
+
+        restoreStateFlow.value = ResumeCoordinator.RestoreState.Settled
+        advanceUntilIdle()
+        assertThat(vm.isRestoringPanesForTest()).isFalse()
+    }
+
+    @Test
+    fun `restore latch clears via 60s timeout if Coordinator never settles`() = runTest {
+        val vm = createViewModel()
+        restoreStateFlow.value = ResumeCoordinator.RestoreState.InProgress
+        advanceTimeBy(59_000)
+        assertThat(vm.isRestoringPanesForTest()).isTrue()
+        advanceTimeBy(1_001)
+        assertThat(vm.isRestoringPanesForTest()).isFalse()
+    }
+
+    // --- Foldable split terminal Task 7: reducer runs after every tab mutation ---
+
+    @Test
+    fun `opening second tab fills right pane when left already populated`() = runTest {
+        stubSshConnection()
+        coEvery { sessionRegistry.connect(1L) } returns kotlin.Result.success(
+            makeSession(profileId = 1L, id = "session-1"),
+        )
+        coEvery { sessionRegistry.connect(2L) } returns kotlin.Result.success(
+            makeSession(profileId = 2L, id = "session-2"),
+        )
+        sessionResumePrefs.activePaneIndexValue.value = 0
+        val vm = createViewModel()
+        // Phase 1 preload only; avoid triggering the 60 s restore-gate
+        // timeout so the reducer's null-sweep of preloaded ids does not
+        // interfere.
+        runCurrent()
+
+        vm.openNewTab(profileId = 1L)
+        advanceUntilIdle()
+        vm.openNewTab(profileId = 2L)
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.leftPaneTabId).isNotNull()
+        assertThat(vm.uiState.value.rightPaneTabId).isNotNull()
+        assertThat(vm.uiState.value.leftPaneTabId).isNotEqualTo(vm.uiState.value.rightPaneTabId)
+    }
+
+    @Test
+    fun `closing tab in left-slot refills slot from remaining tabs`() = runTest {
+        stubSshConnection()
+        coEvery { sessionRegistry.connect(1L) } returns kotlin.Result.success(
+            makeSession(profileId = 1L, id = "session-1"),
+        )
+        coEvery { sessionRegistry.connect(2L) } returns kotlin.Result.success(
+            makeSession(profileId = 2L, id = "session-2"),
+        )
+        val vm = createViewModel()
+        runCurrent()
+        vm.openNewTab(profileId = 1L)
+        vm.openNewTab(profileId = 2L)
+        advanceUntilIdle()
+        val leftId = vm.uiState.value.leftPaneTabId!!
+        val rightId = vm.uiState.value.rightPaneTabId!!
+
+        vm.onEvent(TerminalEvent.CloseTab(leftId))
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.leftPaneTabId).isEqualTo(rightId)
+        assertThat(vm.uiState.value.rightPaneTabId).isNull()
+    }
+
+    // --- Foldable split terminal Task 8: setActivePane + moveTabToPane ---
+
+    @Test
+    fun `setActivePane 1 updates state`() = runTest {
+        stubSshConnection()
+        coEvery { sessionRegistry.connect(1L) } returns kotlin.Result.success(
+            makeSession(profileId = 1L, id = "session-1"),
+        )
+        coEvery { sessionRegistry.connect(2L) } returns kotlin.Result.success(
+            makeSession(profileId = 2L, id = "session-2"),
+        )
+        val vm = createViewModel()
+        runCurrent()
+        vm.openNewTab(profileId = 1L)
+        vm.openNewTab(profileId = 2L)
+        advanceUntilIdle()
+
+        vm.setActivePane(1)
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.activePaneIndex).isEqualTo(1)
+        // Persistence of the pane index is verified in Task 9's
+        // `snapshot writer persists leftPaneTabId, rightPaneTabId,
+        // activePaneIndex` once the snapshot writer is extended.
+    }
+
+    @Test
+    fun `moveTabToPane is transactional - no intermediate reducer pass`() = runTest {
+        stubSshConnection()
+        coEvery { sessionRegistry.connect(1L) } returns kotlin.Result.success(
+            makeSession(profileId = 1L, id = "session-1"),
+        )
+        coEvery { sessionRegistry.connect(2L) } returns kotlin.Result.success(
+            makeSession(profileId = 2L, id = "session-2"),
+        )
+        coEvery { sessionRegistry.connect(3L) } returns kotlin.Result.success(
+            makeSession(profileId = 3L, id = "session-3"),
+        )
+        val vm = createViewModel()
+        runCurrent()
+        vm.openNewTab(profileId = 1L)
+        vm.openNewTab(profileId = 2L)
+        vm.openNewTab(profileId = 3L)
+        advanceUntilIdle()
+        val tab3 = vm.uiState.value.tabs.last().id
+        val oldLeft = vm.uiState.value.leftPaneTabId!!
+
+        vm.moveTabToPane(tab3, pane = 0)
+        advanceUntilIdle()
+
+        assertThat(vm.uiState.value.leftPaneTabId).isEqualTo(tab3)
+        assertThat(vm.uiState.value.tabs.map { it.id }).contains(oldLeft)
+    }
+
+    // --- Foldable split terminal Task 9: snapshot writer persists pane fields ---
+
+    @Test
+    fun `snapshot writer persists leftPaneTabId, rightPaneTabId, activePaneIndex`() = runTest {
+        stubSshConnection()
+        coEvery { sessionRegistry.connect(1L) } returns kotlin.Result.success(
+            makeSession(profileId = 1L, id = "session-1"),
+        )
+        coEvery { sessionRegistry.connect(2L) } returns kotlin.Result.success(
+            makeSession(profileId = 2L, id = "session-2"),
+        )
+        val vm = createViewModel()
+        runCurrent()
+        vm.openNewTab(profileId = 1L)
+        vm.openNewTab(profileId = 2L)
+        advanceUntilIdle()
+        vm.setActivePane(1)
+        advanceTimeBy(1_001)
+
+        assertThat(sessionResumePrefs.leftPaneTabIdValue.value).isNotNull()
+        assertThat(sessionResumePrefs.rightPaneTabIdValue.value).isNotNull()
+        assertThat(sessionResumePrefs.activePaneIndexValue.value).isEqualTo(1)
+    }
 }
 
 /**
@@ -835,12 +1072,18 @@ private class FakeSessionResumePreferences : SessionResumePreferences {
     val focusedProfileIdValue = MutableStateFlow<Long?>(null)
     val remotePathsValue = MutableStateFlow<Map<Long, String>>(emptyMap())
     val lastTopLevelRouteValue = MutableStateFlow("connections")
+    val leftPaneTabIdValue = MutableStateFlow<String?>(null)
+    val rightPaneTabIdValue = MutableStateFlow<String?>(null)
+    val activePaneIndexValue = MutableStateFlow(0)
 
     override val profileIds = profileIdsValue
     override val tabMemos = tabMemosValue
     override val focusedProfileId = focusedProfileIdValue
     override val remotePaths = remotePathsValue
     override val lastTopLevelRoute = lastTopLevelRouteValue
+    override val leftPaneTabId = leftPaneTabIdValue
+    override val rightPaneTabId = rightPaneTabIdValue
+    override val activePaneIndex = activePaneIndexValue
 
     override suspend fun setProfileIds(ids: Set<Long>) {
         profileIdsValue.value = ids
@@ -862,10 +1105,25 @@ private class FakeSessionResumePreferences : SessionResumePreferences {
         lastTopLevelRouteValue.value = route
     }
 
+    override suspend fun setLeftPaneTabId(tabId: String?) {
+        leftPaneTabIdValue.value = tabId
+    }
+
+    override suspend fun setRightPaneTabId(tabId: String?) {
+        rightPaneTabIdValue.value = tabId
+    }
+
+    override suspend fun setActivePaneIndex(index: Int) {
+        activePaneIndexValue.value = index.coerceIn(0, 1)
+    }
+
     override suspend fun clearResumeSubset() {
         profileIdsValue.value = emptySet()
         tabMemosValue.value = emptyList()
         focusedProfileIdValue.value = null
         remotePathsValue.value = emptyMap()
+        leftPaneTabIdValue.value = null
+        rightPaneTabIdValue.value = null
+        activePaneIndexValue.value = 0
     }
 }

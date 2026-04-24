@@ -91,6 +91,19 @@ class ResumeCoordinator internal constructor(
         CoroutineScope(SupervisorJob() + Dispatchers.IO),
     )
 
+    /**
+     * Lifecycle of a single cold-start resume pass. Exposed via
+     * [restoreState] so terminal-side gates can wait for the coordinator
+     * to finish before routing their own restore flows — e.g. the
+     * foldable split-terminal restore-gate defers tab-hydration until
+     * [Settled]. Guaranteed to reach [Settled] exactly once per process,
+     * even on total failure or cancellation (see [runResume] try/finally).
+     */
+    enum class RestoreState { Idle, InProgress, Settled }
+
+    private val _restoreState = MutableStateFlow(RestoreState.Idle)
+    val restoreState: StateFlow<RestoreState> = _restoreState.asStateFlow()
+
     private val ran = AtomicBoolean(false)
 
     private val _snackbarEvents =
@@ -136,25 +149,32 @@ class ResumeCoordinator internal constructor(
     }
 
     private suspend fun runResume() {
-        val enabled = autoResumePrefs.autoResumeSessions.first()
-        if (!enabled) return
+        _restoreState.value = RestoreState.InProgress
+        try {
+            val enabled = autoResumePrefs.autoResumeSessions.first()
+            if (!enabled) return
 
-        val persisted = resumePrefs.profileIds.first()
-        if (persisted.isEmpty()) return
+            val persisted = resumePrefs.profileIds.first()
+            if (persisted.isEmpty()) return
 
-        pendingFailures.clear()
-        persisted.map { profileId ->
-            scope.async { connectWithHostKeyQueue(profileId) }
-        }.awaitAll()
+            pendingFailures.clear()
+            persisted.map { profileId ->
+                scope.async { connectWithHostKeyQueue(profileId) }
+            }.awaitAll()
 
-        // After all connects resolved, apply the persisted focus.
-        val focusedProfileId = resumePrefs.focusedProfileId.first()
-        val sessions = sessionRegistry.openSessions.first()
-        sessions.firstOrNull { it.profileId == focusedProfileId }?.id
-            ?.let { sessionRegistry.focus(it) }
+            // After all connects resolved, apply the persisted focus.
+            val focusedProfileId = resumePrefs.focusedProfileId.first()
+            val sessions = sessionRegistry.openSessions.first()
+            sessions.firstOrNull { it.profileId == focusedProfileId }?.id
+                ?.let { sessionRegistry.focus(it) }
 
-        // Single fail-count-aware snackbar (spec §6.1).
-        emitFailureSnackbarIfAny()
+            // Single fail-count-aware snackbar (spec §6.1).
+            emitFailureSnackbarIfAny()
+        } finally {
+            // Settle the state even on total failure or cancellation so
+            // downstream gates (terminal restore, etc.) never hang.
+            _restoreState.value = RestoreState.Settled
+        }
     }
 
     private suspend fun connectWithHostKeyQueue(profileId: Long) {

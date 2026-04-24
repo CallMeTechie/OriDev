@@ -100,6 +100,42 @@ class SessionPersistencePreferencesTest {
     }
 
     @Test
+    fun `leftPaneTabId round-trip including null`() = runTest {
+        prefs.setLeftPaneTabId("tab-42")
+        assertThat(prefs.leftPaneTabId.first()).isEqualTo("tab-42")
+        prefs.setLeftPaneTabId(null)
+        assertThat(prefs.leftPaneTabId.first()).isNull()
+    }
+
+    @Test
+    fun `rightPaneTabId round-trip including null`() = runTest {
+        prefs.setRightPaneTabId("tab-7")
+        assertThat(prefs.rightPaneTabId.first()).isEqualTo("tab-7")
+        prefs.setRightPaneTabId(null)
+        assertThat(prefs.rightPaneTabId.first()).isNull()
+    }
+
+    @Test
+    fun `activePaneIndex default is 0 and round-trips`() = runTest {
+        assertThat(prefs.activePaneIndex.first()).isEqualTo(0)
+        prefs.setActivePaneIndex(1)
+        assertThat(prefs.activePaneIndex.first()).isEqualTo(1)
+    }
+
+    @Test
+    fun `clearResumeSubset wipes pane keys but preserves lastTopLevelRoute`() = runTest {
+        prefs.setLeftPaneTabId("L")
+        prefs.setRightPaneTabId("R")
+        prefs.setActivePaneIndex(1)
+        prefs.setLastTopLevelRoute("terminal")
+        prefs.clearResumeSubset()
+        assertThat(prefs.leftPaneTabId.first()).isNull()
+        assertThat(prefs.rightPaneTabId.first()).isNull()
+        assertThat(prefs.activePaneIndex.first()).isEqualTo(0)
+        assertThat(prefs.lastTopLevelRoute.first()).isEqualTo("terminal")
+    }
+
+    @Test
     fun `corrupt tabMemos blob returns empty list and logs`() = runTest {
         mockkObject(NonFatalErrorLogger)
         // `NonFatalErrorLogger` is an Android-aware object — its `log`

@@ -3,6 +3,7 @@ package dev.ori.feature.terminal.ui
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Looper
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.getSystemService
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +15,7 @@ import dev.ori.core.security.clipboard.OriClipboard
 import dev.ori.core.security.crash.NonFatalErrorLogger
 import dev.ori.core.ui.theme.TerminalBackground
 import dev.ori.core.ui.theme.TerminalText
+import dev.ori.data.session.ResumeCoordinator
 import dev.ori.domain.model.CommandSnippet
 import dev.ori.domain.model.ServerProfile
 import dev.ori.domain.model.Session
@@ -45,11 +47,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.connectbot.terminal.TerminalEmulator
 import java.io.IOException
 import java.util.UUID
@@ -58,8 +62,23 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.milliseconds
 
+/**
+ * Resolves which tab ID should receive keystrokes + output. In split
+ * mode (>=600dp + >=2 tabs) the active-pane slot wins; otherwise the
+ * classic single-pane activeTabIndex applies.
+ */
+internal fun computeActiveTabId(state: TerminalUiState, isSplitActive: Boolean): String? =
+    if (isSplitActive) {
+        when (state.activePaneIndex) {
+            1 -> state.rightPaneTabId
+            else -> state.leftPaneTabId
+        }
+    } else {
+        state.tabs.getOrNull(state.activeTabIndex)?.id
+    }
+
 @HiltViewModel
-@Suppress("TooManyFunctions", "LongParameterList")
+@Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
 class TerminalViewModel @Inject constructor(
     private val sshClient: SshClient,
     private val connectionRepository: ConnectionRepository,
@@ -77,11 +96,27 @@ class TerminalViewModel @Inject constructor(
     private val oriClipboard: OriClipboard,
     private val keyboardPreferences: KeyboardPreferences,
     private val sessionResumePrefs: SessionResumePreferences,
+    private val resumeCoordinator: ResumeCoordinator,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TerminalUiState())
     val uiState: StateFlow<TerminalUiState> = _uiState.asStateFlow()
+
+    /**
+     * Foldable split-terminal Task 6 — cold-start restore-gate latch. Set
+     * to `true` for the duration of Phase 1 (pane-id preload from
+     * DataStore) + Phase 3 (wait for [ResumeCoordinator.RestoreState.Settled]
+     * or 60 s timeout). While true, [resolvePaneAssignments] skips Rule 1
+     * (orphan cleanup) so cold-start pane IDs are not nulled before the
+     * matching tabs arrive. The `finally` block in [launchRestoreGate]
+     * guarantees the latch clears and the reducer runs exactly once, even
+     * on total coordinator failure or cancellation.
+     */
+    private val isRestoringPanes = AtomicBoolean(false)
+
+    @VisibleForTesting
+    internal fun isRestoringPanesForTest(): Boolean = isRestoringPanes.get()
 
     /**
      * Profile list for the [TerminalProfilePicker] bottom-sheet. The
@@ -128,11 +163,144 @@ class TerminalViewModel @Inject constructor(
      */
     private val resizeRequests = MutableSharedFlow<Pair<Int, Int>>(extraBufferCapacity = BUFFER_CAPACITY)
 
+    /**
+     * Foldable split-terminal Task 13 — Compose-side notion of "is the
+     * horizontal split currently rendered". Flipped by [TerminalScreen]
+     * whenever [configuration.screenWidthDp] + [tabs.size] crosses the
+     * threshold. Keystrokes and resizes consult this via
+     * [computeActiveTabId] so that in split mode the ACTIVE-PANE slot
+     * wins over the classic [activeTabIndex] lookup. Backed by an
+     * [AtomicBoolean] so the Compose reader and IO writer paths do not
+     * race.
+     */
+    private val isSplitActive = AtomicBoolean(false)
+
+    /**
+     * Foldable split-terminal Task 13 — called from [TerminalScreen] on
+     * every recomposition with the current split state. A wrapping
+     * [AtomicBoolean.set] is cheap enough to call unconditionally; we
+     * do not re-run the reducer or persist anything — this flag is
+     * purely runtime routing metadata.
+     */
+    fun setSplitActive(active: Boolean) {
+        isSplitActive.set(active)
+    }
+
+    /**
+     * Foldable split-terminal Task 14 — per-[tabId] resize debounce. In
+     * split mode both panes resize within the same fold animation frame,
+     * and the previous single-slot debounce ([debouncedResizes]) would
+     * coalesce them so only the last emission wins — silently clobbering
+     * the other pane. Each pane now has its own cancel-replace [Job]
+     * keyed by [tabId], so a burst on pane A cannot cancel a pending
+     * resize on pane B.
+     *
+     * Called from [TerminalScreen] after a fold transition with a 30 ms
+     * stagger between the two panes. The debounce window matches the
+     * one in [debouncedResizes] (200 ms) so IME wobble is still
+     * throttled.
+     */
+    fun scheduleResize(tabId: String, cols: Int, rows: Int) {
+        if (rows < MIN_ROWS_FLOOR) return
+        resizeJobs[tabId]?.cancel()
+        resizeJobs[tabId] = viewModelScope.launch {
+            delay(DEBOUNCE_MILLIS)
+            terminalEmulators[tabId]?.resize(cols, rows)
+        }
+    }
+
+    private val resizeJobs = ConcurrentHashMap<String, Job>()
+
     init {
         loadSnippets()
         collectKeyboardMode()
         collectDebouncedResizes()
         installRestoreObserver()
+        launchRestoreGate()
+    }
+
+    /**
+     * Foldable split-terminal Task 6 — cold-start restore-gate. Runs in
+     * two phases:
+     *
+     * - **Phase 1 (preload):** Read persisted pane IDs +
+     *   active-pane-index from [SessionResumePreferences] and splat them
+     *   onto [TerminalUiState] *before* any tabs arrive. This gives the
+     *   reducer the durable intent (which tab was in which pane) so that
+     *   once the tabs do land, Rule 3/4 have a preferred target.
+     * - **Phase 3 (coordinator wait):** Bounded-wait 60 s for
+     *   [ResumeCoordinator.restoreState] to reach [Settled]. The latch
+     *   stays `true` for this whole window so [resolvePaneAssignments]'s
+     *   Rule 1 (orphan cleanup) does not null out the preloaded pane IDs
+     *   while the registry is still bringing sessions up.
+     *
+     * The `try/finally` guarantees the latch clears and the reducer runs
+     * exactly once — even if the coordinator never reaches [Settled], if
+     * the scope is cancelled, or if the preload flow throws. The 60 s
+     * cap is the worst-case ceiling before the UI must commit to
+     * whatever tabs have arrived, regardless of in-flight reconnects.
+     */
+    private fun launchRestoreGate() {
+        viewModelScope.launch {
+            try {
+                // Phase 1: durable-intent preload from DataStore. Done
+                // BEFORE flipping the latch so the initial _uiState update
+                // reflects the persisted pane IDs; tests that inspect the
+                // state right after createViewModel() + advanceUntilIdle()
+                // see the preloaded values.
+                val left = sessionResumePrefs.leftPaneTabId.first()
+                val right = sessionResumePrefs.rightPaneTabId.first()
+                val active = sessionResumePrefs.activePaneIndex.first()
+                _uiState.update {
+                    it.copy(
+                        leftPaneTabId = left,
+                        rightPaneTabId = right,
+                        activePaneIndex = active,
+                    )
+                }
+                isRestoringPanes.set(true)
+
+                // Phase 3: wait for the coordinator to finish its resume
+                // pass (or 60 s — whichever comes first). The coordinator
+                // is guaranteed to reach Settled even on total failure
+                // (see ResumeCoordinator.runResume try/finally), so the
+                // timeout is a defensive ceiling, not the expected path.
+                withTimeoutOrNull(RESTORE_TIMEOUT_MS) {
+                    resumeCoordinator.restoreState
+                        .filter { it == ResumeCoordinator.RestoreState.Settled }
+                        .first()
+                }
+            } finally {
+                isRestoringPanes.set(false)
+                runReducer()
+            }
+        }
+    }
+
+    /**
+     * Foldable split-terminal Task 6 — runs the pure pane reducer
+     * ([resolvePaneAssignments]) against the current [_uiState] snapshot
+     * and writes the result back. Called once by the restore-gate
+     * `finally` block after the latch clears; downstream tab-mutating
+     * paths (openNewTab, closeTab, etc.) will also funnel through this
+     * reducer in later tasks of the foldable split series.
+     */
+    private fun runReducer() {
+        _uiState.update { state ->
+            val pa = resolvePaneAssignments(
+                tabs = state.tabs,
+                leftPaneTabId = state.leftPaneTabId,
+                rightPaneTabId = state.rightPaneTabId,
+                activePaneIndex = state.activePaneIndex,
+                activeTabIndex = state.activeTabIndex,
+                isRestoringPanes = isRestoringPanes.get(),
+            )
+            state.copy(
+                leftPaneTabId = pa.leftPaneTabId,
+                rightPaneTabId = pa.rightPaneTabId,
+                activePaneIndex = pa.activePaneIndex,
+            )
+        }
     }
 
     /**
@@ -383,6 +551,7 @@ class TerminalViewModel @Inject constructor(
                 activeTabIndex = state.tabs.size,
             )
         }
+        runReducer()
 
         startReaderCoroutine(tabId, shellHandle)
         scheduleTabMemoSnapshot()
@@ -529,6 +698,7 @@ class TerminalViewModel @Inject constructor(
         if (remainingForSession == 0) {
             sessionRegistry.scheduleGraceDisconnect(tab.sessionId)
         }
+        runReducer()
         scheduleTabMemoSnapshot()
     }
 
@@ -541,12 +711,77 @@ class TerminalViewModel @Inject constructor(
      * method is limited to the local tab list + snapshot refresh so it
      * can be unit-tested without the registry fake.
      */
+    /**
+     * Foldable split-terminal Task 8 — user-driven active-pane switch.
+     * Flips [TerminalUiState.activePaneIndex] (clamped to 0..1), runs
+     * the pane reducer so Phase B's sanitization-clamp can rescue an
+     * impossible combo (e.g. active=1 with right=null), and schedules
+     * the debounced snapshot writer so the choice survives process
+     * death.
+     */
+    fun setActivePane(index: Int) {
+        val clamped = index.coerceIn(0, 1)
+        _uiState.update { it.copy(activePaneIndex = clamped) }
+        runReducer()
+        scheduleTabMemoSnapshot()
+    }
+
+    /**
+     * Foldable split-terminal Task 8 — move a tab into a specific pane
+     * slot in a single, transactional [_uiState.update] so the reducer
+     * does not see an intermediate (half-assigned) snapshot. If the tab
+     * is currently in the other slot, its old slot is cleared; if the
+     * target slot already holds a different tab, that tab is bumped to
+     * the opposite slot when empty, otherwise the incoming assignment
+     * wins and the displaced tab falls back into the tab list (Rule 3/4
+     * will pick it back up on the next reducer pass).
+     *
+     * The [activePaneIndex] always follows the move — if the user drags
+     * a tab to the right pane, focus goes with it. Callers don't need
+     * to call [setActivePane] separately.
+     */
+    fun moveTabToPane(tabId: String, pane: Int) {
+        val target = pane.coerceIn(0, 1)
+        _uiState.update { state ->
+            val currentLeft = state.leftPaneTabId
+            val currentRight = state.rightPaneTabId
+            val (newLeft, newRight) = when (target) {
+                0 -> {
+                    val displaced = if (currentLeft != null && currentLeft != tabId) currentLeft else null
+                    val right = when {
+                        currentRight == tabId -> displaced
+                        currentRight == null -> displaced
+                        else -> currentRight
+                    }
+                    tabId to right
+                }
+                else -> {
+                    val displaced = if (currentRight != null && currentRight != tabId) currentRight else null
+                    val left = when {
+                        currentLeft == tabId -> displaced
+                        currentLeft == null -> displaced
+                        else -> currentLeft
+                    }
+                    left to tabId
+                }
+            }
+            state.copy(
+                leftPaneTabId = newLeft,
+                rightPaneTabId = newRight,
+                activePaneIndex = target,
+            )
+        }
+        runReducer()
+        scheduleTabMemoSnapshot()
+    }
+
     fun disconnectProfile(profileId: Long) {
         val toClose = _uiState.value.tabs.filter { it.profileId == profileId }.map { it.id }
         toClose.forEach { closeTab(it) }
         // closeTab already schedules the snapshot, but call here defensively
         // in case [toClose] was empty and the caller still wants the write
         // (e.g. to flush an in-flight memo from a different path).
+        runReducer()
         scheduleTabMemoSnapshot()
         restoreLatches.remove(profileId)
     }
@@ -569,6 +804,7 @@ class TerminalViewModel @Inject constructor(
                 modifierState = it.modifierState.copy(ctrl = false, alt = false),
             )
         }
+        runReducer()
         scheduleTabMemoSnapshot()
     }
 
@@ -606,6 +842,13 @@ class TerminalViewModel @Inject constructor(
             sessionResumePrefs.setFocusedProfileId(
                 state.tabs.firstOrNull { it.id == focusedTabId }?.profileId,
             )
+            // Foldable split-terminal Task 9 — pane-state persistence.
+            // Read fresh from _uiState so a reducer run that fired after
+            // the `state = _uiState.value` capture above still gets its
+            // output persisted.
+            sessionResumePrefs.setLeftPaneTabId(_uiState.value.leftPaneTabId)
+            sessionResumePrefs.setRightPaneTabId(_uiState.value.rightPaneTabId)
+            sessionResumePrefs.setActivePaneIndex(_uiState.value.activePaneIndex)
         }
     }
 
@@ -790,9 +1033,19 @@ class TerminalViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Foldable split-terminal Task 13 — routing helper. In split mode
+     * (>=600 dp + >=2 tabs) the active-pane slot wins; otherwise the
+     * classic single-pane [activeTabIndex] lookup runs. Every call-site
+     * that previously reached for `state.tabs.getOrNull(activeTabIndex)`
+     * should go through here so keystrokes, resizes, and recordings
+     * follow the focused-pane semantic without each call-site
+     * re-implementing the check.
+     */
     private fun getActiveTab(): TerminalTabState? {
         val state = _uiState.value
-        return state.tabs.getOrNull(state.activeTabIndex)
+        val activeTabId = computeActiveTabId(state, isSplitActive.get()) ?: return null
+        return state.tabs.firstOrNull { it.id == activeTabId }
     }
 
     private fun loadSnippets() {
@@ -825,6 +1078,17 @@ class TerminalViewModel @Inject constructor(
          * DataStore commit (one commit ≈ one disk sync).
          */
         private const val TAB_MEMO_DEBOUNCE_MS = 1_000L
+
+        /**
+         * Foldable split-terminal Task 6 — restore-gate ceiling. If the
+         * [ResumeCoordinator] has not reached [ResumeCoordinator.RestoreState.Settled]
+         * within 60 s, the latch clears anyway and the reducer runs with
+         * whatever tabs have arrived. Picked as "worst-case cold start
+         * on cellular with 3 slow profiles" — well above the coordinator's
+         * internal 30 s TOFU-prompt timeout so we do not cut off an
+         * in-flight host-key dialog.
+         */
+        private const val RESTORE_TIMEOUT_MS = 60_000L
 
         /**
          * Phase 14 Task 14.5 — ring-buffer for resize events between the
