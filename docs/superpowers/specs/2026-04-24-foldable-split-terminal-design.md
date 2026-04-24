@@ -1,6 +1,6 @@
 # Foldable Split Terminal — Design
 
-**Status:** Draft (Rev 2 — devil's-advocate fixes applied)
+**Status:** Draft (Rev 3 — devil's-advocate round-2 fixes applied)
 **Date:** 2026-04-24
 **Scope:** Auf dem Pixel Fold unfolded (>=600dp Breite) zeigt das
 Terminal zwei Tabs gleichzeitig nebeneinander. Phone und folded bleiben
@@ -100,22 +100,49 @@ fun resolvePaneAssignments(
 5. **ActivePaneIndex fallback:** Wenn der aktive Slot leer ist (nach
    Regel 1-4 noch `null`) → `activePaneIndex = 0` (left wird zum Default).
 
-**Reducer-Exit-Invariante (hard-asserted in debug builds):**
+**Reducer-Exit: zweistufige Safety.**
+
+Debug-only `check()` ist nicht ausreichend — R8 strippt sie in Release,
+und ein Throw im Release-Build ist nur ein Crash-Outcome statt eines
+sanen Recovery-Pfads. Der Reducer tut deshalb **zwei Dinge:**
+
+**1. Sanitization-Clamp (läuft immer, release + debug):**
 
 ```kotlin
-check(activePaneIndex in 0..1)
-check(activePaneIndex != 1 || rightPaneTabId != null) {
-    "activePaneIndex=1 requires rightPaneTabId non-null"
+// Force-fix any invariant violation with a safe fallback:
+val sanitizedActivePane = when {
+    activePaneIndex == 1 && rightPaneTabId == null -> 0     // fallback to left
+    activePaneIndex == 0 && leftPaneTabId == null && rightPaneTabId != null -> 1
+    else -> activePaneIndex.coerceIn(0, 1)
 }
-check(activePaneIndex != 0 || leftPaneTabId != null || tabs.isEmpty()) {
-    "activePaneIndex=0 requires leftPaneTabId non-null when tabs exist"
+val sanitizedLeft = leftPaneTabId ?: tabs.firstOrNull()?.id
+    .takeIf { tabs.isNotEmpty() && sanitizedActivePane == 0 }
+    ?: leftPaneTabId
+```
+
+So kann eine halb-wiederhergestellte Persistence oder eine Race in
+Release nie zu einem „active pane points to null slot"-Zustand führen,
+der dann Keystrokes auf eine null-Tab-ID routet. Worst Case: User sieht
+den linken Pane fokussiert, obwohl er auf den rechten geklickt hatte —
+visuell erkennbar, nicht destruktiv.
+
+**2. Debug-only `check()` (loud signal in dev):**
+
+```kotlin
+if (BuildConfig.DEBUG) {
+    check(sanitizedActivePane in 0..1)
+    check(sanitizedActivePane != 1 || sanitizedRight != null) {
+        "Reducer exit invariant broken: activePane=1 but rightPaneTabId=null"
+    }
+    check(sanitizedActivePane != 0 || sanitizedLeft != null || tabs.isEmpty()) {
+        "Reducer exit invariant broken: activePane=0 + tabs non-empty but leftPaneTabId=null"
+    }
 }
 ```
 
-Diese Assertions schützen die `computeActiveTabId`-Kette nachgelagert
-(Fold-Transition, Keystroke-Routing) vor "active pane points to null
-slot"-Zuständen, die sonst einen Wrong-Tab-Keystroke-Bug auslösen
-würden.
+In Debug-Builds knallt der Check sofort, wenn Regel 1-5 nicht ausreichen
+und die Sanitization angreifen musste — das macht die Regel-Logik
+testbar, während die Sanitization Release-Builds schützt.
 
 ### VM methods
 
@@ -219,17 +246,32 @@ Column(modifier = Modifier.fillMaxSize()) {
 - Animation: `animateColorAsState(tween(120))` um Tap-to-Switch responsive
   zu halten
 
-**Tab-Bar** unverändert — EINE Leiste über beiden Panes. Der fokussierte
-Pane-Tab bekommt den primary-underline. Der Tab im non-active Pane
-bekommt **keinen zusätzlichen Marker** — er ist sowieso on-screen
-sichtbar, ein Accent-Dot wäre nur visuelle Clutter (Spec-Review-Feedback).
-Non-Pane-Tabs (3., 4., 5. Tab, die in keinem Pane stehen) bleiben
-neutral.
+**Tab-Bar** unverändert — EINE Leiste über beiden Panes. Beide
+Pane-Tabs bekommen einen Underline, differenziert durch Gewicht:
+- **Fokussierter Pane-Tab:** 2dp primary-Underline
+- **Non-active Pane-Tab:** 1dp outlineVariant-Underline
+- **Non-Pane-Tabs (Tab 3, 4, 5...):** kein Underline, neutral
+
+Grund: bei ≥3 Tabs ist die Tab-Bar horizontal scrollbar. Ohne Marker
+auf dem non-active Pane-Tab verliert User den „welche Tabs sind live
+auf meinen Panes"-Überblick, sobald die Bar gescrollt wird. Der
+1dp-Underline ist visuell leichter als ein Dot, bleibt aber sichtbar
+genug um den "mounted on a pane"-Zustand zu kommunizieren. Zusätzlich
+scrollt die Tab-Bar auf `setActivePane` zum fokussierten Tab, damit er
+immer sichtbar ist.
 
 **Long-Press-Popup (Split-Mode only):** Long-Press auf Tab-Bar-Item
 zeigt:
 - „In linken Pane bewegen" / „In rechten Pane bewegen"
 - „Schließen"
+
+**Config-Change Survival:** Wenn User mid-Popup faltet (Fold-Event
+lässt `isSplitActive` kippen), dismissed das Popup sich automatisch via
+`LaunchedEffect(isSplitActive) { popupState.dismiss() }`. Ohne den
+Effect würde das Popup mit split-only Optionen sichtbar bleiben
+(„In rechten Pane bewegen" macht in Single-Pane-Mode keinen Sinn) oder
+die Tab-ID aus dem Popup-State verlieren. Explicit dismiss vermeidet
+beide Bugs.
 
 ---
 
@@ -349,34 +391,60 @@ wiederhergestellt sind. User sieht die falsche Layout.
 ```kotlin
 init {
     viewModelScope.launch {
-        // Phase 1: Pane IDs vorab laden — vor Session-Reconnect
-        val persistedLeft = sessionResumePrefs.leftPaneTabId.first()
-        val persistedRight = sessionResumePrefs.rightPaneTabId.first()
-        val persistedActive = sessionResumePrefs.activePaneIndex.first()
+        try {
+            // Phase 1: Pane IDs vorab laden — vor Session-Reconnect
+            val persistedLeft = sessionResumePrefs.leftPaneTabId.first()
+            val persistedRight = sessionResumePrefs.rightPaneTabId.first()
+            val persistedActive = sessionResumePrefs.activePaneIndex.first()
 
-        _uiState.update {
-            it.copy(
-                leftPaneTabId = persistedLeft,
-                rightPaneTabId = persistedRight,
-                activePaneIndex = persistedActive,
-            )
+            _uiState.update {
+                it.copy(
+                    leftPaneTabId = persistedLeft,
+                    rightPaneTabId = persistedRight,
+                    activePaneIndex = persistedActive,
+                )
+            }
+            isRestoringPanes.set(true)
+
+            // Phase 2: existing Task #8 restore observer läuft.
+            // Während diese Phase läuft, unterdrückt der Reducer Rule 1
+            // (orphan-cleanup) — "Tab existiert noch nicht in tabs" wird
+            // als "pending" behandelt, nicht als "orphan".
+
+            // Phase 3: Warte auf terminal-Signal (allSettled — auch bei
+            // Fail), bounded auf RESTORE_TIMEOUT_MS. Timeout-Fallback
+            // verhindert, dass ein hängendes Restore den Latch ewig
+            // offen lässt.
+            withTimeoutOrNull(RESTORE_TIMEOUT_MS) {
+                awaitRestoreComplete()  // emits on allSettled, not allSuccess
+            }
+        } finally {
+            // Unconditionally — auch bei Exception, Cancellation,
+            // Timeout, Total-Failure (alle Reconnects fallen durch).
+            isRestoringPanes.set(false)
+            runReducer()  // full rules, jetzt auch orphan-cleanup
         }
-        isRestoringPanes.set(true)
-
-        // Phase 2: existing Task #8 restore observer läuft.
-        // Während diese Phase läuft, unterdrückt der Reducer Rule 1
-        // (orphan-cleanup) — "Tab existiert noch nicht in tabs" wird
-        // als "pending" behandelt, nicht als "orphan".
-
-        // Phase 3: Sobald Task #8 terminal-Signal emittiert (alle
-        // persistierten profileIds durchrestauriert), Reducer einmal
-        // mit voller Regel-Kette durchlaufen und Latch öffnen:
-        awaitRestoreComplete()
-        isRestoringPanes.set(false)
-        runReducer()  // full rules, jetzt auch orphan-cleanup
     }
 }
+
+private companion object {
+    const val RESTORE_TIMEOUT_MS = 10_000L
+}
 ```
+
+**Semantik von `awaitRestoreComplete`:** feuert **nach dem letzten**
+Connect-Attempt aus Task #11's `ResumeCoordinator.runResume()` —
+egal ob success oder failure. Implementiert als `ResumeCoordinator`
+expose `val restoreState: StateFlow<RestoreState>` mit
+`Idle | InProgress | Settled`; der VM collected bis `Settled` und
+returned. Wenn Coordinator gar nicht läuft (auto-resume off), ist
+RestoreState ewig `Idle` — der Timeout-Fallback räumt auf.
+
+Bei Total-Failure (alle Reconnects gefailt, 0 Tabs gelandet) räumt
+der Reducer-Exit-Lauf die Pane-IDs via Orphan-Cleanup auf, Slots werden
+null, Empty-State wird gerendert. User sieht keine Corruption, sondern
+den Standard-Empty-Path — genau der Workflow aus Task #33's
+FailedResumeBanner.
 
 Der Reducer empfängt den Latch-State als Parameter:
 
@@ -473,8 +541,14 @@ Doppel-Restore pro Profile).
   rechter Pane wird empty-state. Accepted — informativ, nicht ärgerlich.
 - **Drag-Gesture-Kollision.** Drag im TerminalView würde mit
   Text-Selection kollidieren. Deshalb Long-Press-Popup statt Drag-to-Pane.
-- **TalkBack.** `contentDescription = "Terminal links"` / `"Terminal rechts"`
-  an jedem Pane-Container.
+- **TalkBack.** Jeder Pane-Container bekommt
+  `contentDescription = "Terminal links"` / `"Terminal rechts"`. Zusätzlich
+  lenkt `Modifier.semantics { traversalIndex = if (this == activePane) 0f else 1f }`
+  die TalkBack-Reading-Order — der aktive Pane wird zuerst gelesen,
+  egal ob links oder rechts. Output aus dem inaktiven Pane wird als
+  `LiveRegionMode.Polite` ausgezeichnet (nicht Assertive), damit
+  Screen-Reader den Fokus nicht unterbrechen wenn der User im aktiven
+  Pane gerade tippt.
 - **DataStore atomicity.** `leftPaneTabId` + `rightPaneTabId` sind
   separate Keys, nicht atomar. Wenn Prozess zwischen den Writes stirbt:
   Orphan-Cleanup aus Reducer räumt auf. Graceful degradation.
