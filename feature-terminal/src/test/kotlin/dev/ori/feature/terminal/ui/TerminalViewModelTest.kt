@@ -1032,6 +1032,30 @@ class TerminalViewModelTest {
         assertThat(vm.uiState.value.leftPaneTabId).isEqualTo(tab3)
         assertThat(vm.uiState.value.tabs.map { it.id }).contains(oldLeft)
     }
+
+    // --- Foldable split terminal Task 9: snapshot writer persists pane fields ---
+
+    @Test
+    fun `snapshot writer persists leftPaneTabId, rightPaneTabId, activePaneIndex`() = runTest {
+        stubSshConnection()
+        coEvery { sessionRegistry.connect(1L) } returns kotlin.Result.success(
+            makeSession(profileId = 1L, id = "session-1"),
+        )
+        coEvery { sessionRegistry.connect(2L) } returns kotlin.Result.success(
+            makeSession(profileId = 2L, id = "session-2"),
+        )
+        val vm = createViewModel()
+        runCurrent()
+        vm.openNewTab(profileId = 1L)
+        vm.openNewTab(profileId = 2L)
+        advanceUntilIdle()
+        vm.setActivePane(1)
+        advanceTimeBy(1_001)
+
+        assertThat(sessionResumePrefs.leftPaneTabIdValue.value).isNotNull()
+        assertThat(sessionResumePrefs.rightPaneTabIdValue.value).isNotNull()
+        assertThat(sessionResumePrefs.activePaneIndexValue.value).isEqualTo(1)
+    }
 }
 
 /**

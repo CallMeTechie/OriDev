@@ -78,7 +78,7 @@ internal fun computeActiveTabId(state: TerminalUiState, isSplitActive: Boolean):
     }
 
 @HiltViewModel
-@Suppress("TooManyFunctions", "LongParameterList")
+@Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
 class TerminalViewModel @Inject constructor(
     private val sshClient: SshClient,
     private val connectionRepository: ConnectionRepository,
@@ -794,6 +794,13 @@ class TerminalViewModel @Inject constructor(
             sessionResumePrefs.setFocusedProfileId(
                 state.tabs.firstOrNull { it.id == focusedTabId }?.profileId,
             )
+            // Foldable split-terminal Task 9 — pane-state persistence.
+            // Read fresh from _uiState so a reducer run that fired after
+            // the `state = _uiState.value` capture above still gets its
+            // output persisted.
+            sessionResumePrefs.setLeftPaneTabId(_uiState.value.leftPaneTabId)
+            sessionResumePrefs.setRightPaneTabId(_uiState.value.rightPaneTabId)
+            sessionResumePrefs.setActivePaneIndex(_uiState.value.activePaneIndex)
         }
     }
 
