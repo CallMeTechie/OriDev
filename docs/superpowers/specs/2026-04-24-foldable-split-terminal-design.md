@@ -1,6 +1,6 @@
 # Foldable Split Terminal — Design
 
-**Status:** Draft (Rev 3 — devil's-advocate round-2 fixes applied)
+**Status:** Draft (Rev 4 — devil's-advocate round-3 fixes applied)
 **Date:** 2026-04-24
 **Scope:** Auf dem Pixel Fold unfolded (>=600dp Breite) zeigt das
 Terminal zwei Tabs gleichzeitig nebeneinander. Phone und folded bleiben
@@ -106,25 +106,74 @@ Debug-only `check()` ist nicht ausreichend — R8 strippt sie in Release,
 und ein Throw im Release-Build ist nur ein Crash-Outcome statt eines
 sanen Recovery-Pfads. Der Reducer tut deshalb **zwei Dinge:**
 
-**1. Sanitization-Clamp (läuft immer, release + debug):**
+**1. Sanitization-Clamp läuft NACH Rules 1-4, nicht davor.**
+
+Kritisch: der Clamp darf den active-pane-Index niemals flippen,
+solange Rules 1-4 noch einen Slot füllen könnten. Sonst führt ein
+Zustand wie `tabs=[T1], leftPaneTabId=null, rightPaneTabId=T1,
+activePaneIndex=0` dazu, dass der Clamp den active auf 1 flippt —
+User's nächster Keystroke geht in den rechten Pane, obwohl er in den
+linken tippte. In einem Terminal ist das eine fatale Mis-Route.
+
+Reducer-Ablauf:
 
 ```kotlin
-// Force-fix any invariant violation with a safe fallback:
-val sanitizedActivePane = when {
-    activePaneIndex == 1 && rightPaneTabId == null -> 0     // fallback to left
-    activePaneIndex == 0 && leftPaneTabId == null && rightPaneTabId != null -> 1
-    else -> activePaneIndex.coerceIn(0, 1)
+fun resolvePaneAssignments(...): PaneAssignment {
+    // Phase A: Rules 1-4 (side-effect-free, füllen/korrigieren Slots)
+    var left = if (isRestoringPanes) leftPaneTabId
+               else leftPaneTabId.takeIf { id -> tabs.any { it.id == id } }
+    var right = if (isRestoringPanes) rightPaneTabId
+                else rightPaneTabId.takeIf { id -> tabs.any { it.id == id } }
+    // Rule 2: duplicate cleanup (preserves active)
+    if (left != null && left == right) {
+        if (activePaneIndex == 0) right = null else left = null
+    }
+    // Rule 3: left-slot fill
+    if (left == null && tabs.isNotEmpty()) {
+        val activeId = tabs.getOrNull(activeTabIndex)?.id ?: tabs.first().id
+        if (activeId != right) left = activeId
+    }
+    // Rule 4: right-slot fill
+    if (right == null && tabs.size >= 2) {
+        right = tabs.firstOrNull { it.id != left }?.id
+    }
+
+    // Phase B: Sanitization-Clamp nur als LAST-RESORT
+    var active = activePaneIndex.coerceIn(0, 1)
+    if (active == 1 && right == null) active = 0
+    if (active == 0 && left == null && right != null) active = 1
+    // Hinweis: kein spekulatives Flip mehr — der aktive Slot ist nach
+    // Rules 1-4 gefüllt oder der andere ist auch leer.
+
+    return PaneAssignment(left, right, active)
 }
-val sanitizedLeft = leftPaneTabId ?: tabs.firstOrNull()?.id
-    .takeIf { tabs.isNotEmpty() && sanitizedActivePane == 0 }
-    ?: leftPaneTabId
 ```
 
-So kann eine halb-wiederhergestellte Persistence oder eine Race in
-Release nie zu einem „active pane points to null slot"-Zustand führen,
-der dann Keystrokes auf eine null-Tab-ID routet. Worst Case: User sieht
-den linken Pane fokussiert, obwohl er auf den rechten geklickt hatte —
-visuell erkennbar, nicht destruktiv.
+Kritischer Regression-Test:
+
+```kotlin
+@Test
+fun `single tab in right slot keeps activePaneIndex=0 by filling left`() {
+    val result = resolvePaneAssignments(
+        tabs = listOf(T1),
+        leftPaneTabId = null,
+        rightPaneTabId = "T1",
+        activePaneIndex = 0,
+        activeTabIndex = 0,
+        isRestoringPanes = false,
+    )
+    // After Rules 1-4: left=null (T1 already in right), right=T1 stays
+    // Rule 2 cleanup (both null or single): right becomes null
+    // Rule 3 fills left=T1
+    // Phase B: active stays 0 (left now non-null)
+    assertThat(result.leftPaneTabId).isEqualTo("T1")
+    assertThat(result.rightPaneTabId).isNull()
+    assertThat(result.activePaneIndex).isEqualTo(0)
+}
+```
+
+So kann der Clamp eine halb-wiederhergestellte Persistence auflösen
+**ohne** den User-fokussierten Pane zu verschieben.
 
 **2. Debug-only `check()` (loud signal in dev):**
 
@@ -428,7 +477,14 @@ init {
 }
 
 private companion object {
-    const val RESTORE_TIMEOUT_MS = 10_000L
+    // Generöser Budget: slow cellular SSH handshake auf bastion-host
+    // braucht realistisch 20-30s bis `connect()` returned; Task #33's
+    // HOST_KEY_PROMPT_TIMEOUT_MS steht mit 30s schon fest. 60s ist
+    // die Summe (worst-case connect + worst-case prompt-response) +
+    // kleiner Puffer. Nur der "Coordinator hängt komplett"-Fallback,
+    // normaler Restore-Flow schließt über Coordinator.restoreState
+    // früher.
+    const val RESTORE_TIMEOUT_MS = 60_000L
 }
 ```
 
@@ -543,12 +599,32 @@ Doppel-Restore pro Profile).
   Text-Selection kollidieren. Deshalb Long-Press-Popup statt Drag-to-Pane.
 - **TalkBack.** Jeder Pane-Container bekommt
   `contentDescription = "Terminal links"` / `"Terminal rechts"`. Zusätzlich
-  lenkt `Modifier.semantics { traversalIndex = if (this == activePane) 0f else 1f }`
-  die TalkBack-Reading-Order — der aktive Pane wird zuerst gelesen,
-  egal ob links oder rechts. Output aus dem inaktiven Pane wird als
-  `LiveRegionMode.Polite` ausgezeichnet (nicht Assertive), damit
-  Screen-Reader den Fokus nicht unterbrechen wenn der User im aktiven
-  Pane gerade tippt.
+  lenkt `traversalIndex` die TalkBack-Reading-Order — der aktive Pane
+  wird zuerst gelesen, egal ob links oder rechts:
+
+  ```kotlin
+  val isLeftActive = state.activePaneIndex == 0
+  PaneContent(
+      ...
+      modifier = Modifier.semantics {
+          traversalIndex = if (isLeftActive) 0f else 1f
+      },
+  )
+  PaneContent(
+      ...
+      modifier = Modifier.semantics {
+          traversalIndex = if (isLeftActive) 1f else 0f
+      },
+  )
+  ```
+
+  `isLeftActive` wird AUSSERHALB des `semantics`-Lambdas evaluiert (der
+  Lambda-Receiver ist `SemanticsPropertyReceiver`, nicht der Pane —
+  `this == activePane` würde nicht kompilieren oder immer false sein).
+
+  Output aus dem inaktiven Pane wird als `LiveRegionMode.Polite`
+  ausgezeichnet (nicht Assertive), damit Screen-Reader den Fokus nicht
+  unterbrechen wenn der User im aktiven Pane gerade tippt.
 - **DataStore atomicity.** `leftPaneTabId` + `rightPaneTabId` sind
   separate Keys, nicht atomar. Wenn Prozess zwischen den Writes stirbt:
   Orphan-Cleanup aus Reducer räumt auf. Graceful degradation.
