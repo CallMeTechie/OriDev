@@ -372,15 +372,24 @@ class SshClientImpl @Inject constructor(
             ?: throw IllegalStateException("No active session with id: $sessionId")
     }
 
-    private fun <T> withSftpClient(sessionId: String, block: (SFTPClient) -> T): T {
-        val client = getClient(sessionId)
-        val sftp = client.newSFTPClient()
-        return try {
-            block(sftp)
-        } finally {
-            sftp.close()
+    // SSHJ's `newSFTPClient()` opens a fresh SFTP channel which writes to the
+    // socket synchronously, and every `SFTPClient` op below similarly does
+    // blocking network I/O. Without the explicit IO switch all eight callers
+    // (listFiles, uploadFile, downloadFile, mkdir, rename, chmod, delete,
+    // getFileContent) ran on the caller's coroutine context — which from
+    // `FileManagerViewModel.viewModelScope` is `Dispatchers.Main`. That tripped
+    // `NetworkOnMainThreadException` on Pixel Fold (API 36); reproduced four
+    // times in oridev-error-listfiles-right-2026-04-25-22-04-*.txt.
+    private suspend fun <T> withSftpClient(sessionId: String, block: (SFTPClient) -> T): T =
+        withContext(Dispatchers.IO) {
+            val client = getClient(sessionId)
+            val sftp = client.newSFTPClient()
+            try {
+                block(sftp)
+            } finally {
+                sftp.close()
+            }
         }
-    }
 
     companion object {
         private const val KEEPALIVE_INTERVAL_SECONDS = 15

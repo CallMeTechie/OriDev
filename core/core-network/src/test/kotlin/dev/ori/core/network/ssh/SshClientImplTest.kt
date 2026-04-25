@@ -5,11 +5,13 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import io.mockk.verify
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.sftp.FileAttributes
 import net.schmizz.sshj.sftp.OpenMode
 import net.schmizz.sshj.sftp.RemoteFile
+import net.schmizz.sshj.sftp.RemoteResourceInfo
 import net.schmizz.sshj.sftp.SFTPClient
 import net.schmizz.sshj.sftp.SFTPException
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.io.path.writeBytes
 
 /**
@@ -161,6 +164,25 @@ class SshClientImplTest {
         val result = sshClient.fileSize(sessionId, "/remote/missing")
 
         assertThat(result).isNull()
+    }
+
+    @Test
+    fun listFiles_invokedFromCallerThread_runsSftpCallOnIoDispatcher() {
+        // Regression: `withSftpClient` previously ran network I/O on the
+        // caller's thread, which on Android caused NetworkOnMainThreadException
+        // when FileManagerViewModel called listFiles from viewModelScope
+        // (Dispatchers.Main). The fix routes through Dispatchers.IO.
+        val callerThread = Thread.currentThread()
+        val sftpThread = AtomicReference<Thread?>()
+        every { sftp.ls("/") } answers {
+            sftpThread.set(Thread.currentThread())
+            emptyList<RemoteResourceInfo>()
+        }
+
+        runBlocking { sshClient.listFiles(sessionId, "/") }
+
+        val captured = checkNotNull(sftpThread.get()) { "sftp.ls was never called" }
+        assertThat(captured).isNotSameInstanceAs(callerThread)
     }
 
     @Test
