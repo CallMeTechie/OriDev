@@ -37,19 +37,20 @@ class ConnectionService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Must stay a subset of the manifest's `android:foregroundServiceType`
-        // (`dataSync`). On Android 14+ the ActivityManager validates both
-        // values on every startForeground call and raises
-        // `IllegalArgumentException: foregroundServiceType 0x… is not a
-        // subset of foregroundServiceType attribute 0x…` otherwise —
-        // which crashes the whole Service bounce (observed on Pixel Fold
-        // API 36). `CONNECTED_DEVICE` (0x10) was included here historically
-        // but is reserved for physical peripherals over USB/Bluetooth/NFC;
-        // SSH over TCP maps cleanly onto `DATA_SYNC`, which is what the
-        // manifest already declares.
+        // (`specialUse`, declared with PROPERTY_SPECIAL_USE_FGS_SUBTYPE).
+        // We migrated off `dataSync` because Android 14+ enforces a 6 h /
+        // 24 h budget on it and crashes the next startForeground() call
+        // once exhausted with `ForegroundServiceStartNotAllowedException:
+        // Time limit already exhausted for foreground service type
+        // dataSync` — reproduced on Pixel Fold (oridev-error-terminal-
+        // open-shell-2026-04-25-* embedded 04-23 / 04-24 stacks). SSH
+        // sessions are interactive and intentionally long-lived, so
+        // dataSync is semantically wrong; specialUse is the documented
+        // escape hatch for use cases not covered by the typed FGS list.
         startForeground(
             NOTIFICATION_ID,
             buildNotification(),
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
         )
         return START_STICKY
     }
