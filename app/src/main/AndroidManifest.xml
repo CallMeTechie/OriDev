@@ -5,7 +5,19 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!--
+        ConnectionService keeps SSH transport open for the user's interactive
+        terminal sessions (potentially many hours). The dataSync FGS type
+        carries a hard 6 h / 24 h limit on Android 14+ and crashes the next
+        startForeground() once the budget is exhausted (see
+        oridev-error-terminal-open-shell-2026-04-25-* and the embedded
+        04-23 / 04-24 ForegroundServiceStartNotAllowedException stacks).
+        specialUse is the documented escape hatch for use cases not covered
+        by the typed FGS list. TransferEngineService keeps dataSync —
+        transfers are bounded and dataSync is semantically correct there.
+    -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -50,8 +62,19 @@
 
         <service
             android:name=".service.ConnectionService"
-            android:foregroundServiceType="dataSync"
-            android:exported="false" />
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <!--
+                Required by Android 14+ for FGS_TYPE_SPECIAL_USE: a free-form
+                rationale Google reviewers see in the Play Console and the
+                user surfaces in App Info. Wording stays factual ("interactive
+                shell sessions") so it survives a future review without
+                needing to be re-justified.
+            -->
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Persistent SSH transport for interactive shell sessions" />
+        </service>
 
         <service
             android:name=".service.TransferEngineService"
