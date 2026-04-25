@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.sftp.SFTPClient
+import net.schmizz.sshj.transport.DisconnectListener
 import net.schmizz.sshj.userauth.keyprovider.PKCS8KeyFile
 import java.io.ByteArrayInputStream
 import java.io.InputStreamReader
@@ -69,6 +70,7 @@ class SshClientImpl @Inject constructor(
 
                 val sessionId = UUID.randomUUID().toString()
                 sessions[sessionId] = client
+                registerDisconnectCleanup(sessionId, client)
 
                 return@withContext SshSession(
                     sessionId = sessionId,
@@ -367,9 +369,32 @@ class SshClientImpl @Inject constructor(
         shellManager.openShell(client, cols, rows)
     }
 
+    // Defense-in-depth alongside `registerDisconnectCleanup`: if the SSHJ
+    // Reader thread observed EOF but the cleanup callback hasn't run yet
+    // (or fired before listFiles arrived on a stale handle), reject the
+    // dead client up front instead of letting SSHJ raise the much vaguer
+    // `IllegalStateException: Not connected` deep inside `newSFTPClient()`.
+    // Reproduced 3× in oridev-error-listfiles-right-2026-04-25-22-03/04*.
     private fun getClient(sessionId: String): SSHClient {
-        return sessions[sessionId]
+        val client = sessions[sessionId]
             ?: throw IllegalStateException("No active session with id: $sessionId")
+        if (!client.isConnected) {
+            sessions.remove(sessionId, client)
+            runCatching { client.close() }
+            throw IllegalStateException("SSH session terminated: $sessionId")
+        }
+        return client
+    }
+
+    // Registered immediately after the SSHJ handshake succeeds. Fires from
+    // the Reader thread the moment the transport observes EOF or any
+    // disconnect reason, so a subsequent `connect()` for the same profile
+    // doesn't have to wait for the old (dead) handle to be reaped from
+    // the map.
+    private fun registerDisconnectCleanup(sessionId: String, client: SSHClient) {
+        client.transport.disconnectListener = DisconnectListener { _, _ ->
+            sessions.remove(sessionId, client)
+        }
     }
 
     // SSHJ's `newSFTPClient()` opens a fresh SFTP channel which writes to the

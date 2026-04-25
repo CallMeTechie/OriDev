@@ -8,12 +8,15 @@ import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import net.schmizz.sshj.SSHClient
+import net.schmizz.sshj.common.DisconnectReason
 import net.schmizz.sshj.sftp.FileAttributes
 import net.schmizz.sshj.sftp.OpenMode
 import net.schmizz.sshj.sftp.RemoteFile
 import net.schmizz.sshj.sftp.RemoteResourceInfo
 import net.schmizz.sshj.sftp.SFTPClient
 import net.schmizz.sshj.sftp.SFTPException
+import net.schmizz.sshj.transport.DisconnectListener
+import net.schmizz.sshj.transport.Transport
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -47,6 +50,11 @@ class SshClientImplTest {
         )
         sshNetworkClient = mockk(relaxed = true)
         sftp = mockk(relaxed = true)
+        // `relaxed=true` would default Boolean returns to `false`, which
+        // makes the new isConnected guard in `getClient` reject every
+        // session in these tests. Mark the mocked client live by default;
+        // tests that exercise the disconnected path opt in explicitly.
+        every { sshNetworkClient.isConnected } returns true
         every { sshNetworkClient.newSFTPClient() } returns sftp
         injectSession(sshClient, sessionId, sshNetworkClient)
     }
@@ -183,6 +191,54 @@ class SshClientImplTest {
 
         val captured = checkNotNull(sftpThread.get()) { "sftp.ls was never called" }
         assertThat(captured).isNotSameInstanceAs(callerThread)
+    }
+
+    @Test
+    fun listFiles_clientHasDisconnected_removesSessionFromMapAndThrows() {
+        // Regression: SSHJ's Reader thread fires `TransportImpl.die()` on TCP
+        // EOF / server timeout, which leaves the SSHClient in `sessions` with
+        // `isConnected == false`. The next `listFiles` call previously hit
+        // `IllegalStateException: Not connected` from inside SSHJ — and the
+        // dead client stayed in the map forever, so retries failed the same
+        // way. Reproduced 3× in oridev-error-listfiles-right-2026-04-25-22-03/04*.
+        every { sshNetworkClient.isConnected } returns false
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking { sshClient.listFiles(sessionId, "/") }
+        }
+
+        val sessionsField = SshClientImpl::class.java.getDeclaredField("sessions")
+        sessionsField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val sessionsMap = sessionsField.get(sshClient) as ConcurrentHashMap<String, SSHClient>
+        assertThat(sessionsMap).doesNotContainKey(sessionId)
+    }
+
+    @Test
+    fun disconnectListener_notifiesOnTransportEof_removesSessionFromMap() {
+        // Belt-and-suspenders: even if a caller never reaches `getClient`
+        // again, SSHJ's DisconnectListener should reactively prune the map
+        // the moment the Reader thread observes EOF — so a fresh `connect()`
+        // doesn't have to wait for the GC of the old SSHClient to free up
+        // resources.
+        val transport = mockk<Transport>(relaxed = true)
+        val listenerSlot = slot<DisconnectListener>()
+        every { sshNetworkClient.transport } returns transport
+        every { transport.disconnectListener = capture(listenerSlot) } answers { }
+
+        // Re-trigger the registration path the production code uses on connect.
+        SshClientImpl::class.java
+            .getDeclaredMethod("registerDisconnectCleanup", String::class.java, SSHClient::class.java)
+            .apply { isAccessible = true }
+            .invoke(sshClient, sessionId, sshNetworkClient)
+
+        listenerSlot.captured.notifyDisconnect(DisconnectReason.CONNECTION_LOST, "EOF")
+
+        val sessionsField = SshClientImpl::class.java.getDeclaredField("sessions")
+        sessionsField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        val sessionsMap = sessionsField.get(sshClient) as ConcurrentHashMap<String, SSHClient>
+        assertThat(sessionsMap).doesNotContainKey(sessionId)
     }
 
     @Test
