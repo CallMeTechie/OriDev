@@ -32,9 +32,9 @@ silent fallback.
 | 2 | **Strict routing, no auto-fallback** between SFTP and SCP. | Auto-fallback hides which protocol is actually in use, making diagnosis harder and undermining the user's explicit choice. |
 | 3 | **Reuse SSHJ's built-in `net.schmizz.sshj.xfer.scp.SCPFileTransfer`.** | The library is already on the classpath, no second SSH library, no custom wire-level code for upload/download. |
 | 4 | **Two `SshClient` implementations** keyed by `Protocol`, but **transport state is owned by a third class** (`SshSessionStore`). | Cleanest polymorphism for the file-ops, but the session map and disconnect-listener cleanup must be single-owner — otherwise the v0.34.2 race-condition fix gets split across two classes and stops working (devil's-advocate v1 concern #2). |
-| 5 | `delete(directory)` walks the tree client-side, **batching server commands** to a configurable max-args size (default 200 args ≈ ~16 KB). Returns a `DeleteResult(succeeded, failed)` that the UI consumes — partial success is a first-class outcome, not a swallowed exception. | Avoids exhausting OpenSSH's `MaxSessions=10` default, and prevents the "snackbar says failed but 349/350 files are actually gone" UX surprise (devil's-advocate v1 concern #5, v2 concern #6). |
+| 5 | `delete(directory)` walks the tree client-side, **batching server commands** to a configurable max-args size (default 200 args ≈ ~16 KB). The `SshClient.delete` interface signature changes to `delete(sessionId, paths: List<String>) → DeleteResult`; **both `SshSftpClientImpl` and `SshScpClientImpl` honour this contract** — they continue past per-item permission errors and report `succeeded` / `failed` lists rather than throwing on the first failed item. | Avoids exhausting OpenSSH's `MaxSessions=10` default, and prevents the "snackbar says failed but 349/350 files are actually gone" UX surprise (devil's-advocate v1 concern #5, v2 concern #6). Pinning the contract on the interface (not just the SCP impl) keeps the Repository protocol-agnostic and gives the SFTP path the same partial-success semantics — devil's-advocate v3 concern #2. |
 | 6 | **Listing requires GNU `coreutils`**, invoked with `--numeric-uid-gid` and `--time-style='+%Y-%m-%dT%H:%M:%S'`. Numeric UIDs/GIDs are resolved to display names via a **once-per-session** lookup (`getent passwd; getent group`, cached in `SshSessionStore`). | Numeric flag prevents user/group strings with spaces from corrupting the parser silently (devil's-advocate v1 concern #3). The lookup-and-cache step keeps the UI showing `marc` rather than `1000`, matching the SFTP-mode behaviour (devil's-advocate v2 concern #2). |
-| 7 | **All non-transfer commands are wrapped in `sh -c`** invoked via `Session.exec`, with `bash --noprofile --norc -c` preferred when bash is available. The bash-probe runs **once during `connect()` itself**, atomically, with the result stored on the `SshSession`. | The user's login shell may emit MOTD; `~/.bashrc` may print things; `/etc/profile` may run `fortune`. None of that interferes with `sh -c`'s controlled output (devil's-advocate v1 concerns #1 and #6). Probing in `connect` eliminates the parallel-first-op race (devil's-advocate v2 concern #3). |
+| 7 | **All non-transfer commands are wrapped in `sh -c`** invoked via `Session.exec`, with `bash --noprofile --norc -c` preferred when bash is available. The bash-probe runs **once during `connect()` itself**, atomically, with the result stored on the `SshSession`. **If the probe's channel-open or exec fails for any transport-level reason (MaxSessions exhausted, transient network glitch), `connect()` silently falls back to `bashAvailable = false` and emits a `NonFatalErrorLogger` entry** — the user-facing connect still succeeds. | The user's login shell may emit MOTD; `~/.bashrc` may print things; `/etc/profile` may run `fortune`. None of that interferes with `sh -c`'s controlled output (devil's-advocate v1 concerns #1 and #6). Probing in `connect` eliminates the parallel-first-op race (devil's-advocate v2 concern #3). The fallback prevents the regression where a user with 9 already-open SSH sessions on the same host could connect on v0.34.4 but not on v0.34.5 (devil's-advocate v3 concern #3) — `sh -c` is POSIX-everywhere, so the worst case is a slightly slower invocation path, never a connect failure. |
 | 8 | `uploadFileResumable` / `downloadFileResumable` throw `UnsupportedOperationException("SCP does not support resume")`. | SSHJ's `SCPFileTransfer` has no offset parameter; SCP is fundamentally streaming. Repository must catch and either fall back to a fresh transfer-from-zero or surface the limitation to the user. |
 | 9 | `Protocol.SSH` continues to use the SFTP client for file operations. A `@DefaultSshClient` qualifier preserves the bare `@Inject SshClient` injection point for legacy callers. | "SSH" in the dropdown means "I want a terminal and a file browser without thinking about which sub-protocol." Default-qualifier avoids forcing every existing call site to learn the protocol map (devil's-advocate v2 concern #4). |
 | 10 | **Local-side I/O for upload/download uses SSHJ's `LocalSourceFile` / `LocalDestFile` interfaces directly**, with custom adapters that wrap SAF `content://` `InputStream`/`OutputStream` and stream byte-for-byte. **No temp-file materialisation.** | Avoids the 2×-disk-usage trap and the OOM-on-large-files trap a temp-file path would create (devil's-advocate v2 concern #1). SSHJ's interfaces are designed exactly for this. |
@@ -118,14 +118,20 @@ class SshSessionStore @Inject constructor(
     }
 
     private suspend fun probeBash(client: SSHClient): Boolean {
-        // Single channel-open. If channel-open itself fails (MaxSessions, network) we
-        // bubble IOException out of connect — callers already handle that; we don't
-        // silently fall back to "bash not available", because that's a different cause.
-        // If exec succeeds and stdout matches the probe sentinel, bash is available.
-        // If exec succeeds but no sentinel, fall back to sh and log a NonFatalErrorLogger
-        // entry (category="scp-bash-probe-fallback").
-        // If exec succeeds AND stderr matches a forced-command pattern, throw
-        // IOException("Server appears to use a forced-command authorized_keys configuration; SCP requires unrestricted shell access.")
+        // Single channel-open + exec, fail-safe by design.
+        //  • exec succeeds AND stdout matches sentinel  →  return true  (bash available)
+        //  • exec succeeds, no sentinel                 →  return false, log "scp-bash-probe-fallback"
+        //  • exec succeeds, stderr matches forced-cmd   →  throw IOException("Server appears to
+        //                                                  use a forced-command authorized_keys
+        //                                                  configuration; SCP requires unrestricted
+        //                                                  shell access.") — this is the ONE case
+        //                                                  where the probe propagates: the user
+        //                                                  cannot use SCP at all, no fallback helps.
+        //  • channel-open / exec itself raises          →  return false, log "scp-bash-probe-fallback"
+        //                                                  with the cause attached. `sh -c` is POSIX
+        //                                                  everywhere, so this fallback is correct;
+        //                                                  prevents the "9 sessions already open
+        //                                                  → connect now fails" regression.
     }
 }
 ```
@@ -203,7 +209,7 @@ primitives:
 | `mkdir(sessionId, path)` | Shell invocation: `mkdir -p <escaped-path>`. |
 | `rename(sessionId, old, new)` | Shell invocation: `mv -- <escaped-old> <escaped-new>`. |
 | `chmod(sessionId, path, octal)` | Shell invocation: `chmod <octal-string> <escaped-path>`. |
-| `delete(sessionId, paths) → DeleteResult` | New return type. Client-side recursive walk; per directory level, all child files batched into a single `rm -- <escaped-1> … <escaped-N>` capped at 200 args per batch. After each batch, parse stderr line-by-line (`rm: cannot remove 'X': Permission denied`); collect into `succeeded` and `failed`. Empty directories collected bottom-up and batched into `rmdir -- <…>`. Returns when all batches done; never throws on per-item permission errors. Throws only on transport-level failures. |
+| `delete(sessionId, paths) → DeleteResult` | New return type — applies to **both** `SshSftpClientImpl` and `SshScpClientImpl`. SCP path: client-side recursive walk; per directory level, all child files batched into a single `rm -- <escaped-1> … <escaped-N>` capped at 200 args per batch. After each batch, parse stderr line-by-line (`rm: cannot remove 'X': Permission denied`); collect into `succeeded` and `failed`. Empty directories collected bottom-up and batched into `rmdir -- <…>`. SFTP path: same algorithmic shape using `sftp.rm` / `sftp.rmdir` per item, accumulating `succeeded` / `failed` rather than throwing on the first SFTP-level error. Both return when all items processed; throw only on transport-level failures. |
 | `executeCommand` | Unchanged — both modes share this. |
 | `openShell` | Unchanged — terminal is protocol-agnostic. |
 | `fileSize` | Shell invocation: `stat -c %s <escaped-path>`. |
@@ -283,7 +289,7 @@ separate "unparseable" bucket; `SshScpClientImpl.listFiles` throws
 | `ScpListingParserTest` | Spaces in filenames; symlinks; `->` in filenames; zero-byte files; format mismatch (BSD `ls`) → unparseable bucket; `total NN` line skipped; `.`/`..` filtered; empty input; numeric uid resolved via mock cache; numeric uid not in cache → numeric string preserved | 11 |
 | `SshScpClientImplTest` | Each `SshClient` method with a mocked `SSHClient` + session channel + command stream: correct command strings sent, correct argument escaping (incl. paths with single quotes), listing returns `RemoteFile`s with resolved names, batched delete (count `Session.exec` calls vs item count), partial-failure delete returns `DeleteResult(succeeded, failed)` not exception, `uploadFileResumable` throws `UnsupportedOperationException`, exit-code-non-zero → `IOException` with stderr | 14 |
 | `LocalFileAdaptersTest` | Robolectric, `ContentResolver`-backed: `SafSourceFile.getInputStream` uses `openInputStream`; throws on `null` resolver result; reports correct `getLength`/`getName` from `DocumentFile`; `SafDestFile` throws `IllegalArgumentException` on `append=true`; concurrent reads/writes don't corrupt the stream | 6 |
-| `SshSftpClientImplTest` | Renamed from current `SshClientImplTest`. Transport tests (connect/disconnect/getClient) move to `SshSessionStoreTest`; SFTP file-op tests stay | (existing −3) |
+| `SshSftpClientImplTest` | Renamed from current `SshClientImplTest`. Transport tests (connect/disconnect/getClient) move to `SshSessionStoreTest`; SFTP file-op tests stay. New: `delete_partialFailure_returnsDeleteResult` mirrors the SCP test — 350 mock paths, mock raises `SFTPException("Permission denied")` on item #257, walker continues, returns `DeleteResult` with 349 succeeded + 1 failed entry. Locks the new interface contract on the SFTP path. | (existing −3 +1) |
 
 `RemoteFileSystemRepositoryTest` adds:
 - Upload from SAF `content://` URI: assertion that `SafSourceFile` is the value passed to `client.uploadFile(sessionId, sourceUri, …)`, and that `tmp` files are NOT created.
