@@ -8,6 +8,7 @@ import net.schmizz.sshj.sftp.SFTPClient
 import net.schmizz.sshj.transport.DisconnectListener
 import net.schmizz.sshj.userauth.keyprovider.PKCS8KeyFile
 import java.io.ByteArrayInputStream
+import java.io.IOException
 import java.io.InputStreamReader
 import java.io.RandomAccessFile
 import java.util.UUID
@@ -375,13 +376,21 @@ class SshClientImpl @Inject constructor(
     // dead client up front instead of letting SSHJ raise the much vaguer
     // `IllegalStateException: Not connected` deep inside `newSFTPClient()`.
     // Reproduced 3× in oridev-error-listfiles-right-2026-04-25-22-03/04*.
+    //
+    // Throws `IOException` (not `IllegalStateException`) so the existing
+    // `catch (e: IOException)` blocks in TerminalViewModel.openNewTab and
+    // ListFilesUseCase route this through the same UI-error channel as
+    // SSHJ's own ConnectionException (the parent type). Until v0.34.3 we
+    // threw IllegalStateException, which slipped past those catches and
+    // crashed the app on Main with "No active session with id: …" —
+    // reproduced 2× in oridev-crash-2026-04-26-19-{19,25}-*.txt.
     private fun getClient(sessionId: String): SSHClient {
         val client = sessions[sessionId]
-            ?: throw IllegalStateException("No active session with id: $sessionId")
+            ?: throw IOException("No active SSH session: $sessionId")
         if (!client.isConnected) {
             sessions.remove(sessionId, client)
             runCatching { client.close() }
-            throw IllegalStateException("SSH session terminated: $sessionId")
+            throw IOException("SSH session terminated: $sessionId")
         }
         return client
     }
