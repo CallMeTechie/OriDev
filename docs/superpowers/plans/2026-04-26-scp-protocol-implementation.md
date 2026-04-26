@@ -490,6 +490,18 @@ class LocalFileAdaptersTest {
         }
         assertThat(ex.message).contains("does not support resumable")
     }
+    @Test fun safDest_getChild_returnsSelf_singleFileInvariant() {
+        // SAF Uris always point at a single file; SCPDownloadClient's tree-walking
+        // getChild() resolution returns `this` so SSHJ writes through the same
+        // OutputStream regardless of what server-side filename it announces. A future
+        // change that wants to support directory downloads must replace this with a
+        // DocumentFile.createFile(...) call AND change the test to assert the new
+        // child is a fresh SafDestFile pointing at the new Uri.
+        val dst = SafDestFile(Uri.parse("content://x/abc"), mockk(), "a.txt")
+        assertThat(dst.getChild("anything")).isSameInstanceAs(dst)
+        assertThat(dst.getTargetFile("anything")).isSameInstanceAs(dst)
+        assertThat(dst.getTargetDirectory("anything")).isSameInstanceAs(dst)
+    }
 }
 ```
 
@@ -745,25 +757,11 @@ git commit -m "feat(network): add SshSessionStore skeleton (sessions map + disco
         storeUnderTest.connect("h", 22, "u", "p".toCharArray(), null, Protocol.SFTP)
         verify { transport.connection.keepAlive.keepAliveInterval = 15 }
     }
-    @Test fun bothImpls_shareSessionState_viaSameStore() {
-        // Decision 4 contract: SshSftpClientImpl and SshScpClientImpl must see the SAME
-        // sessions when wired with the same SshSessionStore. Without this guarantee a
-        // future refactor that gives one impl its own private map reintroduces v0.34.2's
-        // race condition.
-        val sharedStore = SshSessionStore(verifier)
-        val client = mockk<SSHClient>(relaxed = true)
-        every { client.isConnected } returns true
-        injectLive(sharedStore, "shared-id", client, Protocol.SCP)
-
-        val sftp = SshSftpClientImpl(sharedStore)
-        val scp = SshScpClientImpl(sharedStore)
-        assertThat(kotlinx.coroutines.runBlocking { sftp.isConnected("shared-id") }).isTrue()
-        assertThat(kotlinx.coroutines.runBlocking { scp.isConnected("shared-id") }).isTrue()
-
-        // Disconnect via one impl is observed by the other.
-        kotlinx.coroutines.runBlocking { scp.disconnect("shared-id") }
-        assertThat(kotlinx.coroutines.runBlocking { sftp.isConnected("shared-id") }).isFalse()
-    }
+    // NOTE: `bothImpls_shareSessionState_viaSameStore` lives in T18 (lower in this
+    // plan), not here — it requires `SshSftpClientImpl` (created in T9) and
+    // `SshScpClientImpl` (created in T10), neither of which exists yet. Adding it
+    // here would break T7's compile gate. Decision 4's contract is locked in by
+    // T18 instead, after both impls exist.
 
     private fun mockBenign(stdout: String, stderr: String, exit: Int): SSHClient {
         val c = mockk<SSHClient>(relaxed = true)
@@ -794,7 +792,10 @@ git commit -m "feat(network): add SshSessionStore skeleton (sessions map + disco
         val client = openTransport(host, port, username, password, privateKey)
         val bashAvailable = probeBash(client)
         val sessionId = java.util.UUID.randomUUID().toString()
-        sessions[sessionId] = LiveSession(client, protocol, bashAvailable, NameCache.empty())
+        // `cacheRef` defaults to AtomicReference(null) — the lazy-populate sentinel.
+        // DO NOT pass NameCache.empty() here; that would pre-populate the cache and
+        // defeat the once-per-session getent fetch in T11.
+        sessions[sessionId] = LiveSession(client, protocol, bashAvailable)
         registerDisconnectCleanup(sessionId, client)
         SshSession(
             sessionId = sessionId, profileId = 0L,
@@ -877,7 +878,7 @@ git commit -m "feat(network): SshSessionStore.connect with fail-safe bash probe"
 - [ ] **Step 2: Apply 3 changes to the interface**
 
 1. `connect(...)` gains `protocol: Protocol` parameter.
-2. `delete(sessionId: String, path: String)` becomes `delete(sessionId: String, paths: List<String>): DeleteResult`.
+2. **Rename** `deleteFile(sessionId: String, path: String)` to `delete(sessionId: String, paths: List<String>): DeleteResult` — the existing method is named `deleteFile`, not `delete`. This is both a rename (singular `Path` semantics → batch) and a return-type widening. After the change, update the single existing call site in `data/src/main/kotlin/dev/ori/data/repository/RemoteFileSystemRepository.kt` (in `deleteFile(path: String)`) from `sshClient.deleteFile(sessionId, path)` to the temporary wrapper shown in Step 3 below.
 3. Add two SAF overloads:
 
 ```kotlin
@@ -904,8 +905,8 @@ override suspend fun uploadFile(
     sessionId: String, sourceUri: android.net.Uri, remotePath: String,
     contentResolver: android.content.ContentResolver,
     onProgress: (Long, Long) -> Unit,
-) { TODO("see Task 9 — SAF overload via temp file") }
-// (mirror downloadFile)
+) { TODO("see Task 9 — SAF overload streams via SafSourceFile, no temp file") }
+// (mirror downloadFile, also streamed via SafDestFile per Decision 10)
 ```
 
 In `RemoteFileSystemRepository.deleteFile`, temporarily wrap the new shape:
@@ -917,11 +918,13 @@ override suspend fun deleteFile(path: String) {
 }
 ```
 
-- [ ] **Step 4: Compile every module**
+- [ ] **Step 4: Compile every module — compile-gate ONLY, do NOT run unit tests yet**
 
 ```
 ./gradlew compileDebugKotlin
 ```
+
+**Important: this task's gate is compile-only.** The `TODO("see Task 9 / 10")` stubs inserted in Step 3 will throw `NotImplementedError` if any test exercises `delete()` or the SAF overloads. Tests for those code paths arrive in T9, T11–T14. Don't run `./gradlew test` until at least T14 fills in the SCP file-ops.
 
 (Not just `:core:core-network`, `:data`, `:app` — the new `protocol: Protocol` parameter on `SshClient.connect(...)` is a hard signature break for every caller including `feature-terminal`, `feature-connections`, `feature-proxmox`, the Wear app, and any test factory that mocks `SshClient`.)
 
@@ -959,18 +962,27 @@ In both files, rename `SshClientImpl` → `SshSftpClientImpl`.
 
 Replace the field `private val sessions = ConcurrentHashMap<String, SSHClient>()` with `@Inject`-ed `private val sessionStore: SshSessionStore`. In every method, swap `sessions[sessionId] ?: throw …` and `getClient(sessionId)` with `sessionStore.getSession(sessionId).client`. Replace `connect/disconnect/isConnected` bodies with delegation to the store. Remove `registerDisconnectCleanup` from this file.
 
-- [ ] **Step 2b: Migrate transport tests from `SshSftpClientImplTest` to `SshSessionStoreTest`**
+- [ ] **Step 2b: Migrate transport tests from `SshSftpClientImplTest` to `SshSessionStoreTest` (grep-driven, not prefix-driven)**
 
-The renamed `SshSftpClientImplTest` inherits the existing transport-level tests (`connect_*`, `disconnect_*`, `getClient_*`, `isConnected_*`) which used to construct `SshClientImpl(hostKeyVerifier, …)`. These no longer compile after Step 2 (constructor shape changes to `SshSftpClientImpl(sessionStore = …)`). Fix in two parts:
+The renamed `SshSftpClientImplTest` inherits tests that used to construct `SshClientImpl(hostKeyVerifier, …)`. These no longer compile after Step 2 (constructor shape changes to `SshSftpClientImpl(sessionStore = …)`). The transport-level tests must move to `SshSessionStoreTest`; the file-op tests stay. Use grep to enumerate authoritatively — name-prefix heuristics miss transport tests like `openShell_unknownSession_throwsIOExceptionNotIllegalStateException` that don't start with one of the four obvious prefixes.
 
-1. **Move** every test method whose name starts with `connect_`, `disconnect_`, `getClient_`, or `isConnected_` from `SshSftpClientImplTest.kt` into `SshSessionStoreTest.kt` (created in T6/T7). Adapt the constructor call from `SshClientImpl(…)` to `SshSessionStore(verifier)`.
-2. **Update** every remaining test in `SshSftpClientImplTest.kt` that constructs the subject under test: replace `SshClientImpl(hostKeyVerifier, shellManager)` with `SshSftpClientImpl(sessionStore = mockk(relaxed = true))`. For tests that need a live SSHJ client in the session map, use the `injectLive(...)` reflection helper from `SshSessionStoreTest` (or duplicate it locally).
+```bash
+grep -nE 'SshClientImpl\(|\bhostKeyVerifier\b|\bsessions\[' \
+  core/core-network/src/test/kotlin/dev/ori/core/network/ssh/SshSftpClientImplTest.kt
+```
+
+For **each** match, classify:
+
+- **Transport-level** (the test exercises `connect`, `disconnect`, `getClient`'s session-map state, the disconnect-listener wiring, or the `openShell_unknownSession_*` IOException-from-getClient guard) → **move** the test method verbatim to `SshSessionStoreTest.kt` and adapt the constructor from `SshClientImpl(…)` to `SshSessionStore(verifier)`.
+- **File-op-level** (the test exercises `listFiles`, `uploadFile`, `mkdir`, `chmod`, `rename`, `delete` etc.) → **stay** in `SshSftpClientImplTest`. Replace the constructor call: `SshSftpClientImpl(sessionStore = mockk(relaxed = true))`. Use `injectLive(...)` reflection helper from `SshSessionStoreTest` (duplicate locally) when you need a live SSHJ client in the store's session map.
+
+Sanity-count the migration: the existing test file (~250 lines today) should split roughly 60/40 between transport-test moves and file-op-test refactors. If your migration ends with 100% of tests in one bucket, you've miscategorised something.
 
 Compile-gate before continuing:
 ```
 ./gradlew :core:core-network:compileTestKotlin
 ```
-Expected: green. If any test references `SshClientImpl` or `hostKeyVerifier` as a constructor argument, it has not been migrated.
+Expected: green. If any test still references `SshClientImpl(...)` or `hostKeyVerifier` as a constructor argument, it has not been migrated.
 
 - [ ] **Step 3: Add the failing partial-failure delete test**
 
@@ -1112,12 +1124,15 @@ class SshScpClientImpl @Inject constructor(
     override suspend fun disconnect(sessionId: String) = sessionStore.disconnect(sessionId)
     override suspend fun isConnected(sessionId: String): Boolean = sessionStore.isConnected(sessionId)
 
-    override suspend fun openShell(sessionId: String, cols: Int, rows: Int, term: String): ShellHandle =
+    override suspend fun openShell(sessionId: String, cols: Int, rows: Int): ShellHandle =
         withContext(Dispatchers.IO) {
-            // Inline shell-open (no separate SshShellManager); identical pattern to SshSftpClientImpl.
+            // Inline shell-open (no separate SshShellManager); identical pattern to
+            // SshSftpClientImpl. Signature MUST match the existing `SshClient.openShell`
+            // (cols, rows only — no `term` parameter); spec table marks openShell
+            // "Unchanged". Hardcoding "xterm" matches the existing SFTP path's behaviour.
             val client = sessionStore.getSession(sessionId).client
             val session = client.startSession()
-            session.allocatePTY(term, cols, rows, 0, 0, emptyMap())
+            session.allocatePTY("xterm", cols, rows, 0, 0, emptyMap())
             val shell = session.startShell()
             ShellHandle(session, shell)
         }
@@ -1151,7 +1166,13 @@ class SshScpClientImpl @Inject constructor(
 }
 ```
 
-- [ ] **Step 4: Run, verify PASS**
+- [ ] **Step 4: Run ONLY the 3 skeleton tests, verify PASS** — the eight `TODO("Task N")` stubs in this skeleton throw `NotImplementedError` if exercised; running the whole module's tests yet would fail. Tests for listFiles, transfer, file-ops, delete arrive in T11–T14.
+
+```
+./gradlew :core:core-network:test --tests "dev.ori.core.network.ssh.SshScpClientImplTest.isConnected_delegates" \
+  --tests "dev.ori.core.network.ssh.SshScpClientImplTest.uploadFileResumable_throws" \
+  --tests "dev.ori.core.network.ssh.SshScpClientImplTest.downloadFileResumable_throws"
+```
 
 - [ ] **Step 5: Commit**
 
@@ -1170,7 +1191,7 @@ git commit -m "feat(network): SshScpClientImpl skeleton (transport delegated, fi
 
 - [ ] **Step 1: Add `ensureNameCache` to `SshSessionStore` (TOCTOU-safe)**
 
-The `LiveSession.nameCache` field is changed from `var nameCache: NameCache` to `val cacheRef: AtomicReference<NameCache?>` (initial `null`). The null sentinel distinguishes "never populated" from "populated but empty (LDAP returned nothing)" — without it, two concurrent first-`listFiles` calls both see `uids.isNotEmpty() == false` and both run `fetchNameCache`. Update `LiveSession`'s definition in T6's earlier code accordingly.
+`LiveSession.cacheRef: AtomicReference<NameCache?>` is already defined in T6 (defaults to `AtomicReference(null)`). The null sentinel distinguishes "never populated" from "populated but empty (LDAP returned nothing)" — without it, two concurrent first-`listFiles` calls both see `uids.isNotEmpty() == false` and both run `fetchNameCache`.
 
 ```kotlin
     private val cacheMutex = kotlinx.coroutines.sync.Mutex()
@@ -1896,9 +1917,23 @@ git commit -m "refactor(data): route RemoteFileSystemRepository via protocol-key
 **Files:**
 - Modify: `SessionRegistry.kt`, `WearMessageListenerService.kt`, companion test files
 
-- [ ] **Step 1: Constructor change in both classes**
+- [ ] **Step 1: Migrate every `SshClient` injection site — full sweep**
 
-Replace `private val sshClient: SshClient` with `private val clients: Map<Protocol, @JvmSuppressWildcards SshClient>`. Inside any body that calls a `SshClient` method, look up `clients[profile.protocol] ?: throw IOException("Protocol ${profile.protocol} not supported")` first, then call.
+The plan's wave-3 audit shows direct `private val sshClient: SshClient` injections in **five** call sites outside `core/core-network/`:
+
+| File | Treatment |
+|---|---|
+| `data/src/main/kotlin/dev/ori/data/session/SessionRegistryImpl.kt:43` | Inject `Map<Protocol, @JvmSuppressWildcards SshClient>` (protocol-routed) — `connect(profileId)` resolves by `profile.protocol`. |
+| `app/src/main/kotlin/dev/ori/app/wear/WearMessageListenerService.kt` | Same as `SessionRegistryImpl`. |
+| `app/src/main/kotlin/dev/ori/app/service/SshTransferExecutor.kt:22` | **Annotate with `@DefaultSshClient`** — transfers use whatever the default impl is (SFTP via the legacy path). |
+| `feature-terminal/src/main/kotlin/dev/ori/feature/terminal/ui/TerminalViewModel.kt:83` | **Annotate with `@DefaultSshClient`** — terminal is protocol-agnostic. |
+| `data/src/main/kotlin/dev/ori/data/repository/ConnectionRepositoryImpl.kt:35` | **Annotate with `@DefaultSshClient`** — only used for connection-validation hop. |
+
+Inside any body that calls a `SshClient` method via the **map**, look up `clients[profile.protocol] ?: throw IOException("Protocol ${profile.protocol} not supported")` first, then call. Bodies that use `@DefaultSshClient` continue to call methods on the single field as before.
+
+Also update the matching test fixtures:
+- `feature-terminal/.../TerminalViewModelTest.kt:62` — replace `private val sshClient = mockk<SshClient>(relaxed = true)` with the same mock annotated as `@DefaultSshClient` if Hilt-injected, or update the constructor call to pass it as the now-`@DefaultSshClient`-qualified field.
+- Any other `*Test.kt` that constructs `SessionRegistryImpl(sshClient = mockk())` etc. — pass `clients = mapOf(Protocol.SFTP to mockk(...), ...)`.
 
 - [ ] **Step 2: Update tests**
 
@@ -1962,6 +1997,29 @@ class SshClientModuleHiltTest {
     }
     @Test fun defaultClient_isSftp() {
         assertThat(defaultClient).isInstanceOf(SshSftpClientImpl::class.java)
+    }
+    @Test fun bothImpls_shareSessionState_viaSameStore() {
+        // Decision 4 contract: SshSftpClientImpl and SshScpClientImpl must see the SAME
+        // sessions when wired with the same SshSessionStore. Without this guarantee a
+        // future refactor that gives one impl its own private map reintroduces v0.34.2's
+        // race condition. Lives here (T18) because both impls only exist post-T10.
+        val verifier = mockk<OriDevHostKeyVerifier>(relaxed = true)
+        val sharedStore = SshSessionStore(verifier)
+        val client = mockk<SSHClient>(relaxed = true)
+        every { client.isConnected } returns true
+
+        // Insert a session via reflection — same helper as in SshSessionStoreTest.
+        val sessionsField = SshSessionStore::class.java.getDeclaredField("sessions"); sessionsField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        (sessionsField.get(sharedStore) as java.util.concurrent.ConcurrentHashMap<String, LiveSession>)["shared-id"] =
+            LiveSession(client, Protocol.SCP, false, java.util.concurrent.atomic.AtomicReference(NameCache.empty()))
+
+        val sftp = SshSftpClientImpl(sharedStore)
+        val scp = SshScpClientImpl(sharedStore)
+        assertThat(kotlinx.coroutines.runBlocking { sftp.isConnected("shared-id") }).isTrue()
+        assertThat(kotlinx.coroutines.runBlocking { scp.isConnected("shared-id") }).isTrue()
+        kotlinx.coroutines.runBlocking { scp.disconnect("shared-id") }
+        assertThat(kotlinx.coroutines.runBlocking { sftp.isConnected("shared-id") }).isFalse()
     }
 }
 ```
