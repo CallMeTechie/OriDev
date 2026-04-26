@@ -7,9 +7,11 @@ class DeleteResultTest {
     @Test fun isFullSuccess_emptyFailed_true() {
         assertThat(DeleteResult(listOf("/a"), emptyList()).isFullSuccess).isTrue()
     }
+
     @Test fun isFullSuccess_nonEmptyFailed_false() {
         assertThat(DeleteResult(listOf("/a"), listOf("/b" to "x")).isFullSuccess).isFalse()
     }
+
     @Test fun merge_combines() {
         val a = DeleteResult(listOf("/x"), listOf("/y" to "e"))
         val b = DeleteResult(listOf("/z"), listOf("/w" to "f"))
