@@ -6,6 +6,7 @@ import dev.ori.domain.model.FileItem
 import dev.ori.domain.repository.FileSystemRepository
 import dev.ori.domain.repository.RemoteFileSystemSession
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,8 +37,8 @@ class RemoteFileSystemRepository @Inject constructor(
     }
 
     override suspend fun deleteFile(path: String) {
-        val sessionId = requireSession()
-        sshClient.deleteFile(sessionId, path)
+        val r = sshClient.delete(requireSession(), listOf(path))
+        if (!r.isFullSuccess) throw IOException("Delete failed: ${r.failed.firstOrNull()?.second ?: "unknown"}")
     }
 
     override suspend fun renameFile(oldPath: String, newPath: String) {

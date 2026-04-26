@@ -1,5 +1,7 @@
 package dev.ori.core.network.ssh
 
+import dev.ori.core.common.model.Protocol
+import dev.ori.core.network.model.DeleteResult
 import dev.ori.core.network.model.RemoteFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -37,6 +39,7 @@ class SshClientImpl @Inject constructor(
         username: String,
         password: CharArray?,
         privateKey: ByteArray?,
+        protocol: Protocol,
     ): SshSession = withContext(Dispatchers.IO) {
         // SSHJ's SocketClient.connect() does blocking network I/O —
         // without this switch it raises NetworkOnMainThreadException
@@ -337,11 +340,25 @@ class SshClientImpl @Inject constructor(
             }
         }
 
-    override suspend fun deleteFile(sessionId: String, path: String) {
-        withSftpClient(sessionId) { sftp ->
-            sftp.rm(path)
-        }
-    }
+    override suspend fun delete(sessionId: String, paths: List<String>): DeleteResult =
+        TODO("see Task 9 — partial-failure delete walk")
+
+    override suspend fun uploadFile(
+        sessionId: String,
+        sourceUri: android.net.Uri,
+        remotePath: String,
+        contentResolver: android.content.ContentResolver,
+        onProgress: (Long, Long) -> Unit,
+    ) { TODO("see Task 9 — SAF overload streams via SafSourceFile, no temp file") }
+
+    // mirror downloadFile, also streamed via SafDestFile per Decision 10
+    override suspend fun downloadFile(
+        sessionId: String,
+        remotePath: String,
+        destUri: android.net.Uri,
+        contentResolver: android.content.ContentResolver,
+        onProgress: (Long, Long) -> Unit,
+    ) { TODO("see Task 9 — SAF overload streams via SafDestFile, no temp file") }
 
     override suspend fun rename(sessionId: String, oldPath: String, newPath: String) {
         withSftpClient(sessionId) { sftp ->

@@ -1,5 +1,6 @@
 package dev.ori.data.session
 
+import dev.ori.core.common.model.Protocol
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.data.dao.ServerProfileDao
 import dev.ori.data.mapper.toDomain
@@ -132,6 +133,7 @@ class SessionRegistryImpl(
             port = profile.port,
             username = profile.username,
             password = password,
+            protocol = profile.protocol,
         )
         val session = Session(
             id = sshSession.sessionId,
