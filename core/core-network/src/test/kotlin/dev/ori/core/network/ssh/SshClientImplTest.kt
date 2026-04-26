@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.io.IOException
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
@@ -201,9 +202,14 @@ class SshClientImplTest {
         // `IllegalStateException: Not connected` from inside SSHJ — and the
         // dead client stayed in the map forever, so retries failed the same
         // way. Reproduced 3× in oridev-error-listfiles-right-2026-04-25-22-03/04*.
+        //
+        // The thrown type is `IOException` (not `IllegalStateException`) so
+        // existing `catch (e: IOException)` blocks in TerminalViewModel and
+        // ListFilesUseCase route the failure through the UI-error channel
+        // instead of crashing on Main — see oridev-crash-2026-04-26-19-*.
         every { sshNetworkClient.isConnected } returns false
 
-        assertThrows(IllegalStateException::class.java) {
+        assertThrows(IOException::class.java) {
             runBlocking { sshClient.listFiles(sessionId, "/") }
         }
 
@@ -212,6 +218,21 @@ class SshClientImplTest {
         @Suppress("UNCHECKED_CAST")
         val sessionsMap = sessionsField.get(sshClient) as ConcurrentHashMap<String, SSHClient>
         assertThat(sessionsMap).doesNotContainKey(sessionId)
+    }
+
+    @Test
+    fun openShell_unknownSession_throwsIOExceptionNotIllegalStateException() {
+        // Direct regression for oridev-crash-2026-04-26-19-19-53.txt:
+        // TerminalViewModel.openNewTab catches `IOException` only, so a
+        // `getClient` throw from a session that was already pruned by the
+        // DisconnectListener must surface as IOException — otherwise the
+        // ViewModel coroutine fails its parent scope and the app crashes
+        // on Main with "No active session with id: <UUID>".
+        val unknownSessionId = "this-session-id-was-never-connected"
+
+        assertThrows(IOException::class.java) {
+            runBlocking { sshClient.openShell(unknownSessionId) }
+        }
     }
 
     @Test
@@ -242,11 +263,12 @@ class SshClientImplTest {
     }
 
     @Test
-    fun fileSize_noActiveSession_throwsIllegalStateException() = runTest {
+    fun fileSize_noActiveSession_throwsIOException() = runTest {
         // `withSftpClient` calls `getClient`, which throws for unknown sessionIds.
         // The try/catch inside `fileSize` only wraps `sftp.stat`, so the
-        // IllegalStateException propagates to the caller.
-        assertThrows(IllegalStateException::class.java) {
+        // IOException propagates to the caller — matching the contract that
+        // ViewModel-layer `catch (e: IOException)` blocks rely on.
+        assertThrows(IOException::class.java) {
             kotlinx.coroutines.runBlocking {
                 sshClient.fileSize("no-such-session", "/remote/foo")
             }
