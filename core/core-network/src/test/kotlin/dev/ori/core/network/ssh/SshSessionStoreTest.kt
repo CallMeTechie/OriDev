@@ -171,4 +171,69 @@ class SshSessionStoreTest {
 
         assertThrows(IOException::class.java) { store.getSession("eof-id") }
     }
+
+    @Test fun ensureNameCache_calledTwice_runsGetentOnlyOnce() = kotlinx.coroutines.test.runTest {
+        // Decision 6 contract: once-per-session lookup. Drives `SshSessionStore` directly
+        // (not through the SCP impl) so the cache logic is locked in independently of
+        // listFiles' call site.
+        val realStore = SshSessionStore(mockk(relaxed = true))
+        val client = mockk<SSHClient>(relaxed = true)
+        val getentCommandsSeen = mutableListOf<String>()
+        every { client.isConnected } returns true
+        every { client.startSession() } answers {
+            val s = mockk<net.schmizz.sshj.connection.channel.direct.Session>(relaxed = true)
+            val c = mockk<net.schmizz.sshj.connection.channel.direct.Session.Command>(relaxed = true)
+            every { s.exec(any()) } answers {
+                getentCommandsSeen += firstArg<String>()
+                c
+            }
+            every { c.inputStream } returns java.io.ByteArrayInputStream(
+                "marc:x:1000:1000::/home/marc:/bin/bash\n".toByteArray(),
+            )
+            every { c.errorStream } returns java.io.ByteArrayInputStream(ByteArray(0))
+            every { c.exitStatus } returns 0
+            s
+        }
+        val sessionsField = SshSessionStore::class.java.getDeclaredField("sessions")
+        sessionsField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        (sessionsField.get(realStore) as java.util.concurrent.ConcurrentHashMap<String, LiveSession>)["s1"] =
+            LiveSession(client, Protocol.SCP, false, java.util.concurrent.atomic.AtomicReference(null))
+
+        realStore.ensureNameCache("s1")
+        realStore.ensureNameCache("s1")
+
+        // First call runs `getent passwd …` and `getent group …`. Second call hits the cache.
+        // We expect exactly TWO exec invocations across both ensureNameCache calls (one for
+        // passwd, one for group), not four.
+        val getentCount = getentCommandsSeen.count { it.contains("getent") }
+        assertThat(getentCount).isEqualTo(2)
+    }
+
+    @Test fun ensureNameCache_failedFetch_doesNotRetryOnSecondCall() = kotlinx.coroutines.test.runTest {
+        // Decision 6 contract: failed fetch caches an empty NameCache; subsequent listFiles
+        // do not re-attempt. Without this guarantee, every listFiles on a server with no
+        // /etc/passwd read access pays a /etc/passwd-attempt + /etc/group-attempt cost.
+        val realStore = SshSessionStore(mockk(relaxed = true))
+        val client = mockk<SSHClient>(relaxed = true)
+        every { client.isConnected } returns true
+        var execCount = 0
+        every { client.startSession() } answers {
+            execCount++
+            throw java.io.IOException("Channel open failed")
+        }
+        val sessionsField = SshSessionStore::class.java.getDeclaredField("sessions")
+        sessionsField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        (sessionsField.get(realStore) as java.util.concurrent.ConcurrentHashMap<String, LiveSession>)["s1"] =
+            LiveSession(client, Protocol.SCP, false, java.util.concurrent.atomic.AtomicReference(null))
+
+        val first = realStore.ensureNameCache("s1")
+        val second = realStore.ensureNameCache("s1")
+
+        assertThat(first).isEqualTo(NameCache.empty())
+        assertThat(second).isEqualTo(NameCache.empty())
+        // First call attempted (and failed) once. Second call must not attempt again.
+        assertThat(execCount).isAtMost(2) // tolerate one passwd attempt + one group attempt on first call
+    }
 }

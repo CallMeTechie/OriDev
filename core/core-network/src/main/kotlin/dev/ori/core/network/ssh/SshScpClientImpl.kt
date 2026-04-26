@@ -55,7 +55,17 @@ class SshScpClientImpl @Inject constructor(
         }
 
     override suspend fun listFiles(sessionId: String, path: String): List<RemoteFile> =
-        TODO("Task 11")
+        withContext(Dispatchers.IO) {
+            val live = sessionStore.getSession(sessionId)
+            val cache = sessionStore.ensureNameCache(sessionId)
+            val cmd = "LANG=C ls -la --numeric-uid-gid --time-style='+%Y-%m-%dT%H:%M:%S' ${shellEscape(path)}"
+            val r = ShellInvocation.run(live.client, cmd, live.bashAvailable)
+            if (r.exitCode != 0) {
+                val first = r.stderr.lineSequence().firstOrNull()?.trim().orEmpty()
+                throw java.io.IOException("ls failed: ${first.ifEmpty { "exit ${r.exitCode}" }}")
+            }
+            ScpListingParser.parse(r.stdout, parentPath = path, nameCache = cache)
+        }
 
     override suspend fun uploadFile(
         sessionId: String,
@@ -113,3 +123,5 @@ class SshScpClientImpl @Inject constructor(
 
     override suspend fun fileSize(sessionId: String, remotePath: String): Long? = TODO("Task 13")
 }
+
+internal fun shellEscape(path: String): String = "'" + path.replace("'", "'\\''") + "'"
