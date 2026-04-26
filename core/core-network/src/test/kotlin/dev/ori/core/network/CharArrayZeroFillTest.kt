@@ -3,8 +3,8 @@ package dev.ori.core.network
 import com.google.common.truth.Truth.assertThat
 import dev.ori.core.network.ftp.FtpClientImpl
 import dev.ori.core.network.ssh.OriDevHostKeyVerifier
-import dev.ori.core.network.ssh.SshClientImpl
-import dev.ori.core.network.ssh.SshShellManager
+import dev.ori.core.network.ssh.SshSessionStore
+import dev.ori.core.network.ssh.SshSftpClientImpl
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test
  *
  *   "Passwords in memory: char[] not String. Zero-fill after use."
  *
- * [dev.ori.core.network.ssh.SshClient.connect] and
+ * [dev.ori.core.network.ssh.SshClient.connect] (delegated to [dev.ori.core.network.ssh.SshSessionStore]) and
  * [dev.ori.core.network.ftp.FtpClient.connect] both document a security
  * contract that the caller's CharArray buffer is zero-filled in a `try/finally`
  * on both the happy path AND on exception, so callers can rely on the buffer
@@ -36,9 +36,8 @@ class CharArrayZeroFillTest {
 
     @Test
     fun sshConnect_failurePath_zeroFillsCallerPasswordBuffer() = runTest {
-        val sshClient = SshClientImpl(
-            hostKeyVerifier = mockk<OriDevHostKeyVerifier>(relaxed = true),
-            shellManager = mockk<SshShellManager>(relaxed = true),
+        val sshClient = SshSftpClientImpl(
+            sessionStore = SshSessionStore(mockk<OriDevHostKeyVerifier>(relaxed = true)),
         )
         val password = "hunter2".toCharArray()
 
@@ -83,9 +82,8 @@ class CharArrayZeroFillTest {
         // can't observe it directly, but we CAN assert the call does not
         // throw a NullPointerException or CharArrayZeroFill-related issue
         // on the exception path (unreachable host).
-        val sshClient = SshClientImpl(
-            hostKeyVerifier = mockk<OriDevHostKeyVerifier>(relaxed = true),
-            shellManager = mockk<SshShellManager>(relaxed = true),
+        val sshClient = SshSftpClientImpl(
+            sessionStore = SshSessionStore(mockk<OriDevHostKeyVerifier>(relaxed = true)),
         )
 
         @Suppress("DEPRECATION")

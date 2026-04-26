@@ -1,6 +1,5 @@
 package dev.ori.data.session
 
-import dev.ori.core.common.model.Protocol
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.data.dao.ServerProfileDao
 import dev.ori.data.mapper.toDomain

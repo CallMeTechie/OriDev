@@ -5,7 +5,7 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dev.ori.core.network.ssh.SshClient
-import dev.ori.core.network.ssh.SshClientImpl
+import dev.ori.core.network.ssh.SshSftpClientImpl
 import javax.inject.Singleton
 
 @Module
@@ -14,5 +14,5 @@ abstract class NetworkModule {
 
     @Binds
     @Singleton
-    abstract fun bindSshClient(impl: SshClientImpl): SshClient
+    abstract fun bindSshClient(impl: SshSftpClientImpl): SshClient
 }

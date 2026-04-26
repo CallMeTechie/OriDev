@@ -6,6 +6,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
 import net.schmizz.sshj.SSHClient
+import net.schmizz.sshj.common.DisconnectReason
 import net.schmizz.sshj.transport.DisconnectListener
 import net.schmizz.sshj.transport.Transport
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -116,4 +117,58 @@ class SshSessionStoreTest {
         SshSessionStore::class.java
             .getDeclaredMethod("probeBash", SSHClient::class.java)
             .apply { isAccessible = true }.invoke(store, client) as Boolean
+
+    // --- Migrated from SshClientImplTest (T9 transport-test migration) ---
+
+    @Test
+    fun listFiles_clientHasDisconnected_removesSessionFromMapAndThrows() {
+        // Regression: SSHJ's Reader thread fires `TransportImpl.die()` on TCP
+        // EOF / server timeout, which leaves the SSHClient in `sessions` with
+        // `isConnected == false`. The next `getSession` call must throw IOException
+        // and remove the stale entry so retries can succeed with a fresh connect().
+        // Reproduced 3x in oridev-error-listfiles-right-2026-04-25-22-03/04*.
+        val client = mockk<SSHClient>(relaxed = true)
+        every { client.isConnected } returns false
+        injectLive(store, "stale-id", client, Protocol.SFTP)
+
+        assertThrows(IOException::class.java) { store.getSession("stale-id") }
+
+        // After the throw, the stale entry must be gone from the map so a
+        // subsequent getSession("stale-id") gets "No active SSH session" not
+        // "SSH session terminated".
+        val ex = assertThrows(IOException::class.java) { store.getSession("stale-id") }
+        assertThat(ex.message).contains("No active SSH session")
+    }
+
+    @Test
+    fun openShell_unknownSession_throwsIOExceptionNotIllegalStateException() {
+        // Direct regression for oridev-crash-2026-04-26-19-19-53.txt:
+        // TerminalViewModel.openNewTab catches `IOException` only, so a
+        // getSession throw from a session that was never connected must surface
+        // as IOException — otherwise the ViewModel coroutine fails its parent
+        // scope and the app crashes on Main with "No active session with id: <UUID>".
+        val ex = assertThrows(IOException::class.java) {
+            store.getSession("this-session-id-was-never-connected")
+        }
+        assertThat(ex).isInstanceOf(IOException::class.java)
+    }
+
+    @Test
+    fun disconnectListener_notifiesOnTransportEof_removesSessionFromMap() {
+        // Belt-and-suspenders: even if a caller never reaches getSession again,
+        // SSHJ's DisconnectListener should reactively prune the map the moment
+        // the Reader thread observes EOF — so a fresh connect() doesn't have to
+        // wait for the GC of the old SSHClient to free up resources.
+        val client = mockk<SSHClient>(relaxed = true)
+        val transport = mockk<Transport>(relaxed = true)
+        every { client.transport } returns transport
+        val listenerSlot = slot<DisconnectListener>()
+        every { transport.disconnectListener = capture(listenerSlot) } answers { }
+        injectLive(store, "eof-id", client, Protocol.SFTP)
+        invokeRegister(store, "eof-id", client)
+
+        listenerSlot.captured.notifyDisconnect(DisconnectReason.CONNECTION_LOST, "EOF")
+
+        assertThrows(IOException::class.java) { store.getSession("eof-id") }
+    }
 }

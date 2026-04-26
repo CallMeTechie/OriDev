@@ -1,22 +1,22 @@
 package dev.ori.core.network.ssh
 
 import com.google.common.truth.Truth.assertThat
+import dev.ori.core.common.model.Protocol
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
+import io.mockk.runs
 import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import net.schmizz.sshj.SSHClient
-import net.schmizz.sshj.common.DisconnectReason
 import net.schmizz.sshj.sftp.FileAttributes
 import net.schmizz.sshj.sftp.OpenMode
 import net.schmizz.sshj.sftp.RemoteFile
 import net.schmizz.sshj.sftp.RemoteResourceInfo
 import net.schmizz.sshj.sftp.SFTPClient
 import net.schmizz.sshj.sftp.SFTPException
-import net.schmizz.sshj.transport.DisconnectListener
-import net.schmizz.sshj.transport.Transport
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -28,36 +28,33 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.io.path.writeBytes
 
 /**
- * Unit tests for the resumable upload/download overloads on [SshClientImpl].
+ * Unit tests for file-op overloads on [SshSftpClientImpl].
  *
- * Strategy: we bypass the real SSHJ network stack by injecting a mocked
- * [SSHClient] into the private `sessions` map via reflection, then mocking the
- * `newSFTPClient()` → `SFTPClient` → `RemoteFile` chain. The RemoteFile mock
- * buffers positional writes/reads in an in-memory byte array, so we can make
- * assertions on the final file content after the transfer loop runs.
+ * Strategy: inject a real [SshSessionStore] with a mock verifier, then place a
+ * mocked [SSHClient] into its `sessions` map via [injectLive]. The
+ * `newSFTPClient()` call on that mock returns a mocked [SFTPClient] so we can
+ * assert on SFTP-level behaviour without any network I/O.
+ *
+ * Transport-level tests (connect, disconnect, getSession guards, disconnect
+ * listener) live in [SshSessionStoreTest].
  */
-class SshClientImplTest {
+class SshSftpClientImplTest {
 
-    private lateinit var sshClient: SshClientImpl
+    private lateinit var sessionStore: SshSessionStore
+    private lateinit var sshClient: SshSftpClientImpl
     private lateinit var sshNetworkClient: SSHClient
     private lateinit var sftp: SFTPClient
     private val sessionId = "test-session"
 
     @BeforeEach
     fun setUp() {
-        sshClient = SshClientImpl(
-            hostKeyVerifier = mockk(relaxed = true),
-            shellManager = mockk(relaxed = true),
-        )
+        sessionStore = SshSessionStore(mockk(relaxed = true))
+        sshClient = SshSftpClientImpl(sessionStore)
         sshNetworkClient = mockk(relaxed = true)
         sftp = mockk(relaxed = true)
-        // `relaxed=true` would default Boolean returns to `false`, which
-        // makes the new isConnected guard in `getClient` reject every
-        // session in these tests. Mark the mocked client live by default;
-        // tests that exercise the disconnected path opt in explicitly.
         every { sshNetworkClient.isConnected } returns true
         every { sshNetworkClient.newSFTPClient() } returns sftp
-        injectSession(sshClient, sessionId, sshNetworkClient)
+        injectLive(sessionStore, sessionId, sshNetworkClient)
     }
 
     @Test
@@ -90,7 +87,6 @@ class SshClientImplTest {
         localFile.writeBytes(payload)
 
         val halfSize = (payload.size / 2).toLong()
-        // Pre-fill remote with first half as if a prior transfer uploaded it.
         val fakeRemote = InMemoryRemoteFile(initial = payload.copyOfRange(0, halfSize.toInt()))
         every { sftp.open(any<String>(), any<Set<OpenMode>>()) } returns fakeRemote.mock
         every { sftp.stat(any<String>()) } returns mockk<FileAttributes>(relaxed = true) {
@@ -129,7 +125,6 @@ class SshClientImplTest {
 
     @Test
     fun uploadFileResumable_progressCallback_firesIncrementally(@TempDir tmp: Path) = runTest {
-        // 96 KiB local file → 3 chunks at 32 KiB buffer.
         val payload = ByteArray(96 * 1024) { (it % 113).toByte() }
         val localFile = tmp.resolve("local.bin")
         localFile.writeBytes(payload)
@@ -167,8 +162,7 @@ class SshClientImplTest {
 
     @Test
     fun fileSize_fileDoesNotExist_returnsNull() = runTest {
-        every { sftp.stat("/remote/missing") } throws
-            SFTPException("No such file")
+        every { sftp.stat("/remote/missing") } throws SFTPException("No such file")
 
         val result = sshClient.fileSize(sessionId, "/remote/missing")
 
@@ -195,79 +189,10 @@ class SshClientImplTest {
     }
 
     @Test
-    fun listFiles_clientHasDisconnected_removesSessionFromMapAndThrows() {
-        // Regression: SSHJ's Reader thread fires `TransportImpl.die()` on TCP
-        // EOF / server timeout, which leaves the SSHClient in `sessions` with
-        // `isConnected == false`. The next `listFiles` call previously hit
-        // `IllegalStateException: Not connected` from inside SSHJ — and the
-        // dead client stayed in the map forever, so retries failed the same
-        // way. Reproduced 3× in oridev-error-listfiles-right-2026-04-25-22-03/04*.
-        //
-        // The thrown type is `IOException` (not `IllegalStateException`) so
-        // existing `catch (e: IOException)` blocks in TerminalViewModel and
-        // ListFilesUseCase route the failure through the UI-error channel
-        // instead of crashing on Main — see oridev-crash-2026-04-26-19-*.
-        every { sshNetworkClient.isConnected } returns false
-
-        assertThrows(IOException::class.java) {
-            runBlocking { sshClient.listFiles(sessionId, "/") }
-        }
-
-        val sessionsField = SshClientImpl::class.java.getDeclaredField("sessions")
-        sessionsField.isAccessible = true
-        @Suppress("UNCHECKED_CAST")
-        val sessionsMap = sessionsField.get(sshClient) as ConcurrentHashMap<String, SSHClient>
-        assertThat(sessionsMap).doesNotContainKey(sessionId)
-    }
-
-    @Test
-    fun openShell_unknownSession_throwsIOExceptionNotIllegalStateException() {
-        // Direct regression for oridev-crash-2026-04-26-19-19-53.txt:
-        // TerminalViewModel.openNewTab catches `IOException` only, so a
-        // `getClient` throw from a session that was already pruned by the
-        // DisconnectListener must surface as IOException — otherwise the
-        // ViewModel coroutine fails its parent scope and the app crashes
-        // on Main with "No active session with id: <UUID>".
-        val unknownSessionId = "this-session-id-was-never-connected"
-
-        assertThrows(IOException::class.java) {
-            runBlocking { sshClient.openShell(unknownSessionId) }
-        }
-    }
-
-    @Test
-    fun disconnectListener_notifiesOnTransportEof_removesSessionFromMap() {
-        // Belt-and-suspenders: even if a caller never reaches `getClient`
-        // again, SSHJ's DisconnectListener should reactively prune the map
-        // the moment the Reader thread observes EOF — so a fresh `connect()`
-        // doesn't have to wait for the GC of the old SSHClient to free up
-        // resources.
-        val transport = mockk<Transport>(relaxed = true)
-        val listenerSlot = slot<DisconnectListener>()
-        every { sshNetworkClient.transport } returns transport
-        every { transport.disconnectListener = capture(listenerSlot) } answers { }
-
-        // Re-trigger the registration path the production code uses on connect.
-        SshClientImpl::class.java
-            .getDeclaredMethod("registerDisconnectCleanup", String::class.java, SSHClient::class.java)
-            .apply { isAccessible = true }
-            .invoke(sshClient, sessionId, sshNetworkClient)
-
-        listenerSlot.captured.notifyDisconnect(DisconnectReason.CONNECTION_LOST, "EOF")
-
-        val sessionsField = SshClientImpl::class.java.getDeclaredField("sessions")
-        sessionsField.isAccessible = true
-        @Suppress("UNCHECKED_CAST")
-        val sessionsMap = sessionsField.get(sshClient) as ConcurrentHashMap<String, SSHClient>
-        assertThat(sessionsMap).doesNotContainKey(sessionId)
-    }
-
-    @Test
     fun fileSize_noActiveSession_throwsIOException() = runTest {
-        // `withSftpClient` calls `getClient`, which throws for unknown sessionIds.
+        // `withSftpClient` calls `sessionStore.getSession`, which throws for unknown sessionIds.
         // The try/catch inside `fileSize` only wraps `sftp.stat`, so the
-        // IOException propagates to the caller — matching the contract that
-        // ViewModel-layer `catch (e: IOException)` blocks rely on.
+        // IOException propagates to the caller.
         assertThrows(IOException::class.java) {
             kotlinx.coroutines.runBlocking {
                 sshClient.fileSize("no-such-session", "/remote/foo")
@@ -275,12 +200,24 @@ class SshClientImplTest {
         }
     }
 
-    private fun injectSession(client: SshClientImpl, id: String, ssh: SSHClient) {
-        val field = SshClientImpl::class.java.getDeclaredField("sessions")
-        field.isAccessible = true
+    @Test
+    fun delete_oneOfThreeFails_returnsDeleteResultWithBoth() = runTest {
+        every { sftp.rm("/a") } just runs
+        every { sftp.rm("/b") } throws SFTPException("Permission denied")
+        every { sftp.rm("/c") } just runs
+        val result = sshClient.delete(sessionId, listOf("/a", "/b", "/c"))
+        assertThat(result.succeeded).containsExactly("/a", "/c").inOrder()
+        assertThat(result.failed).hasSize(1)
+        assertThat(result.failed[0].first).isEqualTo("/b")
+        assertThat(result.failed[0].second).contains("Permission denied")
+    }
+
+    private fun injectLive(store: SshSessionStore, id: String, c: SSHClient) {
+        val f = SshSessionStore::class.java.getDeclaredField("sessions")
+        f.isAccessible = true
         @Suppress("UNCHECKED_CAST")
-        val map = field.get(client) as ConcurrentHashMap<String, SSHClient>
-        map[id] = ssh
+        (f.get(store) as ConcurrentHashMap<String, LiveSession>)[id] =
+            LiveSession(c, Protocol.SFTP, false, AtomicReference(NameCache.empty()))
     }
 
     /**
