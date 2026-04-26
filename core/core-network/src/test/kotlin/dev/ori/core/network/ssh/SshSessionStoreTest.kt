@@ -70,4 +70,50 @@ class SshSessionStoreTest {
             .getDeclaredMethod("registerDisconnectCleanup", String::class.java, SSHClient::class.java)
             .apply { isAccessible = true }.invoke(store, id, c)
     }
+
+    @Test fun probe_sentinelInStdout_returnsTrue() {
+        val client = mockBenign(stdout = "BASH_OK\n", stderr = "", exit = 0)
+        assertThat(invokeProbe(store, client)).isTrue()
+    }
+
+    @Test fun probe_noSentinel_returnsFalse() {
+        val client = mockBenign(stdout = "something else\n", stderr = "", exit = 0)
+        assertThat(invokeProbe(store, client)).isFalse()
+    }
+
+    @Test fun probe_channelOpenFails_returnsFalseFailSafe() {
+        val client = mockk<SSHClient>(relaxed = true)
+        every { client.startSession() } throws IOException("Channel open failure: MaxSessions exceeded")
+        assertThat(invokeProbe(store, client)).isFalse()
+    }
+
+    @Test fun probe_forcedCommand_throwsSpecificIOException() {
+        val client = mockBenign(
+            stdout = "",
+            stderr = "This account is restricted to running 'svnserve -t'\n",
+            exit = 1,
+        )
+        val ex = assertThrows(java.lang.reflect.InvocationTargetException::class.java) {
+            invokeProbe(store, client)
+        }
+        val cause = ex.targetException as IOException
+        assertThat(cause.message).contains("forced-command")
+    }
+
+    private fun mockBenign(stdout: String, stderr: String, exit: Int): SSHClient {
+        val c = mockk<SSHClient>(relaxed = true)
+        val s = mockk<net.schmizz.sshj.connection.channel.direct.Session>(relaxed = true)
+        val cmd = mockk<net.schmizz.sshj.connection.channel.direct.Session.Command>(relaxed = true)
+        every { c.startSession() } returns s
+        every { s.exec(any()) } returns cmd
+        every { cmd.inputStream } returns java.io.ByteArrayInputStream(stdout.toByteArray())
+        every { cmd.errorStream } returns java.io.ByteArrayInputStream(stderr.toByteArray())
+        every { cmd.exitStatus } returns exit
+        return c
+    }
+
+    private fun invokeProbe(store: SshSessionStore, client: SSHClient): Boolean =
+        SshSessionStore::class.java
+            .getDeclaredMethod("probeBash", SSHClient::class.java)
+            .apply { isAccessible = true }.invoke(store, client) as Boolean
 }
