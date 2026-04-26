@@ -84,4 +84,71 @@ class SshScpClientImplTest {
         }
         assertThat(ex.message).contains("Permission denied")
     }
+
+    @Test fun uploadFile_path_callsScpFileTransferUpload() = kotlinx.coroutines.test.runTest {
+        val client = mockk<net.schmizz.sshj.SSHClient>(relaxed = true)
+        val transfer = mockk<net.schmizz.sshj.xfer.scp.SCPFileTransfer>(relaxed = true)
+        every { client.newSCPFileTransfer() } returns transfer
+        every { store.getSession("s1") } returns LiveSession(
+            client,
+            Protocol.SCP,
+            true,
+            java.util.concurrent.atomic.AtomicReference(NameCache.empty()),
+        )
+        sshClient.uploadFile("s1", "/local/file", "/remote/file") { _, _ -> }
+        io.mockk.verify { transfer.upload(any<net.schmizz.sshj.xfer.LocalSourceFile>(), "/remote/file") }
+    }
+
+    @Test fun uploadFile_safUri_streamsViaSafSourceFile() = kotlinx.coroutines.test.runTest {
+        val client = mockk<net.schmizz.sshj.SSHClient>(relaxed = true)
+        val transfer = mockk<net.schmizz.sshj.xfer.scp.SCPFileTransfer>(relaxed = true)
+        every { client.newSCPFileTransfer() } returns transfer
+        every { store.getSession("s1") } returns LiveSession(
+            client,
+            Protocol.SCP,
+            true,
+            java.util.concurrent.atomic.AtomicReference(NameCache.empty()),
+        )
+        val resolver = mockk<android.content.ContentResolver>()
+        val uri = mockk<android.net.Uri>()
+        every { uri.lastPathSegment } returns "abc"
+        every { resolver.openFileDescriptor(uri, "r") } returns null
+        every { resolver.openInputStream(uri) } returns java.io.ByteArrayInputStream("data".toByteArray())
+        sshClient.uploadFile("s1", uri, "/remote/file", resolver) { _, _ -> }
+        io.mockk.verify {
+            transfer.upload(
+                match<net.schmizz.sshj.xfer.LocalSourceFile> { it is SafSourceFile },
+                "/remote/file",
+            )
+        }
+    }
+
+    @Test fun uploadFile_safUri_doesNotMaterialiseTempFile() = kotlinx.coroutines.test.runTest {
+        // Decision 10 contract: SCP path streams from SAF directly, no temp-file hop.
+        // Catches the regression where a future refactor reintroduces `File.createTempFile`.
+        io.mockk.mockkStatic(java.io.File::class)
+        try {
+            val client = mockk<net.schmizz.sshj.SSHClient>(relaxed = true)
+            val transfer = mockk<net.schmizz.sshj.xfer.scp.SCPFileTransfer>(relaxed = true)
+            every { client.newSCPFileTransfer() } returns transfer
+            every { store.getSession("s1") } returns LiveSession(
+                client,
+                Protocol.SCP,
+                true,
+                java.util.concurrent.atomic.AtomicReference(NameCache.empty()),
+            )
+            val resolver = mockk<android.content.ContentResolver>()
+            val uri = mockk<android.net.Uri>()
+            every { uri.lastPathSegment } returns "abc"
+            every { resolver.openFileDescriptor(uri, "r") } returns null
+            every { resolver.openInputStream(uri) } returns java.io.ByteArrayInputStream("data".toByteArray())
+
+            sshClient.uploadFile("s1", uri, "/remote", resolver) { _, _ -> }
+
+            io.mockk.verify(exactly = 0) { java.io.File.createTempFile(any(), any()) }
+            io.mockk.verify(exactly = 0) { java.io.File.createTempFile(any(), any(), any()) }
+        } finally {
+            io.mockk.unmockkStatic(java.io.File::class)
+        }
+    }
 }

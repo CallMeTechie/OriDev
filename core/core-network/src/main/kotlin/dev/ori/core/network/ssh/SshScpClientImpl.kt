@@ -72,7 +72,11 @@ class SshScpClientImpl @Inject constructor(
         localPath: String,
         remotePath: String,
         onProgress: (Long, Long) -> Unit,
-    ) = TODO("Task 12")
+    ) = withContext(Dispatchers.IO) {
+        val client = sessionStore.getSession(sessionId).client
+        client.newSCPFileTransfer()
+            .upload(net.schmizz.sshj.xfer.FileSystemFile(java.io.File(localPath)), remotePath)
+    }
 
     override suspend fun uploadFile(
         sessionId: String,
@@ -80,14 +84,25 @@ class SshScpClientImpl @Inject constructor(
         remotePath: String,
         contentResolver: ContentResolver,
         onProgress: (Long, Long) -> Unit,
-    ) = TODO("Task 12")
+    ) = withContext(Dispatchers.IO) {
+        val client = sessionStore.getSession(sessionId).client
+        val length = try {
+            contentResolver.openFileDescriptor(sourceUri, "r")?.use { it.statSize } ?: 0L
+        } catch (_: Exception) { 0L }
+        val src = SafSourceFile(sourceUri, contentResolver, length, sourceUri.lastPathSegment ?: "upload")
+        client.newSCPFileTransfer().upload(src, remotePath)
+    }
 
     override suspend fun downloadFile(
         sessionId: String,
         remotePath: String,
         localPath: String,
         onProgress: (Long, Long) -> Unit,
-    ) = TODO("Task 12")
+    ) = withContext(Dispatchers.IO) {
+        val client = sessionStore.getSession(sessionId).client
+        client.newSCPFileTransfer()
+            .download(remotePath, net.schmizz.sshj.xfer.FileSystemFile(java.io.File(localPath)))
+    }
 
     override suspend fun downloadFile(
         sessionId: String,
@@ -95,7 +110,11 @@ class SshScpClientImpl @Inject constructor(
         destUri: Uri,
         contentResolver: ContentResolver,
         onProgress: (Long, Long) -> Unit,
-    ) = TODO("Task 12")
+    ) = withContext(Dispatchers.IO) {
+        val client = sessionStore.getSession(sessionId).client
+        val dst = SafDestFile(destUri, contentResolver, destUri.lastPathSegment ?: "download")
+        client.newSCPFileTransfer().download(remotePath, dst)
+    }
 
     override suspend fun uploadFileResumable(
         sessionId: String,
