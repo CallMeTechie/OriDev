@@ -1,6 +1,6 @@
 # SCP-Protocol Implementation — Design
 
-**Status:** Approved (brainstorming session 2026-04-26, devil's-advocate revision 2026-04-26)
+**Status:** Approved (brainstorming session 2026-04-26, devil's-advocate revisions ×2 on 2026-04-26)
 **Target release:** v0.34.5
 **Author trail:** Brainstormed with user 2026-04-26 — see commit history of `core/core-network/src/main/kotlin/dev/ori/core/network/ssh/`.
 
@@ -31,14 +31,14 @@ silent fallback.
 | 1 | SCP is a **real, separate transfer protocol**, not an SFTP alias. | The dropdown should not lie. |
 | 2 | **Strict routing, no auto-fallback** between SFTP and SCP. | Auto-fallback hides which protocol is actually in use, making diagnosis harder and undermining the user's explicit choice. |
 | 3 | **Reuse SSHJ's built-in `net.schmizz.sshj.xfer.scp.SCPFileTransfer`.** | The library is already on the classpath, no second SSH library, no custom wire-level code for upload/download. |
-| 4 | **Two `SshClient` implementations** keyed by `Protocol`, but **transport state is owned by a third class** (`SshSessionStore`). | Cleanest polymorphism for the file-ops, but the session map and disconnect-listener cleanup must be single-owner — otherwise the v0.34.2 race-condition fix gets split across two classes and stops working (devil's-advocate concern #2). |
-| 5 | `delete(directory)` walks the tree client-side, **batching server commands** to a configurable max-args size (default 200 args ≈ ~16 KB). | Identical algorithmic shape to the SFTP path; deletes are cancellable and progress-reporting. Batching avoids exhausting OpenSSH's `MaxSessions=10` default (devil's-advocate concern #5). |
-| 6 | **Listing requires GNU `coreutils`**, invoked with `--numeric-uid-gid` and `--time-style='+%Y-%m-%dT%H:%M:%S'`. BSD/Solaris servers fail with a precise `IOException`. | Numeric UID/GID prevents user/group strings with spaces from corrupting the parser silently (devil's-advocate concern #3). First-iteration scope; BSD `ls -laT` fallback is mechanical follow-up. |
-| 7 | **All non-transfer commands are wrapped in `sh -c '<inner>'` invoked via `Session.exec`, with `bash --noprofile --norc -c` preferred when bash is available.** | The user's login shell may emit a MOTD, `~/.bashrc` may print things, `/etc/profile` may run `fortune`/`last-login`. None of that interferes with `sh -c`'s controlled output (devil's-advocate concerns #1 and #6). |
-| 8 | `uploadFileResumable` / `downloadFileResumable` throw `UnsupportedOperationException("SCP does not support resume")` from the SCP client. | SSHJ's `SCPFileTransfer` has no offset parameter; SCP is fundamentally streaming. Repository must catch and either fall back to a fresh transfer-from-zero or surface the limitation to the user. |
-| 9 | `Protocol.SSH` continues to use the SFTP client for file operations. | "SSH" in the dropdown means "I want a terminal and a file browser without thinking about which sub-protocol." No change to that user-facing semantic. |
-| 10 | **Local-side I/O for upload/download stays the Repository's responsibility.** SCP and SFTP clients both accept a `String localPath` to a regular `File` on disk; if the source/destination is a SAF `content://` URI, the Repository materializes a temp file via `ContentResolver` first (current SFTP-path pattern). | Avoids forcing SSHJ to learn about Android's SAF (devil's-advocate concern #4). Keeps the contract uniform between modes. |
-| 11 | **Every command's exit status is checked**; non-zero exit drains stderr and is wrapped as `IOException("<verb> failed: <stderr-first-line>", cause)`. | Empty stdout from a failing `ls` (e.g. `Permission denied`) must NOT silently render an empty directory (devil's-advocate concern #7). |
+| 4 | **Two `SshClient` implementations** keyed by `Protocol`, but **transport state is owned by a third class** (`SshSessionStore`). | Cleanest polymorphism for the file-ops, but the session map and disconnect-listener cleanup must be single-owner — otherwise the v0.34.2 race-condition fix gets split across two classes and stops working (devil's-advocate v1 concern #2). |
+| 5 | `delete(directory)` walks the tree client-side, **batching server commands** to a configurable max-args size (default 200 args ≈ ~16 KB). Returns a `DeleteResult(succeeded, failed)` that the UI consumes — partial success is a first-class outcome, not a swallowed exception. | Avoids exhausting OpenSSH's `MaxSessions=10` default, and prevents the "snackbar says failed but 349/350 files are actually gone" UX surprise (devil's-advocate v1 concern #5, v2 concern #6). |
+| 6 | **Listing requires GNU `coreutils`**, invoked with `--numeric-uid-gid` and `--time-style='+%Y-%m-%dT%H:%M:%S'`. Numeric UIDs/GIDs are resolved to display names via a **once-per-session** lookup (`getent passwd; getent group`, cached in `SshSessionStore`). | Numeric flag prevents user/group strings with spaces from corrupting the parser silently (devil's-advocate v1 concern #3). The lookup-and-cache step keeps the UI showing `marc` rather than `1000`, matching the SFTP-mode behaviour (devil's-advocate v2 concern #2). |
+| 7 | **All non-transfer commands are wrapped in `sh -c`** invoked via `Session.exec`, with `bash --noprofile --norc -c` preferred when bash is available. The bash-probe runs **once during `connect()` itself**, atomically, with the result stored on the `SshSession`. | The user's login shell may emit MOTD; `~/.bashrc` may print things; `/etc/profile` may run `fortune`. None of that interferes with `sh -c`'s controlled output (devil's-advocate v1 concerns #1 and #6). Probing in `connect` eliminates the parallel-first-op race (devil's-advocate v2 concern #3). |
+| 8 | `uploadFileResumable` / `downloadFileResumable` throw `UnsupportedOperationException("SCP does not support resume")`. | SSHJ's `SCPFileTransfer` has no offset parameter; SCP is fundamentally streaming. Repository must catch and either fall back to a fresh transfer-from-zero or surface the limitation to the user. |
+| 9 | `Protocol.SSH` continues to use the SFTP client for file operations. A `@DefaultSshClient` qualifier preserves the bare `@Inject SshClient` injection point for legacy callers. | "SSH" in the dropdown means "I want a terminal and a file browser without thinking about which sub-protocol." Default-qualifier avoids forcing every existing call site to learn the protocol map (devil's-advocate v2 concern #4). |
+| 10 | **Local-side I/O for upload/download uses SSHJ's `LocalSourceFile` / `LocalDestFile` interfaces directly**, with custom adapters that wrap SAF `content://` `InputStream`/`OutputStream` and stream byte-for-byte. **No temp-file materialisation.** | Avoids the 2×-disk-usage trap and the OOM-on-large-files trap a temp-file path would create (devil's-advocate v2 concern #1). SSHJ's interfaces are designed exactly for this. |
+| 11 | **Every command's exit status is checked**; non-zero exit drains stderr and is wrapped as `IOException("<verb> failed: <stderr-first-line>", cause)`. The probe-failure path detects forced-command authorized_keys and surfaces a specific error. | Empty stdout from a failing `ls` (e.g. `Permission denied`) must NOT silently render an empty directory (devil's-advocate v1 concern #7). A forced-command setup must produce an actionable error, not a generic IOException (devil's-advocate v2 concern #3 sub-point). |
 
 ## Architecture
 
@@ -47,59 +47,90 @@ silent fallback.
 ```
 core/core-network/src/main/kotlin/dev/ori/core/network/ssh/
 ├── SshClient.kt                  (interface — unchanged)
-├── SshSessionStore.kt            (NEW — @Singleton, owns the sessions map and disconnect-listener)
+├── SshSessionStore.kt            (NEW — @Singleton, owns the sessions map, the disconnect-listener,
+│                                  the bash-availability flag per session, and the UID/GID name cache)
 ├── SshSftpClientImpl.kt          (renamed from SshClientImpl; now delegates connect/disconnect to SshSessionStore)
 ├── SshScpClientImpl.kt           (NEW — same delegation pattern)
-├── ShellInvocation.kt            (NEW — internal helper: builds `sh -c '<inner>'` / `bash --noprofile --norc -c '<inner>'`,
-│                                  picks bash when available via a once-per-session probe, tracks exit status,
-│                                  drains stderr on failure)
-└── ScpListingParser.kt           (NEW — parses `ls -la --numeric-uid-gid --time-style=…` output)
+├── ShellInvocation.kt            (NEW — internal helper: builds wrapper command strings,
+│                                  reads back stdout, drains stderr on failure, returns ShellResult)
+├── ScpListingParser.kt           (NEW — parses `ls -la --numeric-uid-gid --time-style=…` output)
+└── LocalFileAdapters.kt          (NEW — SAF-Uri-backed LocalSourceFile and LocalDestFile)
 
 core/core-network/src/test/kotlin/dev/ori/core/network/ssh/
-├── SshSessionStoreTest.kt        (NEW — disconnect-listener cleanup, getClient guard, both clients share state)
-├── SshSftpClientImplTest.kt      (renamed from SshClientImplTest; transport tests removed, file-op tests stay)
+├── SshSessionStoreTest.kt        (NEW)
+├── SshSftpClientImplTest.kt      (renamed; transport tests moved to SshSessionStoreTest)
 ├── SshScpClientImplTest.kt       (NEW)
-├── ShellInvocationTest.kt        (NEW — wrapper builds correct strings, MOTD-line in stdout doesn't poison parser,
-│                                  csh login default doesn't break quoting)
-└── ScpListingParserTest.kt       (NEW)
+├── ShellInvocationTest.kt        (NEW)
+├── ScpListingParserTest.kt       (NEW)
+└── LocalFileAdaptersTest.kt      (NEW — Robolectric, ContentResolver-backed)
 ```
 
-### State ownership
+### State ownership: `SshSessionStore`
 
-`SshSessionStore` owns the single source of truth for "which transports are alive":
+The store owns four cross-cutting facts about each live session:
 
 ```kotlin
+data class LiveSession(
+    val client: SSHClient,
+    val protocol: Protocol,
+    val bashAvailable: Boolean,         // resolved once during connect
+    val nameCache: NameCache,           // uid → user, gid → group; populated on first listFiles
+)
+
 @Singleton
 class SshSessionStore @Inject constructor(
     private val hostKeyVerifier: OriDevHostKeyVerifier,
 ) {
-    private val sessions = ConcurrentHashMap<String, SSHClient>()
+    private val sessions = ConcurrentHashMap<String, LiveSession>()
 
-    suspend fun connect(host: String, port: Int, username: String, …): SshSession =
-        withContext(Dispatchers.IO) { /* same as today's SshClientImpl.connect, plus registerDisconnectCleanup */ }
+    suspend fun connect(host: String, port: Int, username: String,
+                        password: CharArray?, privateKey: ByteArray?,
+                        protocol: Protocol): SshSession =
+        withContext(Dispatchers.IO) {
+            val client = openTransport(host, port, username, password, privateKey)
+            val bashAvailable = probeBash(client)        // single-flight; result stored, no retry
+            val sessionId = UUID.randomUUID().toString()
+            sessions[sessionId] = LiveSession(client, protocol, bashAvailable, NameCache.empty())
+            registerDisconnectCleanup(sessionId, client)
+            SshSession(sessionId, protocol, host, port, …)
+        }
 
-    suspend fun disconnect(sessionId: String) { sessions.remove(sessionId)?.close() }
-
-    fun getClient(sessionId: String): SSHClient {
-        val client = sessions[sessionId]
+    fun getSession(sessionId: String): LiveSession {
+        val live = sessions[sessionId]
             ?: throw IOException("No active SSH session: $sessionId")
-        if (!client.isConnected) {
-            sessions.remove(sessionId, client)
-            runCatching { client.close() }
+        if (!live.client.isConnected) {
+            sessions.remove(sessionId, live)
+            runCatching { live.client.close() }
             throw IOException("SSH session terminated: $sessionId")
         }
-        return client
+        return live
     }
+
+    suspend fun disconnect(sessionId: String) { sessions.remove(sessionId)?.client?.close() }
+
+    /** Cached UID/GID resolution, populated lazily by SshScpClientImpl on first listFiles. */
+    suspend fun ensureNameCache(sessionId: String, populate: suspend () -> NameCache): NameCache { … }
 
     private fun registerDisconnectCleanup(sessionId: String, client: SSHClient) {
         client.transport.disconnectListener = DisconnectListener { _, _ ->
-            sessions.remove(sessionId, client)
+            sessions.remove(sessionId)
         }
+    }
+
+    private suspend fun probeBash(client: SSHClient): Boolean {
+        // Single channel-open. If channel-open itself fails (MaxSessions, network) we
+        // bubble IOException out of connect — callers already handle that; we don't
+        // silently fall back to "bash not available", because that's a different cause.
+        // If exec succeeds and stdout matches the probe sentinel, bash is available.
+        // If exec succeeds but no sentinel, fall back to sh and log a NonFatalErrorLogger
+        // entry (category="scp-bash-probe-fallback").
+        // If exec succeeds AND stderr matches a forced-command pattern, throw
+        // IOException("Server appears to use a forced-command authorized_keys configuration; SCP requires unrestricted shell access.")
     }
 }
 ```
 
-`SshSftpClientImpl` and `SshScpClientImpl` both inject `SshSessionStore` and route their `connect/disconnect/isConnected/getClient` through it. Neither holds its own session map. The v0.34.2 disconnect-listener fix and the v0.34.4 `IOException`-typed guard live in **one** place.
+`SshSftpClientImpl` and `SshScpClientImpl` both inject `SshSessionStore`. Neither holds its own session map. The v0.34.2 disconnect-listener fix and the v0.34.4 `IOException`-typed guard live in **one** place. Keep-alive (`KEEPALIVE_INTERVAL_SECONDS = 15`) is set in `openTransport` and propagates onto the cached `SSHClient`.
 
 ### Hilt wiring
 
@@ -109,6 +140,10 @@ class SshSessionStore @Inject constructor(
 @MapKey
 @Retention(AnnotationRetention.RUNTIME)
 annotation class ProtocolKey(val value: Protocol)
+
+@Qualifier
+@Retention(AnnotationRetention.RUNTIME)
+annotation class DefaultSshClient
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -128,65 +163,50 @@ abstract class SshClientModule {
     @IntoMap
     @ProtocolKey(Protocol.SSH)
     abstract fun bindSshClientAsSftp(impl: SshSftpClientImpl): SshClient
+
+    /** Default binding for legacy callers that haven't been routed to the protocol map. */
+    @Binds
+    @DefaultSshClient
+    abstract fun bindDefault(impl: SshSftpClientImpl): SshClient
 }
 ```
 
-### Connect routing
+### Migration plan for `@Inject SshClient` call sites
 
-`connect` is the entry point; the *caller* picks the right `SshClient` from the map. The two callers are `SessionRegistry.connect(profileId)` (Filemanager + Terminal user-initiated path) and the Wear `WearMessageListenerService` (which calls `executeCommand` directly today). Both already know the `Protocol` from the profile.
+Spec mandates a `grep -rn '@Inject.*SshClient\b'` audit before the routing diff is finalised. Every site is classified into one of two columns:
 
-```kotlin
-class SessionRegistry @Inject constructor(
-    private val clients: Map<Protocol, @JvmSuppressWildcards SshClient>,
-    private val profileRepository: ServerProfileRepository,
-) {
-    suspend fun connect(profileId: Long): Result<Session> {
-        val profile = profileRepository.get(profileId)
-        val client = clients[profile.protocol]
-            ?: return Result.failure(IOException("Protocol ${profile.protocol} not supported"))
-        // Both clients delegate through SshSessionStore — `connect` returns the same SshSession
-        // regardless of which client object handled it. Subsequent file-ops route via `clients[profile.protocol]`.
-        return runCatching { client.connect(profile.host, profile.port, profile.username, …) }
-            .map { Session(it.sessionId, profile.protocol, profile, …) }
-    }
-}
-```
+| Site | Treatment |
+|---|---|
+| `RemoteFileSystemRepository` | injects `Map<Protocol, @JvmSuppressWildcards SshClient>` and resolves per-call by the active session's protocol. |
+| `SessionRegistry` | injects the same map; `connect(profileId)` picks `clients[profile.protocol]` before calling. |
+| `WearMessageListenerService` | injects the same map; resolves by the profile's protocol before calling `executeCommand`. |
+| `TerminalViewModel`, `ConnectionDetailViewModel`, `feature-proxmox`-internal callers, etc. | inject `@DefaultSshClient SshClient`. Terminal is protocol-agnostic; everything else either talks to a single protocol per profile (proxmox uses its own client and isn't part of this routing) or is being migrated incrementally. |
 
-`Session` (`domain/`) gains `protocol: Protocol` so `RemoteFileSystemRepository` can pick the right client:
-
-```kotlin
-private fun client(): SshClient {
-    val sessionId = activeSessionId.get() ?: throw IOException("No active SSH session")
-    val protocol = sessionRegistry.openSessions.value.firstOrNull { it.id == sessionId }?.protocol
-        ?: throw IOException("Session $sessionId not in registry")
-    return clients[protocol]
-        ?: throw IOException("No SshClient registered for protocol $protocol")
-}
-```
-
-`WearMessageListenerService` is updated symmetrically: it receives the same `Map<Protocol, SshClient>` and resolves by the profile's protocol before calling `executeCommand`.
+Migration PR is gated by the audit table being filled in for every grep-hit and showing zero "ambiguous" rows.
 
 ## Wire-level operations (SCP path)
 
 Every server-side action in the SCP client runs through one of two SSHJ
 primitives:
 
-- **Bulk transfer** uses `SSHClient.newSCPFileTransfer()` (upload + download).
-- **Everything else** opens a session channel and runs `<wrapper>` where `<wrapper>` is the `ShellInvocation` helper's output (`bash --noprofile --norc -c '<inner>'` if bash is available on the server, `sh -c '<inner>'` as a portable fallback). The helper interprets stdout, stderr, and exit status uniformly.
+- **Bulk transfer** uses `SSHClient.newSCPFileTransfer()` (upload + download), with our `LocalSourceFile`/`LocalDestFile` adapters from `LocalFileAdapters.kt`.
+- **Everything else** opens a session channel and runs through `ShellInvocation`. The helper builds either `bash --noprofile --norc -c '<inner>'` (when `LiveSession.bashAvailable == true`) or `sh -c '<inner>'`, opens the channel, drains stdout + stderr, returns `ShellResult(exitCode, stdout, stderr)`. Non-zero exit is converted to `IOException` by the call site with a verb-specific prefix.
 
 | `SshClient` method | SCP behaviour |
 |---|---|
 | `connect / disconnect / isConnected` | Delegate to `SshSessionStore`. |
-| `listFiles(sessionId, path)` | `<wrapper>` running `LANG=C ls -la --numeric-uid-gid --time-style='+%Y-%m-%dT%H:%M:%S' <escaped-path>`. Stdout streamed into `ScpListingParser` → `List<RemoteFile>`. Non-zero exit + stderr → `IOException("ls failed: <stderr first line>")`. |
-| `uploadFile / downloadFile` | `client.newSCPFileTransfer().upload(local, remote)` / `.download(remote, local)`, with a `TransferListener` that maps SSHJ's byte-progress callback onto our `onProgress(transferred, total)`. The Repository materializes any SAF `content://` URI to a `File.createTempFile(…)` first. |
+| `listFiles(sessionId, path)` | First call per session triggers `SshSessionStore.ensureNameCache(...)`: a single shell invocation runs `getent passwd 2>/dev/null; echo '---'; getent group 2>/dev/null` (with `cat /etc/passwd; echo '---'; cat /etc/group` as fallback if `getent` is unavailable), populating the UID/GID maps. The actual listing then runs `LANG=C ls -la --numeric-uid-gid --time-style='+%Y-%m-%dT%H:%M:%S' <escaped-path>`; stdout streams through `ScpListingParser`; numeric uid/gid are resolved to names via the cache before returning `RemoteFile` instances. Non-zero exit + stderr → `IOException("ls failed: <stderr first line>")`. `.` and `..` filtered out. |
+| `uploadFile(sessionId, localPath, remotePath, onProgress)` | `client.newSCPFileTransfer().upload(LocalFileSystemAdapter.fromPath(localPath), remotePath)`. |
+| `uploadFile(sessionId, sourceUri, remotePath, contentResolver, onProgress)` | New overload accepting an Android `Uri`. `client.newSCPFileTransfer().upload(SafSourceFile(sourceUri, contentResolver), remotePath)`. Streams `InputStream` byte-for-byte; no temp file. |
+| `downloadFile(sessionId, remotePath, destUri, contentResolver, onProgress)` | Mirror overload using `SafDestFile`. Streams to `OutputStream` directly. |
 | `uploadFileResumable / downloadFileResumable` | Throw `UnsupportedOperationException("SCP does not support resume")`. |
-| `mkdir(sessionId, path)` | `<wrapper>` running `mkdir -p <escaped-path>`. |
-| `rename(sessionId, old, new)` | `<wrapper>` running `mv -- <escaped-old> <escaped-new>`. |
-| `chmod(sessionId, path, octal)` | `<wrapper>` running `chmod <octal-string> <escaped-path>`. |
-| `delete(sessionId, path)` | Client-side recursive walk; per directory level, all child files batched into a single `<wrapper>` running `rm -- <escaped-1> <escaped-2> … <escaped-N>` capped at 200 args per batch. Empty directories collected bottom-up and batched into `rmdir -- <…>`. |
+| `mkdir(sessionId, path)` | Shell invocation: `mkdir -p <escaped-path>`. |
+| `rename(sessionId, old, new)` | Shell invocation: `mv -- <escaped-old> <escaped-new>`. |
+| `chmod(sessionId, path, octal)` | Shell invocation: `chmod <octal-string> <escaped-path>`. |
+| `delete(sessionId, paths) → DeleteResult` | New return type. Client-side recursive walk; per directory level, all child files batched into a single `rm -- <escaped-1> … <escaped-N>` capped at 200 args per batch. After each batch, parse stderr line-by-line (`rm: cannot remove 'X': Permission denied`); collect into `succeeded` and `failed`. Empty directories collected bottom-up and batched into `rmdir -- <…>`. Returns when all batches done; never throws on per-item permission errors. Throws only on transport-level failures. |
 | `executeCommand` | Unchanged — both modes share this. |
 | `openShell` | Unchanged — terminal is protocol-agnostic. |
-| `fileSize` | `<wrapper>` running `stat -c %s <escaped-path>`. |
+| `fileSize` | Shell invocation: `stat -c %s <escaped-path>`. |
 
 ### Shell-escape helper
 
@@ -198,6 +218,38 @@ internal fun shellEscape(path: String): String =
 POSIX single-quote escape. Combined with the always-`sh -c` invocation
 strategy, the user's default login shell (csh, fish, zsh) is irrelevant — the
 inner command runs under `sh` regardless.
+
+### SAF adapters
+
+```kotlin
+internal class SafSourceFile(
+    private val uri: Uri,
+    private val resolver: ContentResolver,
+) : LocalSourceFile {
+    override fun getInputStream(): InputStream =
+        resolver.openInputStream(uri)
+            ?: throw IOException("Cannot open input stream for $uri")
+    override fun getLength(): Long = … /* DocumentFile.length() */
+    override fun getName(): String = … /* DocumentFile.getName() */
+    // …other LocalSourceFile contract members
+}
+
+internal class SafDestFile(
+    private val uri: Uri,
+    private val resolver: ContentResolver,
+) : LocalDestFile {
+    override fun getOutputStream(append: Boolean): OutputStream {
+        require(!append) { "SCP does not produce resumable transfers" }
+        return resolver.openOutputStream(uri, "wt")
+            ?: throw IOException("Cannot open output stream for $uri")
+    }
+    // …
+}
+```
+
+These are what the upload/download overloads pass to SSHJ. Bytes flow
+`SAF InputStream → SSHJ buffer → socket` without ever materialising on the
+app-private cache.
 
 ### Listing parser
 
@@ -213,7 +265,9 @@ Parser splits on the first six whitespace runs; everything after is the name.
 Symlinks are detected by leading `l` on the permission string and a ` -> `
 substring in the name; the target is dropped from `name`. Lines starting with
 `total ` are skipped. The `.` and `..` pseudo-entries are filtered out before
-returning to callers.
+returning to callers. Numeric uid/gid are resolved to names via the
+`SshSessionStore` name cache; if the cache returns `null` (uid not in passwd),
+the numeric value is shown as a string.
 
 If a line cannot be parsed (BSD `ls`, Solaris, exotic locale, MOTD line that
 somehow leaked through `sh -c`), `ScpListingParser` returns the line in a
@@ -224,16 +278,20 @@ separate "unparseable" bucket; `SshScpClientImpl.listFiles` throws
 
 | File | Coverage | ≈ tests |
 |---|---|---|
-| `SshSessionStoreTest` | Connect adds to map, disconnect removes, listener fires on EOF, getClient throws `IOException` for unknown id and for stale `isConnected==false`, two SshClient impls injected with the same store see the same session | 8 |
-| `ShellInvocationTest` | Wrapper produces correct `bash --noprofile --norc -c …` and `sh -c …` strings; bash-availability probe is cached per session; non-zero exit raises `IOException` with stderr's first line; MOTD-prefixed stdout passes through unchanged because the wrapper isolates it | 6 |
-| `ScpListingParserTest` | Spaces in filenames; symlinks; `->` in filenames; zero-byte files; format mismatch (BSD `ls`) → unparseable bucket; `total NN` line skipped; `.`/`..` filtered; empty input | 10 |
-| `SshScpClientImplTest` | Each `SshClient` method with a mocked `SSHClient` + session channel + command stream: correct command strings sent, correct argument escaping (including paths with single quotes), listing returns `RemoteFile`s with numeric uid/gid, batched delete (count `startSession()` calls vs item count), `uploadFileResumable` throws `UnsupportedOperationException`, exit-code-non-zero → `IOException` with stderr | 12 |
+| `SshSessionStoreTest` | Connect adds to map; disconnect removes; listener fires on EOF; `getSession` throws IOException for unknown id and for stale `isConnected==false`; `KEEPALIVE_INTERVAL_SECONDS=15` is propagated; bash-probe result is stored on `LiveSession`; bash-probe failure with forced-command stderr produces a specific IOException; both SshClient impls injected with the same store see the same session; name cache is populated lazily and survives re-list | 11 |
+| `ShellInvocationTest` | Wrapper produces correct `bash --noprofile --norc -c …` and `sh -c …` strings based on `LiveSession.bashAvailable`; non-zero exit raises IOException with stderr's first line; MOTD-prefixed stdout passes through unchanged because the wrapper isolates it | 6 |
+| `ScpListingParserTest` | Spaces in filenames; symlinks; `->` in filenames; zero-byte files; format mismatch (BSD `ls`) → unparseable bucket; `total NN` line skipped; `.`/`..` filtered; empty input; numeric uid resolved via mock cache; numeric uid not in cache → numeric string preserved | 11 |
+| `SshScpClientImplTest` | Each `SshClient` method with a mocked `SSHClient` + session channel + command stream: correct command strings sent, correct argument escaping (incl. paths with single quotes), listing returns `RemoteFile`s with resolved names, batched delete (count `Session.exec` calls vs item count), partial-failure delete returns `DeleteResult(succeeded, failed)` not exception, `uploadFileResumable` throws `UnsupportedOperationException`, exit-code-non-zero → `IOException` with stderr | 14 |
+| `LocalFileAdaptersTest` | Robolectric, `ContentResolver`-backed: `SafSourceFile.getInputStream` uses `openInputStream`; throws on `null` resolver result; reports correct `getLength`/`getName` from `DocumentFile`; `SafDestFile` throws `IllegalArgumentException` on `append=true`; concurrent reads/writes don't corrupt the stream | 6 |
 | `SshSftpClientImplTest` | Renamed from current `SshClientImplTest`. Transport tests (connect/disconnect/getClient) move to `SshSessionStoreTest`; SFTP file-op tests stay | (existing −3) |
 
 `RemoteFileSystemRepositoryTest` adds:
-- Upload from SAF `content://` URI: `ContentResolver.openInputStream` is invoked, a `tmp` file is created, and the client's `uploadFile(tmp.absolutePath, …)` receives the local path.
+- Upload from SAF `content://` URI: assertion that `SafSourceFile` is the value passed to `client.uploadFile(sessionId, sourceUri, …)`, and that `tmp` files are NOT created.
 - Path-edge-case tests on `deleteFile`: root, empty, single slash → all reject with `IllegalArgumentException` from a `require(...)` block.
 - Property-based test (Kotest-property): for ~500 generated paths, exactly the safe ones reach the client mock.
+- `delete` partial-success case: 350 mock paths, mock fails item #257 → `DeleteResult` reflects 349 successes and 1 failure with the right error string; UI test asserts the snackbar text says "Deleted 349 files. 1 file could not be deleted: …".
+
+`SessionRegistryTest`, `WearMessageListenerServiceTest`, and any other constructor-changed test files are updated to inject the protocol map. Hilt-wiring-smoke test: spin up the `@HiltAndroidTest` graph and assert all four injection points (`Repository`, `SessionRegistry`, `Wear`, `@DefaultSshClient`) resolve without `MissingBindingException`.
 
 Out of scope for unit tests: real-server SSH (manual smoke), delete performance on deep trees (UX assessment, not a unit test).
 
@@ -245,7 +303,7 @@ to SFTP. After v0.34.5 they get the real SCP path. Two outcomes:
 - **Server supports SFTP, but user picked SCP "by mistake":** continues to work iff the server *also* supports SCP plus GNU `ls`. Most Linux/BSD-compatible servers do.
 - **Server supports neither SFTP for this user nor `ls -la --numeric-uid-gid --time-style`:** listing fails with the precise error message above. User changes the dropdown to `SFTP` (or whichever the server supports) and the connection works.
 
-`SessionRegistry` and `WearMessageListenerService` constructors change shape (gain `Map<Protocol, SshClient>` instead of a single `SshClient`). All call sites — including any Hilt `@Provides` factories — need the same update.
+Constructor changes to `SessionRegistry` and `WearMessageListenerService` ripple to their tests and to any existing `@Provides` factories. Implementation plan must include the audit grep before the routing diff is approved.
 
 Release-notes line, mandatory for v0.34.5:
 
@@ -258,4 +316,5 @@ Release-notes line, mandatory for v0.34.5:
 - A second strategy layer between `RemoteFileSystemRepository` and `SshClient`. (Premature; only meaningful with 3+ file-transfer modes.)
 - FTPS coverage audit. (Tracked separately.)
 - Improving the "Failed to list files: Request failed" UX with SFTP status codes. (Tracked separately.)
-- Sandboxed/forced-command SSH setups (`authorized_keys` `command="…"`). The `sh -c` wrapper assumes the user can run arbitrary commands.
+- Sandboxed/forced-command SSH setups (`authorized_keys` `command="…"`). The `ShellInvocation` wrapper assumes the user can run arbitrary commands. The bash-probe surfaces a specific error message for this case (decision #11), but no fallback shell-less mode is provided.
+- Stale-after-resume connection detection beyond what SSHJ keep-alive (`KEEPALIVE_INTERVAL_SECONDS=15`) provides. After a long device-suspend, the first operation may incur up to 15 s of latency before the disconnect-listener prunes the dead session. Acceptable for v0.34.5; if telemetry shows it as a recurring complaint, a forward TCP-keep-alive probe in `getSession` is the planned remedy.
