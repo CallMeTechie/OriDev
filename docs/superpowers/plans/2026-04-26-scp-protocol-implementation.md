@@ -625,7 +625,7 @@ class SshSessionStoreTest {
         val f = SshSessionStore::class.java.getDeclaredField("sessions"); f.isAccessible = true
         @Suppress("UNCHECKED_CAST")
         (f.get(store) as ConcurrentHashMap<String, LiveSession>)[id] =
-            LiveSession(c, p, false, NameCache.empty())
+            LiveSession(c, p, false, java.util.concurrent.atomic.AtomicReference(NameCache.empty()))
     }
     private fun invokeRegister(store: SshSessionStore, id: String, c: SSHClient) {
         SshSessionStore::class.java
@@ -654,7 +654,8 @@ internal data class LiveSession(
     val client: SSHClient,
     val protocol: Protocol,
     val bashAvailable: Boolean,
-    @Volatile var nameCache: NameCache,
+    val cacheRef: java.util.concurrent.atomic.AtomicReference<NameCache?> =
+        java.util.concurrent.atomic.AtomicReference(null),
 )
 
 @Singleton
@@ -723,6 +724,38 @@ git commit -m "feat(network): add SshSessionStore skeleton (sessions map + disco
         val ex = assertThrows(java.lang.reflect.InvocationTargetException::class.java) { invokeProbe(store, client) }
         val cause = ex.targetException as IOException
         assertThat(cause.message).contains("forced-command")
+    }
+    @Test fun connect_setsKeepAliveInterval15s() = kotlinx.coroutines.test.runTest {
+        // Decision 7 + spec testing-table commitment. Prevents a refactor that drops the
+        // keep-alive from silently making sessions hang forever post-NAT-timeout.
+        val transport = mockk<net.schmizz.sshj.SSHClient>(relaxed = true)
+        val keepAlive = mockk<net.schmizz.sshj.connection.ConnectionImpl>(relaxed = true) // proxy via mockk(relaxed=true)
+        every { transport.connection.keepAlive.keepAliveInterval = any() } answers { }
+        // Use the openTransport-override seam to inject the transport mock.
+        val storeUnderTest = object : SshSessionStore(verifier) {
+            override fun openTransport(host: String, port: Int, username: String, password: CharArray?, privateKey: ByteArray?) = transport
+        }
+        storeUnderTest.connect("h", 22, "u", "p".toCharArray(), null, Protocol.SFTP)
+        verify { transport.connection.keepAlive.keepAliveInterval = 15 }
+    }
+    @Test fun bothImpls_shareSessionState_viaSameStore() {
+        // Decision 4 contract: SshSftpClientImpl and SshScpClientImpl must see the SAME
+        // sessions when wired with the same SshSessionStore. Without this guarantee a
+        // future refactor that gives one impl its own private map reintroduces v0.34.2's
+        // race condition.
+        val sharedStore = SshSessionStore(verifier)
+        val client = mockk<SSHClient>(relaxed = true)
+        every { client.isConnected } returns true
+        injectLive(sharedStore, "shared-id", client, Protocol.SCP)
+
+        val sftp = SshSftpClientImpl(sharedStore)
+        val scp = SshScpClientImpl(sharedStore)
+        assertThat(kotlinx.coroutines.runBlocking { sftp.isConnected("shared-id") }).isTrue()
+        assertThat(kotlinx.coroutines.runBlocking { scp.isConnected("shared-id") }).isTrue()
+
+        // Disconnect via one impl is observed by the other.
+        kotlinx.coroutines.runBlocking { scp.disconnect("shared-id") }
+        assertThat(kotlinx.coroutines.runBlocking { sftp.isConnected("shared-id") }).isFalse()
     }
 
     private fun mockBenign(stdout: String, stderr: String, exit: Int): SSHClient {
@@ -877,9 +910,15 @@ override suspend fun deleteFile(path: String) {
 }
 ```
 
-- [ ] **Step 4: Compile**
+- [ ] **Step 4: Compile every module**
 
-`./gradlew :core:core-network:compileDebugKotlin :data:compileDebugKotlin :app:compileDebugKotlin`
+```
+./gradlew compileDebugKotlin
+```
+
+(Not just `:core:core-network`, `:data`, `:app` — the new `protocol: Protocol` parameter on `SshClient.connect(...)` is a hard signature break for every caller including `feature-terminal`, `feature-connections`, `feature-proxmox`, the Wear app, and any test factory that mocks `SshClient`.)
+
+If a feature module fails to compile because a `connect(...)` call site lacks the `protocol` argument, add `protocol = Protocol.SSH` (or the profile's actual protocol if available at the call site) — this matches the legacy "use the default SFTP impl" semantic via the `@DefaultSshClient` qualifier added in T15. T17 finalises injection-shape changes; T8 only guarantees the codebase compiles after the signature update.
 
 - [ ] **Step 5: Commit**
 
@@ -913,6 +952,19 @@ In both files, rename `SshClientImpl` → `SshSftpClientImpl`.
 
 Replace the field `private val sessions = ConcurrentHashMap<String, SSHClient>()` with `@Inject`-ed `private val sessionStore: SshSessionStore`. In every method, swap `sessions[sessionId] ?: throw …` and `getClient(sessionId)` with `sessionStore.getSession(sessionId).client`. Replace `connect/disconnect/isConnected` bodies with delegation to the store. Remove `registerDisconnectCleanup` from this file.
 
+- [ ] **Step 2b: Migrate transport tests from `SshSftpClientImplTest` to `SshSessionStoreTest`**
+
+The renamed `SshSftpClientImplTest` inherits the existing transport-level tests (`connect_*`, `disconnect_*`, `getClient_*`, `isConnected_*`) which used to construct `SshClientImpl(hostKeyVerifier, …)`. These no longer compile after Step 2 (constructor shape changes to `SshSftpClientImpl(sessionStore = …)`). Fix in two parts:
+
+1. **Move** every test method whose name starts with `connect_`, `disconnect_`, `getClient_`, or `isConnected_` from `SshSftpClientImplTest.kt` into `SshSessionStoreTest.kt` (created in T6/T7). Adapt the constructor call from `SshClientImpl(…)` to `SshSessionStore(verifier)`.
+2. **Update** every remaining test in `SshSftpClientImplTest.kt` that constructs the subject under test: replace `SshClientImpl(hostKeyVerifier, shellManager)` with `SshSftpClientImpl(sessionStore = mockk(relaxed = true))`. For tests that need a live SSHJ client in the session map, use the `injectLive(...)` reflection helper from `SshSessionStoreTest` (or duplicate it locally).
+
+Compile-gate before continuing:
+```
+./gradlew :core:core-network:compileTestKotlin
+```
+Expected: green. If any test references `SshClientImpl` or `hostKeyVerifier` as a constructor argument, it has not been migrated.
+
 - [ ] **Step 3: Add the failing partial-failure delete test**
 
 ```kotlin
@@ -931,7 +983,7 @@ Replace the field `private val sessions = ConcurrentHashMap<String, SSHClient>()
 
 - [ ] **Step 4: Run, verify FAIL**
 
-- [ ] **Step 5: Implement `delete` and SAF overloads in `SshSftpClientImpl`**
+- [ ] **Step 5: Implement `delete` and SAF overloads in `SshSftpClientImpl`** (no temp file — both SFTP and SCP honour spec Decision #10 by streaming through SSHJ's `LocalSourceFile` / `LocalDestFile` directly)
 
 ```kotlin
 override suspend fun delete(sessionId: String, paths: List<String>): DeleteResult =
@@ -952,13 +1004,11 @@ override suspend fun uploadFile(
     contentResolver: android.content.ContentResolver,
     onProgress: (Long, Long) -> Unit,
 ) = withContext(Dispatchers.IO) {
-    val tmp = java.io.File.createTempFile("oridev_saf_upload_", ".tmp")
-    try {
-        contentResolver.openInputStream(sourceUri)?.use { input ->
-            tmp.outputStream().use { input.copyTo(it) }
-        } ?: throw IOException("Cannot open input stream for $sourceUri")
-        uploadFile(sessionId, tmp.absolutePath, remotePath, onProgress)
-    } finally { tmp.delete() }
+    val length = try {
+        contentResolver.openFileDescriptor(sourceUri, "r")?.use { it.statSize } ?: 0L
+    } catch (_: Exception) { 0L }
+    val src = SafSourceFile(sourceUri, contentResolver, length, sourceUri.lastPathSegment ?: "upload")
+    withSftpClient(sessionId) { sftp -> sftp.fileTransfer.upload(src, remotePath) }
 }
 
 override suspend fun downloadFile(
@@ -966,13 +1016,8 @@ override suspend fun downloadFile(
     contentResolver: android.content.ContentResolver,
     onProgress: (Long, Long) -> Unit,
 ) = withContext(Dispatchers.IO) {
-    val tmp = java.io.File.createTempFile("oridev_saf_download_", ".tmp")
-    try {
-        downloadFile(sessionId, remotePath, tmp.absolutePath, onProgress)
-        contentResolver.openOutputStream(destUri, "wt")?.use { out ->
-            tmp.inputStream().use { it.copyTo(out) }
-        } ?: throw IOException("Cannot open output stream for $destUri")
-    } finally { tmp.delete() }
+    val dst = SafDestFile(destUri, contentResolver, destUri.lastPathSegment ?: "download")
+    withSftpClient(sessionId) { sftp -> sftp.fileTransfer.download(remotePath, dst) }
 }
 ```
 
@@ -1009,8 +1054,7 @@ import org.junit.jupiter.api.Test
 
 class SshScpClientImplTest {
     val store = mockk<SshSessionStore>(relaxed = true)
-    val shellManager = mockk<SshShellManager>(relaxed = true)
-    val sshClient = SshScpClientImpl(store, shellManager)
+    val sshClient = SshScpClientImpl(store)
 
     @Test fun isConnected_delegates() = kotlinx.coroutines.test.runTest {
         every { store.isConnected("s1") } returns true
@@ -1029,6 +1073,8 @@ class SshScpClientImplTest {
     }
 }
 ```
+
+Note: `SshShellManager` is **not** a separate dependency. The shell-open operation is the same SSHJ session-channel call used in `SshSftpClientImpl` today; we inline it here rather than introducing a new class.
 
 - [ ] **Step 2: Run, verify FAIL**
 
@@ -1050,7 +1096,6 @@ import javax.inject.Singleton
 @Singleton
 class SshScpClientImpl @Inject constructor(
     private val sessionStore: SshSessionStore,
-    private val shellManager: SshShellManager,
 ) : SshClient {
     override suspend fun connect(
         host: String, port: Int, username: String,
@@ -1062,7 +1107,12 @@ class SshScpClientImpl @Inject constructor(
 
     override suspend fun openShell(sessionId: String, cols: Int, rows: Int, term: String): ShellHandle =
         withContext(Dispatchers.IO) {
-            shellManager.openShell(sessionStore.getSession(sessionId).client, cols, rows, term)
+            // Inline shell-open (no separate SshShellManager); identical pattern to SshSftpClientImpl.
+            val client = sessionStore.getSession(sessionId).client
+            val session = client.startSession()
+            session.allocatePTY(term, cols, rows, 0, 0, emptyMap<String, String>())
+            val shell = session.startShell()
+            ShellHandle(session, shell)
         }
 
     override suspend fun executeCommand(sessionId: String, command: String): CommandResult =
@@ -1111,20 +1161,21 @@ git commit -m "feat(network): SshScpClientImpl skeleton (transport delegated, fi
 **Files:**
 - Modify: `SshSessionStore.kt`, `SshScpClientImpl.kt`, `SshScpClientImplTest.kt`
 
-- [ ] **Step 1: Add `ensureNameCache` to `SshSessionStore`**
+- [ ] **Step 1: Add `ensureNameCache` to `SshSessionStore` (TOCTOU-safe)**
+
+The `LiveSession.nameCache` field is changed from `var nameCache: NameCache` to `val cacheRef: AtomicReference<NameCache?>` (initial `null`). The null sentinel distinguishes "never populated" from "populated but empty (LDAP returned nothing)" — without it, two concurrent first-`listFiles` calls both see `uids.isNotEmpty() == false` and both run `fetchNameCache`. Update `LiveSession`'s definition in T6's earlier code accordingly.
 
 ```kotlin
     private val cacheMutex = kotlinx.coroutines.sync.Mutex()
-    suspend fun ensureNameCache(sessionId: String): NameCache = cacheMutex.let { m ->
-        kotlinx.coroutines.sync.withLock(m) {
-            val live = getSession(sessionId)
-            if (live.nameCache.uids.isNotEmpty() || live.nameCache.gids.isNotEmpty()) live.nameCache
-            else {
-                val cache = try { fetchNameCache(live.client, live.bashAvailable) } catch (_: Exception) { NameCache.empty() }
-                live.nameCache = cache
-                cache
-            }
-        }
+    suspend fun ensureNameCache(sessionId: String): NameCache = kotlinx.coroutines.sync.withLock(cacheMutex) {
+        val live = getSession(sessionId)
+        live.cacheRef.get()?.let { return@withLock it }
+        // Compute once. Even if `fetchNameCache` throws (e.g. `/etc/passwd` unreadable),
+        // store `NameCache.empty()` and never retry — that's the "lazy, once-per-session"
+        // contract; retrying on every listFiles would defeat the cache.
+        val cache = try { fetchNameCache(live.client, live.bashAvailable) } catch (_: Exception) { NameCache.empty() }
+        live.cacheRef.set(cache)
+        cache
     }
     private fun fetchNameCache(client: SSHClient, bashAvailable: Boolean): NameCache {
         val pw = ShellInvocation.run(client, "getent passwd 2>/dev/null || cat /etc/passwd", bashAvailable)
@@ -1144,10 +1195,11 @@ git commit -m "feat(network): SshScpClientImpl skeleton (transport delegated, fi
 ```kotlin
     @Test fun listFiles_runsAndParses() = kotlinx.coroutines.test.runTest {
         val client = mockk<SSHClient>(relaxed = true)
+        val cachedNames = NameCache(mapOf(1000 to "marc"), mapOf(1000 to "marc"))
         val live = LiveSession(client, Protocol.SCP, true,
-            NameCache(mapOf(1000 to "marc"), mapOf(1000 to "marc")))
+            java.util.concurrent.atomic.AtomicReference(cachedNames))
         every { store.getSession("s1") } returns live
-        coEvery { store.ensureNameCache("s1") } returns live.nameCache
+        coEvery { store.ensureNameCache("s1") } returns cachedNames
         val session = mockk<net.schmizz.sshj.connection.channel.direct.Session>(relaxed = true)
         val command = mockk<net.schmizz.sshj.connection.channel.direct.Session.Command>(relaxed = true)
         every { client.startSession() } returns session
@@ -1161,9 +1213,69 @@ git commit -m "feat(network): SshScpClientImpl skeleton (transport delegated, fi
         assertThat(files[0].name).isEqualTo("hello")
         assertThat(files[0].owner).isEqualTo("marc")
     }
+    @Test fun ensureNameCache_calledTwice_runsGetentOnlyOnce() = kotlinx.coroutines.test.runTest {
+        // Decision 6 contract: once-per-session lookup. Drives `SshSessionStore` directly
+        // (not through the SCP impl) so the cache logic is locked in independently of
+        // listFiles' call site.
+        val realStore = SshSessionStore(mockk(relaxed = true))
+        val client = mockk<SSHClient>(relaxed = true)
+        val getentCommandsSeen = mutableListOf<String>()
+        every { client.isConnected } returns true
+        every { client.startSession() } answers {
+            val s = mockk<net.schmizz.sshj.connection.channel.direct.Session>(relaxed = true)
+            val c = mockk<net.schmizz.sshj.connection.channel.direct.Session.Command>(relaxed = true)
+            every { s.exec (any()) } answers {
+                getentCommandsSeen += firstArg<String>()
+                c
+            }
+            every { c.inputStream } returns java.io.ByteArrayInputStream(
+                "marc:x:1000:1000::/home/marc:/bin/bash\n".toByteArray()
+            )
+            every { c.errorStream } returns java.io.ByteArrayInputStream(ByteArray(0))
+            every { c.exitStatus } returns 0
+            s
+        }
+        val sessionsField = SshSessionStore::class.java.getDeclaredField("sessions"); sessionsField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        (sessionsField.get(realStore) as java.util.concurrent.ConcurrentHashMap<String, LiveSession>)["s1"] =
+            LiveSession(client, Protocol.SCP, false, java.util.concurrent.atomic.AtomicReference(null))
+
+        realStore.ensureNameCache("s1")
+        realStore.ensureNameCache("s1")
+
+        // First call runs `getent passwd …` and `getent group …`. Second call hits the cache.
+        // We expect exactly TWO exec invocations across both ensureNameCache calls (one for
+        // passwd, one for group), not four.
+        val getentCount = getentCommandsSeen.count { it.contains("getent") }
+        assertThat(getentCount).isEqualTo(2)
+    }
+
+    @Test fun ensureNameCache_failedFetch_doesNotRetryOnSecondCall() = kotlinx.coroutines.test.runTest {
+        // Decision 6 contract: failed fetch caches an empty NameCache; subsequent listFiles
+        // do not re-attempt. Without this guarantee, every listFiles on a server with no
+        // /etc/passwd read access pays a /etc/passwd-attempt + /etc/group-attempt cost.
+        val realStore = SshSessionStore(mockk(relaxed = true))
+        val client = mockk<SSHClient>(relaxed = true)
+        every { client.isConnected } returns true
+        var execCount = 0
+        every { client.startSession() } answers { execCount++; throw java.io.IOException("Channel open failed") }
+        val sessionsField = SshSessionStore::class.java.getDeclaredField("sessions"); sessionsField.isAccessible = true
+        @Suppress("UNCHECKED_CAST")
+        (sessionsField.get(realStore) as java.util.concurrent.ConcurrentHashMap<String, LiveSession>)["s1"] =
+            LiveSession(client, Protocol.SCP, false, java.util.concurrent.atomic.AtomicReference(null))
+
+        val first = realStore.ensureNameCache("s1")
+        val second = realStore.ensureNameCache("s1")
+
+        assertThat(first).isEqualTo(NameCache.empty())
+        assertThat(second).isEqualTo(NameCache.empty())
+        // First call attempted (and failed) once. Second call must not attempt again.
+        assertThat(execCount).isAtMost(2) // tolerate one passwd attempt + one group attempt on first call
+    }
+
     @Test fun listFiles_lsExitNonZero_throwsWithStderr() = kotlinx.coroutines.test.runTest {
         val client = mockk<SSHClient>(relaxed = true)
-        val live = LiveSession(client, Protocol.SCP, false, NameCache.empty())
+        val live = LiveSession(client, Protocol.SCP, false, java.util.concurrent.atomic.AtomicReference(NameCache.empty()))
         every { store.getSession("s1") } returns live
         coEvery { store.ensureNameCache("s1") } returns NameCache.empty()
         val session = mockk<net.schmizz.sshj.connection.channel.direct.Session>(relaxed = true)
@@ -1227,7 +1339,7 @@ git commit -m "feat(network): SCP listFiles via ls + once-per-session name cache
         val client = mockk<SSHClient>(relaxed = true)
         val transfer = mockk<net.schmizz.sshj.xfer.scp.SCPFileTransfer>(relaxed = true)
         every { client.newSCPFileTransfer() } returns transfer
-        every { store.getSession("s1") } returns LiveSession(client, Protocol.SCP, true, NameCache.empty())
+        every { store.getSession("s1") } returns LiveSession(client, Protocol.SCP, true, java.util.concurrent.atomic.AtomicReference(NameCache.empty()))
         sshClient.uploadFile("s1", "/local/file", "/remote/file") { _, _ -> }
         verify { transfer.upload(any<net.schmizz.sshj.xfer.LocalSourceFile>(), "/remote/file") }
     }
@@ -1235,7 +1347,7 @@ git commit -m "feat(network): SCP listFiles via ls + once-per-session name cache
         val client = mockk<SSHClient>(relaxed = true)
         val transfer = mockk<net.schmizz.sshj.xfer.scp.SCPFileTransfer>(relaxed = true)
         every { client.newSCPFileTransfer() } returns transfer
-        every { store.getSession("s1") } returns LiveSession(client, Protocol.SCP, true, NameCache.empty())
+        every { store.getSession("s1") } returns LiveSession(client, Protocol.SCP, true, java.util.concurrent.atomic.AtomicReference(NameCache.empty()))
         val resolver = mockk<android.content.ContentResolver>()
         val uri = android.net.Uri.parse("content://x/abc")
         every { resolver.openInputStream(uri) } returns java.io.ByteArrayInputStream("data".toByteArray())
@@ -1245,6 +1357,28 @@ git commit -m "feat(network): SCP listFiles via ls + once-per-session name cache
                 match<net.schmizz.sshj.xfer.LocalSourceFile> { it is SafSourceFile },
                 "/remote/file"
             )
+        }
+    }
+    @Test fun uploadFile_safUri_doesNotMaterialiseTempFile() = kotlinx.coroutines.test.runTest {
+        // Decision 10 contract: SCP path streams from SAF directly, no temp-file hop.
+        // Catches the regression where a future refactor reintroduces `File.createTempFile`.
+        io.mockk.mockkStatic(java.io.File::class)
+        try {
+            val client = mockk<SSHClient>(relaxed = true)
+            val transfer = mockk<net.schmizz.sshj.xfer.scp.SCPFileTransfer>(relaxed = true)
+            every { client.newSCPFileTransfer() } returns transfer
+            every { store.getSession("s1") } returns LiveSession(client, Protocol.SCP, true,
+                java.util.concurrent.atomic.AtomicReference(NameCache.empty()))
+            val resolver = mockk<android.content.ContentResolver>()
+            val uri = android.net.Uri.parse("content://x/abc")
+            every { resolver.openInputStream(uri) } returns java.io.ByteArrayInputStream("data".toByteArray())
+
+            sshClient.uploadFile("s1", uri, "/remote", resolver) { _, _ -> }
+
+            io.mockk.verify(exactly = 0) { java.io.File.createTempFile(any(), any()) }
+            io.mockk.verify(exactly = 0) { java.io.File.createTempFile(any(), any(), any()) }
+        } finally {
+            io.mockk.unmockkStatic(java.io.File::class)
         }
     }
 ```
@@ -1330,10 +1464,34 @@ git commit -m "feat(network): SCP upload/download via SCPFileTransfer + SAF adap
         setupExec(stdout = "", stderr = "stat: cannot stat '/missing'\n", exit = 1)
         assertThat(sshClient.fileSize("s1", "/missing")).isNull()
     }
+    @Test fun mkdir_exitNonZero_throwsWithStderrFirstLine() = kotlinx.coroutines.test.runTest {
+        // Decision 11 contract: non-zero exit must surface, not silently succeed.
+        setupExec(stdout = "", stderr = "mkdir: cannot create directory '/root/x': Permission denied\n", exit = 1)
+        val ex = org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException::class.java) {
+            kotlinx.coroutines.runBlocking { sshClient.mkdir("s1", "/root/x") }
+        }
+        assertThat(ex.message).contains("mkdir failed")
+        assertThat(ex.message).contains("Permission denied")
+    }
+    @Test fun rename_exitNonZero_throws() = kotlinx.coroutines.test.runTest {
+        setupExec(stdout = "", stderr = "mv: cannot move '/a' to '/b': Operation not permitted\n", exit = 1)
+        val ex = org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException::class.java) {
+            kotlinx.coroutines.runBlocking { sshClient.rename("s1", "/a", "/b") }
+        }
+        assertThat(ex.message).contains("rename failed")
+        assertThat(ex.message).contains("Operation not permitted")
+    }
+    @Test fun chmod_exitNonZero_throws() = kotlinx.coroutines.test.runTest {
+        setupExec(stdout = "", stderr = "chmod: changing permissions of '/x': Operation not permitted\n", exit = 1)
+        val ex = org.junit.jupiter.api.Assertions.assertThrows(java.io.IOException::class.java) {
+            kotlinx.coroutines.runBlocking { sshClient.chmod("s1", "/x", 0b111_101_101) }
+        }
+        assertThat(ex.message).contains("chmod failed")
+    }
 
     private fun setupExec(stdout: String, stderr: String, exit: Int): io.mockk.CapturingSlot<String> {
         val client = mockk<SSHClient>(relaxed = true)
-        every { store.getSession("s1") } returns LiveSession(client, Protocol.SCP, false, NameCache.empty())
+        every { store.getSession("s1") } returns LiveSession(client, Protocol.SCP, false, java.util.concurrent.atomic.AtomicReference(NameCache.empty()))
         val s = mockk<net.schmizz.sshj.connection.channel.direct.Session>(relaxed = true)
         val c = mockk<net.schmizz.sshj.connection.channel.direct.Session.Command>(relaxed = true)
         every { client.startSession() } returns s
@@ -1401,10 +1559,69 @@ git commit -m "feat(network): SCP mkdir/rename/chmod/fileSize via shell invocati
         assertThat(r.failed.map { it.first }).containsExactly("/b")
         assertThat(r.succeeded).containsExactly("/a", "/c").inOrder()
     }
+    @Test fun delete_emptyPaths_returnsEmpty() = kotlinx.coroutines.test.runTest {
+        // No exec invoked; aggregate equals DeleteResult.EMPTY.
+        val client = mockk<SSHClient>(relaxed = true)
+        every { store.getSession("s1") } returns LiveSession(client, Protocol.SCP, false,
+            java.util.concurrent.atomic.AtomicReference(NameCache.empty()))
+        val r = sshClient.delete("s1", emptyList())
+        assertThat(r.succeeded).isEmpty()
+        assertThat(r.failed).isEmpty()
+        verify(exactly = 0) { client.startSession() }
+    }
+    @Test fun delete_pathWithSingleQuote_landsInResult() = kotlinx.coroutines.test.runTest {
+        // Paths containing `'` are shell-escaped to `'\''`. The stderr from `rm` reads
+        // back the path with the same escape sequence. Parser must handle that, otherwise
+        // the path silently vanishes from succeeded AND failed (worst-case UX: file
+        // appears deleted when it isn't).
+        setupExec(
+            stdout = "",
+            stderr = "rm: cannot remove '/home/marc/it'\\''s here': Permission denied\n",
+            exit = 1,
+        )
+        val r = sshClient.delete("s1", listOf("/home/marc/it's here"))
+        assertThat(r.failed).hasSize(1)
+        assertThat(r.failed[0].first).isEqualTo("/home/marc/it's here")
+        assertThat(r.succeeded).isEmpty()
+    }
+    @Test fun delete_failureSpansBatches_aggregatesAcrossBatches() = kotlinx.coroutines.test.runTest {
+        // 250 paths → 2 batches (200 + 50). Batch 1 reports two failures; batch 2 succeeds.
+        // Aggregate must reflect 248 succeeded + 2 failed, with the right paths.
+        val client = mockk<SSHClient>(relaxed = true)
+        every { store.getSession("s1") } returns LiveSession(client, Protocol.SCP, false,
+            java.util.concurrent.atomic.AtomicReference(NameCache.empty()))
+        val s = mockk<net.schmizz.sshj.connection.channel.direct.Session>(relaxed = true)
+        val cmd1 = mockk<net.schmizz.sshj.connection.channel.direct.Session.Command>(relaxed = true)
+        val cmd2 = mockk<net.schmizz.sshj.connection.channel.direct.Session.Command>(relaxed = true)
+        every { client.startSession() } returns s
+        every { s.exec (any()) } returnsMany listOf(cmd1, cmd2)
+        every { cmd1.inputStream } returns java.io.ByteArrayInputStream(ByteArray(0))
+        every { cmd1.errorStream } returns java.io.ByteArrayInputStream(
+            ("rm: cannot remove '/p50': Permission denied\n" +
+             "rm: cannot remove '/p100': Permission denied\n").toByteArray()
+        )
+        every { cmd1.exitStatus } returns 1
+        every { cmd2.inputStream } returns java.io.ByteArrayInputStream(ByteArray(0))
+        every { cmd2.errorStream } returns java.io.ByteArrayInputStream(ByteArray(0))
+        every { cmd2.exitStatus } returns 0
+
+        val r = sshClient.delete("s1", (1..250).map { "/p$it" })
+
+        assertThat(r.succeeded).hasSize(248)
+        assertThat(r.failed.map { it.first }).containsExactly("/p50", "/p100").inOrder()
+    }
+    @Test fun delete_nonZeroExitButEmptyStderr_treatsAllAsFailed() = kotlinx.coroutines.test.runTest {
+        // Defensive: if rm reports failure but stderr can't be parsed, do NOT silently
+        // attribute success to the batch. Mark all items as failed with a synthetic reason.
+        setupExec(stdout = "", stderr = "", exit = 1)
+        val r = sshClient.delete("s1", listOf("/a", "/b"))
+        assertThat(r.succeeded).isEmpty()
+        assertThat(r.failed.map { it.first }).containsExactly("/a", "/b")
+    }
     @Test fun delete_450Paths_makes3Batches() = kotlinx.coroutines.test.runTest {
         // Setup: 3 successive exec invocations all return exit 0.
         val client = mockk<SSHClient>(relaxed = true)
-        every { store.getSession("s1") } returns LiveSession(client, Protocol.SCP, false, NameCache.empty())
+        every { store.getSession("s1") } returns LiveSession(client, Protocol.SCP, false, java.util.concurrent.atomic.AtomicReference(NameCache.empty()))
         val s = mockk<net.schmizz.sshj.connection.channel.direct.Session>(relaxed = true)
         val c = mockk<net.schmizz.sshj.connection.channel.direct.Session.Command>(relaxed = true)
         every { client.startSession() } returns s
@@ -1437,11 +1654,31 @@ override suspend fun delete(sessionId: String, paths: List<String>): DeleteResul
 
 private fun parseRm(batch: List<String>, r: ShellResult): DeleteResult {
     if (r.exitCode == 0) return DeleteResult(succeeded = batch, failed = emptyList())
-    val rx = Regex("""rm: cannot remove '([^']+)': (.+)""")
-    val failed = r.stderr.lineSequence().mapNotNull { line ->
-        rx.matchEntire(line.trim())?.let { it.groupValues[1] to it.groupValues[2] }
+    // Robust matcher: GNU rm's failure line shape is `rm: cannot remove 'X': REASON`,
+    // where X may contain shell-escaped single quotes (`'\''`). A naive `[^']+` regex
+    // truncates the path at the first quote and silently drops the entry from both
+    // buckets. Instead match by anchored prefix/suffix and unescape inside.
+    val prefix = "rm: cannot remove '"
+    val failed = r.stderr.lineSequence().mapNotNull { rawLine ->
+        val line = rawLine.trim()
+        if (!line.startsWith(prefix)) return@mapNotNull null
+        // After prefix, the path is everything up to the LAST occurrence of `': `.
+        val end = line.lastIndexOf("': ")
+        if (end < prefix.length) return@mapNotNull null
+        val pathEscaped = line.substring(prefix.length, end)
+        val reason = line.substring(end + 3)
+        val path = pathEscaped.replace("'\\''", "'")  // un-do shellEscape's POSIX trick
+        path to reason
     }.toList()
     val failedSet = failed.map { it.first }.toSet()
+    if (failed.isEmpty()) {
+        // Non-zero exit but no parseable failure lines (rate-limit, OOM on remote shell,
+        // generic error) — treat the entire batch as failed with a synthetic reason.
+        return DeleteResult(
+            succeeded = emptyList(),
+            failed = batch.map { it to "rm exited ${r.exitCode}" },
+        )
+    }
     return DeleteResult(succeeded = batch.filter { it !in failedSet }, failed = failed)
 }
 companion object { private const val MAX_BATCH_ARGS = 200 }
@@ -1553,6 +1790,52 @@ git commit -m "feat(di): SshClientModule binds @IntoMap by Protocol + @DefaultSs
         }
         coVerify(exactly = 0) { client.delete(any(), any()) }
     }
+    @Test fun listFiles_protocolSsh_routesToSftpClient() = runTest {
+        // Decision 9 contract: SSH-protocol profiles use SFTP for file operations.
+        val sftp = mockk<SshClient>(relaxed = true)
+        val scp = mockk<SshClient>(relaxed = true)
+        coEvery { sftp.listFiles(any(), "/x") } returns emptyList()
+        val registry = mockk<SessionRegistry>()
+        every { registry.openSessions } returns kotlinx.coroutines.flow.MutableStateFlow(
+            listOf(Session(id = "s1", protocol = Protocol.SSH, /* … */))
+        )
+        val repo = RemoteFileSystemRepository(
+            mapOf(Protocol.SFTP to sftp, Protocol.SCP to scp, Protocol.SSH to sftp),
+            registry,
+        )
+        repo.setActiveSession("s1")
+        repo.listFiles("/x")
+        coVerify(exactly = 0) { scp.listFiles(any(), any()) }
+        coVerify(exactly = 1) { sftp.listFiles("s1", "/x") }
+    }
+    @Test fun deleteFile_unsafePathArb_alwaysRejectedBeforeClient() = runTest {
+        // Property-based test (Kotest-property). Generates ~500 path strings drawn from
+        // the "unsafe" alphabet — empty, whitespace-only, "/", "//", " /", ".", "..", and
+        // strings made of those characters. The contract: NONE of these paths reaches
+        // `client.delete(...)`. Generator and assertion are explicit; the predicate for
+        // "unsafe" is "every shape that the require(...) block in deleteFile must reject."
+        val unsafeShapes = io.kotest.property.Arb.of(
+            "", " ", "  ", "\t", "/", "//", "  /  ", ".", "..", "./", "../"
+        )
+        val client = mockk<SshClient>(relaxed = true)
+        val repo = RemoteFileSystemRepository(
+            mapOf(Protocol.SFTP to client),
+            mockk(relaxed = true) {
+                every { openSessions } returns kotlinx.coroutines.flow.MutableStateFlow(
+                    listOf(Session(id = "s1", protocol = Protocol.SFTP, /* … */))
+                )
+            },
+        )
+        repo.setActiveSession("s1")
+
+        io.kotest.property.checkAll(io.kotest.property.PropTestConfig(iterations = 500), unsafeShapes) { path ->
+            runCatching { repo.deleteFile(path) }
+                .exceptionOrNull()
+                ?.let { it is IllegalArgumentException }
+                ?: false
+        }
+        coVerify(exactly = 0) { client.delete(any(), any()) }
+    }
 ```
 
 - [ ] **Step 3: Run, verify FAIL**
@@ -1632,13 +1915,24 @@ git commit -m "refactor(registry,wear): inject Map<Protocol, SshClient> for prot
 **Files:**
 - Create: `app/src/androidTest/kotlin/dev/ori/app/di/SshClientModuleHiltTest.kt`
 
-- [ ] **Step 1: Audit grep**
+- [ ] **Step 1: Audit grep — five-pass to catch all injection forms**
+
+A single regex misses `Lazy<>`, `Provider<>`, multi-line constructor params, and qualified injections. Run all five and merge:
 
 ```bash
-grep -rn '@Inject.*SshClient\b' --include="*.kt" .
+grep -rn 'SshClient' --include="*.kt" . | grep -v '/core-network/'  # widest net
+grep -rn 'Lazy<.*SshClient' --include="*.kt" .
+grep -rn 'Provider<.*SshClient' --include="*.kt" .
+grep -rn '@DefaultSshClient' --include="*.kt" .
+grep -rn 'SshClient\b' --include="*.kt" -l . | xargs grep -l 'TestModule\|@Provides'
 ```
 
-For every result NOT in `core/core-network/`, classify "uses Map (protocol-routed)" vs "uses @DefaultSshClient (legacy)". Document the table inline in the PR description so the reviewer can verify exhaustiveness.
+For every result NOT in `core/core-network/`, classify "uses Map (protocol-routed)" vs "uses @DefaultSshClient (legacy)" vs "test-double (update in same PR)". Document the table inline in the PR description so the reviewer can verify exhaustiveness. Pay extra attention to:
+
+- `feature-terminal/.../TerminalViewModel.kt`
+- `feature-connections/.../ConnectionDetailViewModel.kt`
+- `feature-proxmox/` callers
+- Any `*TestModule.kt` and `@Provides` factories that bind `SshClient` for tests
 
 - [ ] **Step 2: Write the smoke test**
 
@@ -1654,6 +1948,10 @@ class SshClientModuleHiltTest {
         assertThat(clients.keys).containsAtLeast(Protocol.SFTP, Protocol.SCP, Protocol.SSH)
         assertThat(clients[Protocol.SFTP]).isInstanceOf(SshSftpClientImpl::class.java)
         assertThat(clients[Protocol.SCP]).isInstanceOf(SshScpClientImpl::class.java)
+        // Decision 9: SSH is bound to the SFTP impl, not SCP. Pin both halves so a
+        // future binding swap is caught.
+        assertThat(clients[Protocol.SSH]).isInstanceOf(SshSftpClientImpl::class.java)
+        assertThat(clients[Protocol.SCP]).isNotInstanceOf(SshSftpClientImpl::class.java)
     }
     @Test fun defaultClient_isSftp() {
         assertThat(defaultClient).isInstanceOf(SshSftpClientImpl::class.java)
