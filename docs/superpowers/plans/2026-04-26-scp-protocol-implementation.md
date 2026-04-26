@@ -535,13 +535,20 @@ internal class SafDestFile(
     private val resolver: ContentResolver,
     private val name: String,
 ) : LocalDestFile {
-    override fun getName() = name
+    // `name` is exposed only for diagnostics — `LocalDestFile` itself has no `getName()`,
+    // so this is a plain Kotlin property, not an override.
+    fun displayName(): String = name
+
     override fun getLength() = 0L
     override fun getOutputStream(append: Boolean): OutputStream {
         require(!append) { "SafDestFile does not support resumable transfers (SCP cannot resume)" }
         return resolver.openOutputStream(uri, "wt") ?: throw IOException("Cannot open output stream for $uri")
     }
     override fun getOutputStream(): OutputStream = getOutputStream(false)
+    // SAF Uris always point at a single file; no child resolution needed. Return `this`
+    // so SSHJ's `SCPDownloadClient` walks the recursion through us as if we were the
+    // target file directly.
+    override fun getChild(name: String): LocalDestFile = this
     override fun getTargetFile(filename: String): LocalDestFile = this
     override fun getTargetDirectory(dirname: String): LocalDestFile = this
     override fun setPermissions(perms: Int) { }
@@ -1110,7 +1117,7 @@ class SshScpClientImpl @Inject constructor(
             // Inline shell-open (no separate SshShellManager); identical pattern to SshSftpClientImpl.
             val client = sessionStore.getSession(sessionId).client
             val session = client.startSession()
-            session.allocatePTY(term, cols, rows, 0, 0, emptyMap<String, String>())
+            session.allocatePTY(term, cols, rows, 0, 0, emptyMap())
             val shell = session.startShell()
             ShellHandle(session, shell)
         }
