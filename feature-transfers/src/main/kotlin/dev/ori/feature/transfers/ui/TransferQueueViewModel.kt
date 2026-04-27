@@ -51,7 +51,12 @@ class TransferQueueViewModel @Inject constructor(
 
     fun onEvent(event: TransferEvent) {
         when (event) {
-            is TransferEvent.SetFilter -> _uiState.update { it.copy(filter = event.filter) }
+            is TransferEvent.SetFilter -> _uiState.update {
+                it.copy(
+                    filter = event.filter,
+                    transfers = applyFilter(it.allTransfers, event.filter),
+                )
+            }
             is TransferEvent.PauseTransfer -> pauseTransfer(event.transferId)
             is TransferEvent.ResumeTransfer -> resumeTransfer(event.transferId)
             is TransferEvent.CancelTransfer -> cancelTransfer(event.transferId)
@@ -87,6 +92,7 @@ class TransferQueueViewModel @Inject constructor(
                 .collect { transfers ->
                     _uiState.update {
                         it.copy(
+                            allTransfers = transfers,
                             transfers = applyFilter(transfers, it.filter),
                             isLoading = false,
                         )

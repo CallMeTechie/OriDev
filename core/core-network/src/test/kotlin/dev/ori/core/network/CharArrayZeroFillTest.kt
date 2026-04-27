@@ -1,5 +1,6 @@
 package dev.ori.core.network
 
+import android.content.Context
 import com.google.common.truth.Truth.assertThat
 import dev.ori.core.network.ftp.FtpClientImpl
 import dev.ori.core.network.ssh.OriDevHostKeyVerifier
@@ -38,6 +39,7 @@ class CharArrayZeroFillTest {
     fun sshConnect_failurePath_zeroFillsCallerPasswordBuffer() = runTest {
         val sshClient = SshSftpClientImpl(
             sessionStore = SshSessionStore(mockk<OriDevHostKeyVerifier>(relaxed = true)),
+            context = mockk<Context>(relaxed = true),
         )
         val password = "hunter2".toCharArray()
 
@@ -84,6 +86,7 @@ class CharArrayZeroFillTest {
         // on the exception path (unreachable host).
         val sshClient = SshSftpClientImpl(
             sessionStore = SshSessionStore(mockk<OriDevHostKeyVerifier>(relaxed = true)),
+            context = mockk<Context>(relaxed = true),
         )
 
         @Suppress("DEPRECATION")
