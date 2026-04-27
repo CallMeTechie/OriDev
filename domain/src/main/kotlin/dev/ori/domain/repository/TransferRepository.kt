@@ -13,13 +13,21 @@ interface TransferRepository {
     suspend fun cancel(transferId: Long)
 
     /**
-     * Removes all transfers in `COMPLETED` state from persistent storage.
+     * Removes every transfer in a terminal state — `COMPLETED`, `FAILED`,
+     * `CANCELLED` — from persistent storage. In-flight rows (`QUEUED`,
+     * `ACTIVE`, `PAUSED`) are untouched.
+     *
+     * Bug N — historically this method only purged `COMPLETED` rows, so the
+     * single "Clear" button in the queue toolbar ignored failed and cancelled
+     * transfers and left the list cluttered. Widening the predicate is the
+     * least disruptive fix because the UI never exposed separate clear
+     * actions for failed/cancelled rows in the first place.
      *
      * @return number of rows that were deleted. Surfaced to the UI so the
      *         queue toolbar can confirm the action via a Snackbar (e.g.
-     *         "3 completed transfers cleared").
+     *         "3 finished transfers cleared").
      */
-    suspend fun clearCompleted(): Int
+    suspend fun clearFinished(): Int
 
     // Phase 12 P12.2 — additions consumed by the TransferEngineService workers.
     suspend fun updateProgress(id: Long, transferred: Long, total: Long)

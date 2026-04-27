@@ -25,8 +25,20 @@ interface TransferRecordDao {
     @Update
     suspend fun update(record: TransferRecordEntity)
 
-    @Query("DELETE FROM transfer_records WHERE status = 'COMPLETED'")
-    suspend fun clearCompleted(): Int
+    /**
+     * Removes every transfer in a terminal state — `COMPLETED`, `FAILED`,
+     * and `CANCELLED` — leaving in-flight rows (`QUEUED`, `ACTIVE`,
+     * `PAUSED`) untouched.
+     *
+     * Bug N — the previous query only matched `COMPLETED`, which meant the
+     * "Clear" button silently ignored failed and cancelled rows. Users with
+     * a long history of retries-that-never-recovered (e.g. wrong host key
+     * after server reinstall, expired credentials) had no way to prune the
+     * queue without dropping the database, because the UI only exposes one
+     * clear button.
+     */
+    @Query("DELETE FROM transfer_records WHERE status IN ('COMPLETED', 'FAILED', 'CANCELLED')")
+    suspend fun clearFinished(): Int
 
     @Query(
         """
