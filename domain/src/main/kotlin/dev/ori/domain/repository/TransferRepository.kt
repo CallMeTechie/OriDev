@@ -11,7 +11,15 @@ interface TransferRepository {
     suspend fun pause(transferId: Long)
     suspend fun resume(transferId: Long)
     suspend fun cancel(transferId: Long)
-    suspend fun clearCompleted()
+
+    /**
+     * Removes all transfers in `COMPLETED` state from persistent storage.
+     *
+     * @return number of rows that were deleted. Surfaced to the UI so the
+     *         queue toolbar can confirm the action via a Snackbar (e.g.
+     *         "3 completed transfers cleared").
+     */
+    suspend fun clearCompleted(): Int
 
     // Phase 12 P12.2 — additions consumed by the TransferEngineService workers.
     suspend fun updateProgress(id: Long, transferred: Long, total: Long)
