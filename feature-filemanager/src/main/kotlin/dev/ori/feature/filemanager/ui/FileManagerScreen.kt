@@ -573,6 +573,9 @@ private fun PaneContent(
             onEvent(FileManagerEvent.DeleteSelected(pane))
         },
         onChmod = { file -> dialogCallbacks.onShowChmod(pane, file) },
+        onTransfer = { file ->
+            onEvent(FileManagerEvent.InitiateTransfer(listOf(file.path), pane))
+        },
         onDragStart = { filePath ->
             val selectedPaths = paneState.selectedFiles.toList().ifEmpty { listOf(filePath) }
             viewModel?.setDragState(
