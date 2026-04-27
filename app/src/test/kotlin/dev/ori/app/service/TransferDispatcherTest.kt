@@ -293,9 +293,9 @@ internal class FakeTransferRecordDao(
         rows[record.id] = record
     }
 
-    override suspend fun clearCompleted(): Int {
+    override suspend fun clearFinished(): Int {
         val before = rows.size
-        rows.values.removeAll { it.status == TransferStatus.COMPLETED }
+        rows.values.removeAll { it.status.isTerminal }
         return before - rows.size
     }
 
@@ -354,7 +354,7 @@ internal class FakeTransferRepository(
     override suspend fun pause(transferId: Long) = Unit
     override suspend fun resume(transferId: Long) = Unit
     override suspend fun cancel(transferId: Long) = Unit
-    override suspend fun clearCompleted(): Int = 0
+    override suspend fun clearFinished(): Int = 0
 
     override suspend fun updateProgress(id: Long, transferred: Long, total: Long) {
         dao.updateProgress(id, transferred, total)

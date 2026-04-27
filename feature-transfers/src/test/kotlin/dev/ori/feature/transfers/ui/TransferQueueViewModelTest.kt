@@ -10,7 +10,7 @@ import dev.ori.domain.model.TransferRequest
 import dev.ori.domain.repository.TransferConflictRepository
 import dev.ori.domain.usecase.CancelAllTransfersUseCase
 import dev.ori.domain.usecase.CancelTransferUseCase
-import dev.ori.domain.usecase.ClearCompletedTransfersUseCase
+import dev.ori.domain.usecase.ClearFinishedTransfersUseCase
 import dev.ori.domain.usecase.EnqueueTransferUseCase
 import dev.ori.domain.usecase.GetTransfersUseCase
 import dev.ori.domain.usecase.PauseAllTransfersUseCase
@@ -46,7 +46,7 @@ class TransferQueueViewModelTest {
     private lateinit var resumeTransferUseCase: ResumeTransferUseCase
     private lateinit var cancelTransferUseCase: CancelTransferUseCase
     private lateinit var enqueueTransferUseCase: EnqueueTransferUseCase
-    private lateinit var clearCompletedTransfersUseCase: ClearCompletedTransfersUseCase
+    private lateinit var clearFinishedTransfersUseCase: ClearFinishedTransfersUseCase
     private lateinit var conflictRepository: FakeTransferConflictRepository
     private lateinit var pauseAllTransfersUseCase: PauseAllTransfersUseCase
     private lateinit var cancelAllTransfersUseCase: CancelAllTransfersUseCase
@@ -92,7 +92,7 @@ class TransferQueueViewModelTest {
         resumeTransferUseCase = mockk(relaxed = true)
         cancelTransferUseCase = mockk(relaxed = true)
         enqueueTransferUseCase = mockk(relaxed = true)
-        clearCompletedTransfersUseCase = mockk(relaxed = true)
+        clearFinishedTransfersUseCase = mockk(relaxed = true)
         conflictRepository = FakeTransferConflictRepository()
         pauseAllTransfersUseCase = mockk(relaxed = true)
         cancelAllTransfersUseCase = mockk(relaxed = true)
@@ -112,7 +112,7 @@ class TransferQueueViewModelTest {
         resumeTransferUseCase = resumeTransferUseCase,
         cancelTransferUseCase = cancelTransferUseCase,
         enqueueTransferUseCase = enqueueTransferUseCase,
-        clearCompletedTransfersUseCase = clearCompletedTransfersUseCase,
+        clearFinishedTransfersUseCase = clearFinishedTransfersUseCase,
         conflictRepository = conflictRepository,
         pauseAllTransfersUseCase = pauseAllTransfersUseCase,
         cancelAllTransfersUseCase = cancelAllTransfersUseCase,
@@ -282,19 +282,19 @@ class TransferQueueViewModelTest {
     }
 
     @Test
-    fun `clearCompleted calls clear completed use case`() = runTest {
+    fun `clearFinished calls clear finished use case`() = runTest {
         val viewModel = createViewModel()
         advanceUntilIdle()
 
         viewModel.onEvent(TransferEvent.ClearCompleted)
         advanceUntilIdle()
 
-        coVerify { clearCompletedTransfersUseCase() }
+        coVerify { clearFinishedTransfersUseCase() }
     }
 
     @Test
-    fun `clearCompleted sets infoSnackbar with deleted count`() = runTest {
-        coEvery { clearCompletedTransfersUseCase() } returns 4
+    fun `clearFinished sets infoSnackbar with deleted count`() = runTest {
+        coEvery { clearFinishedTransfersUseCase() } returns 4
         val viewModel = createViewModel()
         advanceUntilIdle()
 
@@ -303,7 +303,7 @@ class TransferQueueViewModelTest {
 
         viewModel.uiState.test {
             val state = awaitItem()
-            assertThat(state.infoSnackbar).isEqualTo("4 completed transfers cleared")
+            assertThat(state.infoSnackbar).isEqualTo("4 finished transfers cleared")
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -341,7 +341,7 @@ class TransferQueueViewModelTest {
 
     @Test
     fun `clearInfo resets infoSnackbar`() = runTest {
-        coEvery { clearCompletedTransfersUseCase() } returns 2
+        coEvery { clearFinishedTransfersUseCase() } returns 2
         val viewModel = createViewModel()
         advanceUntilIdle()
 
@@ -358,8 +358,8 @@ class TransferQueueViewModelTest {
     }
 
     @Test
-    fun `clearCompleted error path leaves infoSnackbar null`() = runTest {
-        coEvery { clearCompletedTransfersUseCase() } throws RuntimeException("DB locked")
+    fun `clearFinished error path leaves infoSnackbar null`() = runTest {
+        coEvery { clearFinishedTransfersUseCase() } throws RuntimeException("DB locked")
         val viewModel = createViewModel()
         advanceUntilIdle()
 
