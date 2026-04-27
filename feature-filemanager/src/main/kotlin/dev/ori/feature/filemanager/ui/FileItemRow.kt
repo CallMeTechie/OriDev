@@ -2,7 +2,7 @@ package dev.ori.feature.filemanager.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.draganddrop.dragAndDropSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +32,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.ori.core.common.extension.toHumanReadableSize
+import dev.ori.core.ui.icons.lucide.EllipsisVertical
 import dev.ori.core.ui.icons.lucide.File
 import dev.ori.core.ui.icons.lucide.FileCode
 import dev.ori.core.ui.icons.lucide.FileText
@@ -51,7 +53,7 @@ fun FileItemRow(
     file: FileItem,
     isSelected: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
+    onShowMenu: () -> Unit,
     onToggleSelection: () -> Unit,
     modifier: Modifier = Modifier,
     onDragStart: (filePath: String) -> List<String> = { listOf(it) },
@@ -66,10 +68,21 @@ fun FileItemRow(
         modifier = modifier
             .fillMaxWidth()
             .background(backgroundColor)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick,
-            )
+            // Bug K fix — switch from `combinedClickable` (single + long) to a
+            // plain `clickable` that handles only the single-tap. The
+            // long-press is exclusively claimed by `dragAndDropSource` below;
+            // running both gesture detectors over the same row meant
+            // `dragAndDropSource` swallowed the down-event before
+            // `combinedClickable.onClick` could see the up-event, so on a
+            // Pixel Fold + remote SSH-pane the user reported "Klick passiert
+            // nichts". Long-press now starts the drag, and the
+            // explicit 3-dot menu button at the end of the row replaces the
+            // old long-press → context menu shortcut.
+            //
+            // `clickable` MUST come BEFORE `dragAndDropSource` so the
+            // platform's tap recogniser is the first to consume the up-event;
+            // the drag source only fires on long-press anyway.
+            .clickable(onClick = onClick)
             .semantics(mergeDescendants = true) {
                 contentDescription = rowDescription
                 stateDescription = selectionState
@@ -159,6 +172,18 @@ fun FileItemRow(
         file.gitStatus?.let { status ->
             Spacer(modifier = Modifier.width(8.dp))
             GitStatusDot(status = status)
+        }
+
+        // Bug K fix — dedicated 3-dot menu button replaces the old
+        // long-press → context-menu trigger. Long-press is now reserved for
+        // the drag-and-drop source, so users access Info / Rename /
+        // Permissions / Transfer / Delete via this explicit affordance.
+        IconButton(onClick = onShowMenu) {
+            Icon(
+                imageVector = LucideIcons.EllipsisVertical,
+                contentDescription = "Menü öffnen",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
