@@ -2,6 +2,7 @@ package dev.ori.data.repository
 
 import dev.ori.core.network.model.RemoteFile
 import dev.ori.core.network.ssh.SshClient
+import dev.ori.data.di.DefaultSshClient
 import dev.ori.domain.model.FileItem
 import dev.ori.domain.repository.FileSystemRepository
 import dev.ori.domain.repository.RemoteFileSystemSession
@@ -13,7 +14,7 @@ import javax.inject.Singleton
 
 @Singleton
 class RemoteFileSystemRepository @Inject constructor(
-    private val sshClient: SshClient,
+    @DefaultSshClient private val sshClient: SshClient,
 ) : FileSystemRepository, RemoteFileSystemSession {
 
     private val activeSessionId = AtomicReference<String?>(null)
