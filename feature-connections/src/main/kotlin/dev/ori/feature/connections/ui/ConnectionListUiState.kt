@@ -65,6 +65,18 @@ data class HostKeyPrompt(
      * matching ack (stale ids are treated as decline).
      */
     val coordinatorPromptId: String? = null,
+    /**
+     * Bug P fix — when non-null the prompt originated from
+     * [ConnectionListViewModel.openProfile] (i.e. the user tapped
+     * "Terminal öffnen" / "Dateien öffnen" on a profile whose host key
+     * we have not yet pinned). The accept handler must trust the host
+     * key and then re-invoke `openProfile(profileId, pendingOpenTarget)`
+     * so the original navigation effect still fires after the TOFU
+     * round-trip — calling the manual-connect retry path instead would
+     * connect but never emit an [OpenProfileEffect] and the user would
+     * be left stuck on the Connections screen.
+     */
+    val pendingOpenTarget: OpenTarget? = null,
 )
 
 sealed class ConnectionListEvent {
