@@ -293,6 +293,88 @@ class TransferQueueViewModelTest {
     }
 
     @Test
+    fun `clearCompleted sets infoSnackbar with deleted count`() = runTest {
+        coEvery { clearCompletedTransfersUseCase() } returns 4
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(TransferEvent.ClearCompleted)
+        advanceUntilIdle()
+
+        viewModel.uiState.test {
+            val state = awaitItem()
+            assertThat(state.infoSnackbar).isEqualTo("4 completed transfers cleared")
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `pauseAll sets infoSnackbar on success`() = runTest {
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(TransferEvent.PauseAll)
+        advanceUntilIdle()
+
+        viewModel.uiState.test {
+            val state = awaitItem()
+            assertThat(state.infoSnackbar).isEqualTo("All active transfers paused")
+            assertThat(state.error).isNull()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `cancelAll sets infoSnackbar on success`() = runTest {
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(TransferEvent.CancelAll)
+        advanceUntilIdle()
+
+        viewModel.uiState.test {
+            val state = awaitItem()
+            assertThat(state.infoSnackbar).isEqualTo("All transfers cancelled")
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `clearInfo resets infoSnackbar`() = runTest {
+        coEvery { clearCompletedTransfersUseCase() } returns 2
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(TransferEvent.ClearCompleted)
+        advanceUntilIdle()
+        viewModel.onEvent(TransferEvent.ClearInfo)
+        advanceUntilIdle()
+
+        viewModel.uiState.test {
+            val state = awaitItem()
+            assertThat(state.infoSnackbar).isNull()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `clearCompleted error path leaves infoSnackbar null`() = runTest {
+        coEvery { clearCompletedTransfersUseCase() } throws RuntimeException("DB locked")
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(TransferEvent.ClearCompleted)
+        advanceUntilIdle()
+
+        viewModel.uiState.test {
+            val state = awaitItem()
+            assertThat(state.error).isEqualTo("DB locked")
+            assertThat(state.infoSnackbar).isNull()
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
     fun `error from pause is captured in ui state`() = runTest {
         coEvery { pauseTransferUseCase(any()) } throws RuntimeException("Pause failed")
         val viewModel = createViewModel()
@@ -309,7 +391,7 @@ class TransferQueueViewModelTest {
     }
 
     @Test
-    fun `pauseAll invokes use case and clears nothing`() = runTest {
+    fun `pauseAll invokes use case and leaves error null`() = runTest {
         val viewModel = createViewModel()
         advanceUntilIdle()
 

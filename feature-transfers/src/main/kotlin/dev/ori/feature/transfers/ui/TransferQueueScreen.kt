@@ -65,6 +65,16 @@ fun TransferQueueScreen(
         }
     }
 
+    // Bug I — toolbar buttons (Clear / PauseAll / CancelAll) need a visible
+    // confirmation. The success Snackbar is split from `error` so the host
+    // could render it with a neutral surface while errors stay tinted.
+    LaunchedEffect(uiState.infoSnackbar) {
+        uiState.infoSnackbar?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.onEvent(TransferEvent.ClearInfo)
+        }
+    }
+
     Scaffold(
         topBar = {
             OriTopBar(

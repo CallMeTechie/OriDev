@@ -26,7 +26,7 @@ interface TransferRecordDao {
     suspend fun update(record: TransferRecordEntity)
 
     @Query("DELETE FROM transfer_records WHERE status = 'COMPLETED'")
-    suspend fun clearCompleted()
+    suspend fun clearCompleted(): Int
 
     @Query(
         """
