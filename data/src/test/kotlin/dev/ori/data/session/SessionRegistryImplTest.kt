@@ -63,6 +63,7 @@ class SessionRegistryImplTest {
                 username = any(),
                 password = any<CharArray>(),
                 privateKey = any(),
+                protocol = any(),
             )
         } returns SshSession("s-A", 1L, "nas.local", 22, 1_000L)
     }
@@ -78,6 +79,7 @@ class SessionRegistryImplTest {
                 username = any(),
                 password = any<CharArray>(),
                 privateKey = any(),
+                protocol = any(),
             )
         } returns SshSession("s-B", 2L, "dev.local", 22, 2_000L)
     }
@@ -118,7 +120,7 @@ class SessionRegistryImplTest {
             assertThat(second.id).isEqualTo(first.id)
             assertThat(registry.openSessions.value).hasSize(1)
             coVerify(exactly = 1) {
-                sshClient.connect(any(), any(), any(), any<CharArray>(), any())
+                sshClient.connect(any(), any(), any(), any<CharArray>(), any(), any())
             }
         }
 
@@ -190,7 +192,7 @@ class SessionRegistryImplTest {
         coEvery { credentialStore.getPassword("kref_test") } returns "secret".toCharArray()
         // Handshake blocks forever until cancelled — simulates an in-flight SSH connect.
         coEvery {
-            sshClient.connect(any(), any(), any(), any<CharArray>(), any())
+            sshClient.connect(any(), any(), any(), any<CharArray>(), any(), any())
         } coAnswers {
             awaitCancellation()
         }
@@ -224,7 +226,7 @@ class SessionRegistryImplTest {
         coEvery { serverProfileDao.getById(1L) } returns testProfile.toEntity()
         coEvery { credentialStore.getPassword("kref_test") } returns "secret".toCharArray()
         coEvery {
-            sshClient.connect(any(), any(), any(), any<CharArray>(), any())
+            sshClient.connect(any(), any(), any(), any<CharArray>(), any(), any())
         } coAnswers { awaitCancellation() }
 
         val registry = registry()

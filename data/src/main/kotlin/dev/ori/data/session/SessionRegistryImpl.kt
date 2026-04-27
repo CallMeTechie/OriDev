@@ -141,6 +141,7 @@ class SessionRegistryImpl(
             host = sshSession.host,
             port = sshSession.port,
             connectedAt = sshSession.connectedAt,
+            protocol = profile.protocol,
         )
         _openSessions.update { it + session }
         _focusedSessionId.value = session.id

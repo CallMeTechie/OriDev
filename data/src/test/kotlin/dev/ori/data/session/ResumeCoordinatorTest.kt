@@ -448,6 +448,7 @@ class ResumeCoordinatorTest {
                 host = "host-$profileId",
                 port = 22,
                 connectedAt = 0L,
+                protocol = dev.ori.core.common.model.Protocol.SFTP,
             )
             _openSessions.value = _openSessions.value + session
             return Result.success(session)

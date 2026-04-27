@@ -1,11 +1,12 @@
 package dev.ori.data.repository
 
+import dev.ori.core.common.model.Protocol
 import dev.ori.core.network.model.RemoteFile
 import dev.ori.core.network.ssh.SshClient
-import dev.ori.data.di.DefaultSshClient
 import dev.ori.domain.model.FileItem
 import dev.ori.domain.repository.FileSystemRepository
 import dev.ori.domain.repository.RemoteFileSystemSession
+import dev.ori.domain.repository.SessionRegistry
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicReference
@@ -14,7 +15,8 @@ import javax.inject.Singleton
 
 @Singleton
 class RemoteFileSystemRepository @Inject constructor(
-    @DefaultSshClient private val sshClient: SshClient,
+    private val clients: Map<Protocol, @JvmSuppressWildcards SshClient>,
+    private val sessionRegistry: SessionRegistry,
 ) : FileSystemRepository, RemoteFileSystemSession {
 
     private val activeSessionId = AtomicReference<String?>(null)
@@ -30,26 +32,39 @@ class RemoteFileSystemRepository @Inject constructor(
 
     private fun requireSession(): String =
         activeSessionId.get()
-            ?: throw IllegalStateException("No active SSH session. Call setActiveSession() first.")
+            ?: throw IOException("No active SSH session")
+
+    /**
+     * Resolves the correct [SshClient] for the active session's protocol.
+     * Consults [SessionRegistry.openSessions] to find the [Session] whose id
+     * matches the active session, then looks up the protocol-keyed client map.
+     */
+    private fun client(): SshClient {
+        val sid = requireSession()
+        val proto = sessionRegistry.openSessions.value.firstOrNull { it.id == sid }?.protocol
+            ?: throw IOException("Session $sid not in registry")
+        return clients[proto] ?: throw IOException("No SshClient registered for protocol $proto")
+    }
 
     override suspend fun listFiles(path: String): List<FileItem> {
         val sessionId = requireSession()
-        return sshClient.listFiles(sessionId, path).map { it.toFileItem() }
+        return client().listFiles(sessionId, path).map { it.toFileItem() }
     }
 
     override suspend fun deleteFile(path: String) {
-        val r = sshClient.delete(requireSession(), listOf(path))
+        require(path.isNotBlank() && path != "/") { "Refusing to delete protected path: '$path'" }
+        val r = client().delete(requireSession(), listOf(path))
         if (!r.isFullSuccess) throw IOException("Delete failed: ${r.failed.firstOrNull()?.second ?: "unknown"}")
     }
 
     override suspend fun renameFile(oldPath: String, newPath: String) {
         val sessionId = requireSession()
-        sshClient.rename(sessionId, oldPath, newPath)
+        client().rename(sessionId, oldPath, newPath)
     }
 
     override suspend fun createDirectory(path: String) {
         val sessionId = requireSession()
-        sshClient.mkdir(sessionId, path)
+        client().mkdir(sessionId, path)
     }
 
     // chmod permissions are parsed as OCTAL: e.g. "755" -> 0755 (493 decimal).
@@ -57,14 +72,14 @@ class RemoteFileSystemRepository @Inject constructor(
     override suspend fun chmod(path: String, permissions: String) {
         val sessionId = requireSession()
         val octalPermissions = permissions.toInt(8)
-        sshClient.chmod(sessionId, path, octalPermissions)
+        client().chmod(sessionId, path, octalPermissions)
     }
 
     override suspend fun getFileContent(path: String): ByteArray {
         val sessionId = requireSession()
         val tempFile = File.createTempFile("oridev_download_", ".tmp")
         try {
-            sshClient.downloadFile(sessionId, path, tempFile.absolutePath)
+            client().downloadFile(sessionId, path, tempFile.absolutePath)
             return tempFile.readBytes()
         } finally {
             tempFile.delete()
@@ -76,7 +91,7 @@ class RemoteFileSystemRepository @Inject constructor(
         val tempFile = File.createTempFile("oridev_upload_", ".tmp")
         try {
             tempFile.writeBytes(content)
-            sshClient.uploadFile(sessionId, tempFile.absolutePath, path)
+            client().uploadFile(sessionId, tempFile.absolutePath, path)
         } finally {
             tempFile.delete()
         }
