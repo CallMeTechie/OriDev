@@ -3,7 +3,7 @@ package dev.ori.feature.filemanager.ui
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.draganddrop.dragAndDropSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,10 +21,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -54,9 +54,7 @@ fun FileItemRow(
     onLongClick: () -> Unit,
     onToggleSelection: () -> Unit,
     modifier: Modifier = Modifier,
-    onDragStart: () -> Unit = {},
-    onDragEnd: () -> Unit = {},
-    onDrop: () -> Unit = {},
+    onDragStart: (filePath: String) -> List<String> = { listOf(it) },
 ) {
     val backgroundColor = if (isSelected) Indigo50 else Color.Transparent
     val typeLabel = if (file.isDirectory) "Ordner" else "Datei"
@@ -76,17 +74,29 @@ fun FileItemRow(
                 contentDescription = rowDescription
                 stateDescription = selectionState
             }
-            .pointerInput(Unit) {
-                detectDragGesturesAfterLongPress(
-                    onDragStart = { onDragStart() },
-                    onDragEnd = {
-                        onDrop()
-                        onDragEnd()
-                    },
-                    onDragCancel = { onDragEnd() },
-                    onDrag = { change, _ -> change.consume() },
-                )
-            }
+            // Bug G fix — switch from `detectDragGesturesAfterLongPress` to the
+            // Compose-Foundation drag-and-drop API. The previous gesture
+            // detector fired `onDragEnd` on the SOURCE item when the finger
+            // lifted, regardless of where the finger was — so on a Pixel
+            // Fold the file-manager could never tell the user dropped on
+            // the OTHER pane. `dragAndDropSource` hands the payload to the
+            // platform, which routes drop events to whichever pane has a
+            // matching `dragAndDropTarget` modifier under the finger.
+            //
+            // `onDragStart` is called when the drag actually starts (after
+            // the platform's long-press detection). It returns the full
+            // list of paths to ship in the ClipData — the caller resolves
+            // multi-selection vs. single-tap-without-checkbox there. It
+            // also primes the `DragState` global so the pane border
+            // highlight on the OTHER pane reflects the in-flight drag.
+            .dragAndDropSource(
+                transferData = {
+                    val paths = onDragStart(file.path)
+                    DragAndDropTransferData(
+                        clipData = encodeClipData(paths),
+                    )
+                },
+            )
             // Phase 15 Task 15.5 — vertical padding 8dp → 4dp brings the
             // row from ~64dp down to ~48dp so power users see more
             // entries at once. Touch target stays ≥48dp via the

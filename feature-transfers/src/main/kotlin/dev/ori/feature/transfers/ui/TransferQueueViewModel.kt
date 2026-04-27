@@ -51,19 +51,35 @@ class TransferQueueViewModel @Inject constructor(
 
     fun onEvent(event: TransferEvent) {
         when (event) {
-            is TransferEvent.SetFilter -> _uiState.update { it.copy(filter = event.filter) }
+            is TransferEvent.SetFilter -> _uiState.update {
+                it.copy(
+                    filter = event.filter,
+                    transfers = applyFilter(it.allTransfers, event.filter),
+                )
+            }
             is TransferEvent.PauseTransfer -> pauseTransfer(event.transferId)
             is TransferEvent.ResumeTransfer -> resumeTransfer(event.transferId)
             is TransferEvent.CancelTransfer -> cancelTransfer(event.transferId)
             is TransferEvent.RetryTransfer -> retryTransfer(event.transfer)
             is TransferEvent.ClearCompleted -> clearCompleted()
             is TransferEvent.ClearError -> _uiState.update { it.copy(error = null) }
+            is TransferEvent.ClearInfo -> _uiState.update { it.copy(infoSnackbar = null) }
             TransferEvent.PauseAll -> viewModelScope.launch {
                 runCatching { pauseAllTransfersUseCase() }
+                    .onSuccess {
+                        _uiState.update {
+                            it.copy(infoSnackbar = "All active transfers paused")
+                        }
+                    }
                     .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
             }
             TransferEvent.CancelAll -> viewModelScope.launch {
                 runCatching { cancelAllTransfersUseCase() }
+                    .onSuccess {
+                        _uiState.update {
+                            it.copy(infoSnackbar = "All transfers cancelled")
+                        }
+                    }
                     .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
             }
             is TransferEvent.ResolveConflict -> {
@@ -87,6 +103,7 @@ class TransferQueueViewModel @Inject constructor(
                 .collect { transfers ->
                     _uiState.update {
                         it.copy(
+                            allTransfers = transfers,
                             transfers = applyFilter(transfers, it.filter),
                             isLoading = false,
                         )
@@ -153,6 +170,11 @@ class TransferQueueViewModel @Inject constructor(
     private fun clearCompleted() {
         viewModelScope.launch {
             runCatching { clearCompletedTransfersUseCase() }
+                .onSuccess { count ->
+                    _uiState.update {
+                        it.copy(infoSnackbar = "$count completed transfers cleared")
+                    }
+                }
                 .onFailure { e ->
                     _uiState.update {
                         it.copy(error = e.message ?: "Failed to clear completed transfers")
