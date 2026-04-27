@@ -276,7 +276,12 @@ fun FileListPane(
                                         onShowFilePreview(file)
                                     }
                                 },
-                                onLongClick = {
+                                // Bug K fix — long-press is now exclusive to
+                                // the drag source (`dragAndDropSource`).
+                                // Context-menu access goes through the row's
+                                // explicit 3-dot button, which routes here as
+                                // `onShowMenu` instead of `onLongClick`.
+                                onShowMenu = {
                                     contextMenuFile = file
                                     onShowContextMenu(file)
                                 },
