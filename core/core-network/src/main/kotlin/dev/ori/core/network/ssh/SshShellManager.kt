@@ -91,11 +91,13 @@ class SshShellManager @Inject constructor() {
             session.allocatePTY(term, cols, rows, 0, 0, emptyMap())
             val shell = session.startShell()
             return SshShellSession(session, shell)
-        } catch (t: Throwable) {
+        } catch (@Suppress("TooGenericExceptionCaught") t: Throwable) {
             // If allocatePTY/startShell fails, the underlying SSHJ Session must be
             // closed so the channel is freed before any retry — otherwise the retry
             // path doubles the open-channel pressure on quirky servers (Synology
-            // DSM 7.2 already chokes on two channels in flight, see Bug E).
+            // DSM 7.2 already chokes on two channels in flight, see Bug E). We
+            // intentionally catch Throwable so even unchecked exceptions don't
+            // leak the channel.
             runCatching { session.close() }
             throw t
         }
