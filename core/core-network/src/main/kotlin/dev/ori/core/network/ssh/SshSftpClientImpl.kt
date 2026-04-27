@@ -1,11 +1,16 @@
 package dev.ori.core.network.ssh
 
+import android.content.ContentResolver
+import android.content.Context
+import android.net.Uri
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.ori.core.common.model.Protocol
 import dev.ori.core.network.model.DeleteResult
 import dev.ori.core.network.model.RemoteFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.sftp.SFTPClient
+import java.io.IOException
 import java.io.RandomAccessFile
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -13,7 +18,10 @@ import javax.inject.Singleton
 @Singleton
 class SshSftpClientImpl @Inject constructor(
     private val sessionStore: SshSessionStore,
+    @ApplicationContext private val context: Context,
 ) : SshClient {
+
+    private val contentResolver: ContentResolver get() = context.contentResolver
 
     /**
      * See [SshClient.connect] for the security contract — [SshSessionStore]
@@ -158,6 +166,10 @@ class SshSftpClientImpl @Inject constructor(
         offsetBytes: Long,
         onProgress: suspend (transferred: Long, total: Long) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
+        if (localPath.startsWith(CONTENT_URI_PREFIX)) {
+            uploadResumableFromContentUri(sessionId, localPath, remotePath, offsetBytes, onProgress)
+            return@withContext
+        }
         val sftp = sessionStore.getSession(sessionId).client.newSFTPClient()
         try {
             val localFile = java.io.File(localPath)
@@ -230,6 +242,10 @@ class SshSftpClientImpl @Inject constructor(
         offsetBytes: Long,
         onProgress: suspend (transferred: Long, total: Long) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
+        if (localPath.startsWith(CONTENT_URI_PREFIX)) {
+            downloadResumableToContentUri(sessionId, remotePath, localPath, offsetBytes, onProgress)
+            return@withContext
+        }
         val sftp = sessionStore.getSession(sessionId).client.newSFTPClient()
         try {
             val remoteFile = sftp.open(remotePath)
@@ -355,6 +371,89 @@ class SshSftpClientImpl @Inject constructor(
         SshShellManager().openShell(client, cols, rows)
     }
 
+    /**
+     * Resumable-upload SAF branch.
+     *
+     * The SAF / `content://` URI carries no random-access semantics — the
+     * `ContentResolver`'s `InputStream` is one-shot. SSHJ's
+     * `SFTPFileTransfer.upload(LocalSourceFile, ...)` likewise streams the
+     * source linearly, so `offsetBytes > 0` cannot be honoured here. We
+     * fail fast with an IOException so the Transfer Engine surfaces a
+     * clean error instead of producing a corrupt destination.
+     *
+     * For `offsetBytes == 0` we delegate to the same SafSourceFile +
+     * `fileTransfer.upload` path as the non-resumable [uploadFile]
+     * overload. Progress is bracketed with `0/total` and `total/total`
+     * because the SSHJ file-transfer API does not expose intra-call
+     * progress for the SAF stream we feed it.
+     */
+    private suspend fun uploadResumableFromContentUri(
+        sessionId: String,
+        localPath: String,
+        remotePath: String,
+        offsetBytes: Long,
+        onProgress: suspend (transferred: Long, total: Long) -> Unit,
+    ) {
+        if (offsetBytes > 0L) {
+            throw IOException(
+                "Resumable upload from content:// URI is not supported (offsetBytes=$offsetBytes)",
+            )
+        }
+        val sourceUri = Uri.parse(localPath)
+        val resolver = contentResolver
+        val length = try {
+            resolver.openFileDescriptor(sourceUri, "r")?.use { it.statSize } ?: 0L
+        } catch (_: Exception) {
+            0L
+        }
+        val src = SafSourceFile(
+            sourceUri,
+            resolver,
+            length,
+            sourceUri.lastPathSegment ?: "upload",
+        )
+        onProgress(0L, length)
+        withSftpClient(sessionId) { sftp -> sftp.fileTransfer.upload(src, remotePath) }
+        onProgress(length, length)
+    }
+
+    /**
+     * Resumable-download SAF branch.
+     *
+     * Mirror image of [uploadResumableFromContentUri]: the SAF `OutputStream`
+     * cannot be rewound or seeked, so `offsetBytes > 0` is rejected with
+     * IOException. For `offsetBytes == 0` we delegate to
+     * `fileTransfer.download` with a [SafDestFile]. Progress is bracketed
+     * with `0/total` / `total/total` for the same reason as the upload
+     * branch.
+     */
+    private suspend fun downloadResumableToContentUri(
+        sessionId: String,
+        remotePath: String,
+        localPath: String,
+        offsetBytes: Long,
+        onProgress: suspend (transferred: Long, total: Long) -> Unit,
+    ) {
+        if (offsetBytes > 0L) {
+            throw IOException(
+                "Resumable download to content:// URI is not supported (offsetBytes=$offsetBytes)",
+            )
+        }
+        val destUri = Uri.parse(localPath)
+        val resolver = contentResolver
+        val dst = SafDestFile(destUri, resolver, destUri.lastPathSegment ?: "download")
+        val total = withSftpClient(sessionId) { sftp ->
+            try {
+                sftp.stat(remotePath).size
+            } catch (_: Exception) {
+                0L
+            }
+        }
+        onProgress(0L, total)
+        withSftpClient(sessionId) { sftp -> sftp.fileTransfer.download(remotePath, dst) }
+        onProgress(total, total)
+    }
+
     // Defense-in-depth: `SshSessionStore.getSession` already rejects disconnected
     // clients, but we also gate here so every SFTP operation gets the same
     // IOException (not SSHJ's internal IllegalStateException) if the session
@@ -382,5 +481,6 @@ class SshSftpClientImpl @Inject constructor(
     companion object {
         private const val TRANSFER_BUFFER_SIZE = 32_768
         private const val CHUNK_SIZE = 32 * 1024
+        private const val CONTENT_URI_PREFIX = "content://"
     }
 }
