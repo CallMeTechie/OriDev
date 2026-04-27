@@ -207,6 +207,106 @@ class SshScpClientImplTest {
         assertThat(ex.message).contains("chmod failed")
     }
 
+    @Test fun delete_oneFails_returnsDeleteResult() = kotlinx.coroutines.test.runTest {
+        setupExec(stdout = "", stderr = "rm: cannot remove '/b': Permission denied\n", exit = 1)
+        val r = sshClient.delete("s1", listOf("/a", "/b", "/c"))
+        assertThat(r.failed.map { it.first }).containsExactly("/b")
+        assertThat(r.succeeded).containsExactly("/a", "/c").inOrder()
+    }
+
+    @Test fun delete_emptyPaths_returnsEmpty() = kotlinx.coroutines.test.runTest {
+        // No exec invoked; aggregate equals DeleteResult.EMPTY.
+        val client = mockk<net.schmizz.sshj.SSHClient>(relaxed = true)
+        every { store.getSession("s1") } returns LiveSession(
+            client,
+            Protocol.SCP,
+            false,
+            java.util.concurrent.atomic.AtomicReference(NameCache.empty()),
+        )
+        val r = sshClient.delete("s1", emptyList())
+        assertThat(r.succeeded).isEmpty()
+        assertThat(r.failed).isEmpty()
+        io.mockk.verify(exactly = 0) { client.startSession() }
+    }
+
+    @Test fun delete_pathWithSingleQuote_landsInResult() = kotlinx.coroutines.test.runTest {
+        // Paths containing `'` are shell-escaped to `'\''`. The stderr from `rm` reads
+        // back the path with the same escape sequence. Parser must handle that, otherwise
+        // the path silently vanishes from succeeded AND failed (worst-case UX: file
+        // appears deleted when it isn't).
+        setupExec(
+            stdout = "",
+            stderr = "rm: cannot remove '/home/marc/it'\\''s here': Permission denied\n",
+            exit = 1,
+        )
+        val r = sshClient.delete("s1", listOf("/home/marc/it's here"))
+        assertThat(r.failed).hasSize(1)
+        assertThat(r.failed[0].first).isEqualTo("/home/marc/it's here")
+        assertThat(r.succeeded).isEmpty()
+    }
+
+    @Test fun delete_failureSpansBatches_aggregatesAcrossBatches() = kotlinx.coroutines.test.runTest {
+        // 250 paths → 2 batches (200 + 50). Batch 1 reports two failures; batch 2 succeeds.
+        // Aggregate must reflect 248 succeeded + 2 failed, with the right paths.
+        val client = mockk<net.schmizz.sshj.SSHClient>(relaxed = true)
+        every { store.getSession("s1") } returns LiveSession(
+            client,
+            Protocol.SCP,
+            false,
+            java.util.concurrent.atomic.AtomicReference(NameCache.empty()),
+        )
+        val s = mockk<net.schmizz.sshj.connection.channel.direct.Session>(relaxed = true)
+        val cmd1 = mockk<net.schmizz.sshj.connection.channel.direct.Session.Command>(relaxed = true)
+        val cmd2 = mockk<net.schmizz.sshj.connection.channel.direct.Session.Command>(relaxed = true)
+        every { client.startSession() } returns s
+        every { s.exec(any()) } returnsMany listOf(cmd1, cmd2)
+        every { cmd1.inputStream } returns java.io.ByteArrayInputStream(ByteArray(0))
+        every { cmd1.errorStream } returns java.io.ByteArrayInputStream(
+            (
+                "rm: cannot remove '/p50': Permission denied\n" +
+                    "rm: cannot remove '/p100': Permission denied\n"
+                ).toByteArray(),
+        )
+        every { cmd1.exitStatus } returns 1
+        every { cmd2.inputStream } returns java.io.ByteArrayInputStream(ByteArray(0))
+        every { cmd2.errorStream } returns java.io.ByteArrayInputStream(ByteArray(0))
+        every { cmd2.exitStatus } returns 0
+
+        val r = sshClient.delete("s1", (1..250).map { "/p$it" })
+
+        assertThat(r.succeeded).hasSize(248)
+        assertThat(r.failed.map { it.first }).containsExactly("/p50", "/p100").inOrder()
+    }
+
+    @Test fun delete_nonZeroExitButEmptyStderr_treatsAllAsFailed() = kotlinx.coroutines.test.runTest {
+        // Defensive: if rm reports failure but stderr can't be parsed, do NOT silently
+        // attribute success to the batch. Mark all items as failed with a synthetic reason.
+        setupExec(stdout = "", stderr = "", exit = 1)
+        val r = sshClient.delete("s1", listOf("/a", "/b"))
+        assertThat(r.succeeded).isEmpty()
+        assertThat(r.failed.map { it.first }).containsExactly("/a", "/b")
+    }
+
+    @Test fun delete_450Paths_makes3Batches() = kotlinx.coroutines.test.runTest {
+        // Setup: 3 successive exec invocations all return exit 0.
+        val client = mockk<net.schmizz.sshj.SSHClient>(relaxed = true)
+        every { store.getSession("s1") } returns LiveSession(
+            client,
+            Protocol.SCP,
+            false,
+            java.util.concurrent.atomic.AtomicReference(NameCache.empty()),
+        )
+        val s = mockk<net.schmizz.sshj.connection.channel.direct.Session>(relaxed = true)
+        val c = mockk<net.schmizz.sshj.connection.channel.direct.Session.Command>(relaxed = true)
+        every { client.startSession() } returns s
+        every { s.exec(any()) } returns c
+        every { c.inputStream } returns java.io.ByteArrayInputStream(ByteArray(0))
+        every { c.errorStream } returns java.io.ByteArrayInputStream(ByteArray(0))
+        every { c.exitStatus } returns 0
+        sshClient.delete("s1", (1..450).map { "/p$it" })
+        io.mockk.verify(exactly = 3) { client.startSession() }
+    }
+
     private fun setupExec(stdout: String, stderr: String, exit: Int): io.mockk.CapturingSlot<String> {
         val client = mockk<net.schmizz.sshj.SSHClient>(relaxed = true)
         every { store.getSession("s1") } returns LiveSession(

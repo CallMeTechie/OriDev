@@ -143,13 +143,56 @@ class SshScpClientImpl @Inject constructor(
         runShellOrFail(sessionId, "chmod", "chmod $asOctal ${shellEscape(path)}")
     }
 
-    override suspend fun delete(sessionId: String, paths: List<String>): DeleteResult = TODO("Task 14")
+    override suspend fun delete(sessionId: String, paths: List<String>): DeleteResult =
+        withContext(Dispatchers.IO) {
+            if (paths.isEmpty()) return@withContext DeleteResult.EMPTY
+            val live = sessionStore.getSession(sessionId)
+            var aggregate = DeleteResult.EMPTY
+            for (batch in paths.chunked(MAX_BATCH_ARGS)) {
+                val joined = batch.joinToString(" ") { shellEscape(it) }
+                val r = ShellInvocation.run(live.client, "rm -- $joined", live.bashAvailable)
+                aggregate = aggregate.merge(parseRm(batch, r))
+            }
+            aggregate
+        }
+
+    private fun parseRm(batch: List<String>, r: ShellResult): DeleteResult {
+        if (r.exitCode == 0) return DeleteResult(succeeded = batch, failed = emptyList())
+        // Robust matcher: GNU rm's failure line shape is `rm: cannot remove 'X': REASON`,
+        // where X may contain shell-escaped single quotes (`'\''`). A naive `[^']+` regex
+        // truncates the path at the first quote and silently drops the entry from both
+        // buckets. Instead match by anchored prefix/suffix and unescape inside.
+        val prefix = "rm: cannot remove '"
+        val failed = r.stderr.lineSequence().mapNotNull { rawLine ->
+            val line = rawLine.trim()
+            if (!line.startsWith(prefix)) return@mapNotNull null
+            // After prefix, the path is everything up to the LAST occurrence of `': `.
+            val end = line.lastIndexOf("': ")
+            if (end < prefix.length) return@mapNotNull null
+            val pathEscaped = line.substring(prefix.length, end)
+            val reason = line.substring(end + 3)
+            val path = pathEscaped.replace("'\\''", "'") // un-do shellEscape's POSIX trick
+            path to reason
+        }.toList()
+        val failedSet = failed.map { it.first }.toSet()
+        if (failed.isEmpty()) {
+            // Non-zero exit but no parseable failure lines (rate-limit, OOM on remote shell,
+            // generic error) — treat the entire batch as failed with a synthetic reason.
+            return DeleteResult(
+                succeeded = emptyList(),
+                failed = batch.map { it to "rm exited ${r.exitCode}" },
+            )
+        }
+        return DeleteResult(succeeded = batch.filter { it !in failedSet }, failed = failed)
+    }
 
     override suspend fun fileSize(sessionId: String, remotePath: String): Long? = withContext(Dispatchers.IO) {
         val live = sessionStore.getSession(sessionId)
         val r = ShellInvocation.run(live.client, "stat -c %s ${shellEscape(remotePath)}", live.bashAvailable)
         if (r.exitCode != 0) null else r.stdout.trim().toLongOrNull()
     }
+
+    companion object { private const val MAX_BATCH_ARGS = 200 }
 
     private suspend fun runShellOrFail(sessionId: String, verb: String, inner: String) =
         withContext(Dispatchers.IO) {
