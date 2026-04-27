@@ -337,11 +337,9 @@ class TerminalViewModel @Inject constructor(
      * (nothing to restore), so without this observer the Terminal tab would
      * open empty and the user would have to press `+` manually.
      *
-     * Invariant: exactly one tab per focused session is opened when no tab
-     * already represents that session AND no restore latch is active for
-     * its profile. Duplicate-emission suppression is inherent to
-     * [StateFlow] (operator fusion) so rapid identical updates do not
-     * trigger redundant opens.
+     * Race guard: the latch is claimed atomically with [AtomicBoolean.compareAndSet]
+     * BEFORE calling [openNewTab]. If the restore-observer has already claimed
+     * the latch first, this observer exits immediately so only one opener runs.
      */
     private fun installFocusObserver() {
         sessionRegistry.focusedSessionId
@@ -351,8 +349,8 @@ class TerminalViewModel @Inject constructor(
                     .firstOrNull { it.id == focusedId } ?: return@onEach
                 val alreadyHasTab = _uiState.value.tabs.any { it.sessionId == focusedId }
                 if (alreadyHasTab) return@onEach
-                val latch = restoreLatches[session.profileId]
-                if (latch?.get() == true) return@onEach
+                val latch = restoreLatches.computeIfAbsent(session.profileId) { AtomicBoolean(false) }
+                if (!latch.compareAndSet(false, true)) return@onEach // restore-observer claimed it first
                 openNewTab(session.profileId)
             }
             .launchIn(viewModelScope)
@@ -361,20 +359,21 @@ class TerminalViewModel @Inject constructor(
     /**
      * Full Session Persistence Task 8 — open any missing PTYs per
      * persisted [TabMemo], once per profile. The per-profile latch is
-     * checked before any work and flipped to `true` only after
-     * [openNewTabInternal] has successfully completed `tabCount -
-     * currentPtys` iterations, so a mid-restore failure leaves the
-     * latch `false` and the observer retries on the next qualifying
-     * emission. Option B: user-opened tabs during restore are additive
-     * — the `max(0, ...)` subtraction means the restore path only
-     * tops up tabs, never closes anything.
+     * claimed atomically with [AtomicBoolean.compareAndSet] BEFORE any
+     * work so that a concurrent focus-observer cannot also enter the
+     * open path for the same profile. If the claim fails (focus-observer
+     * won the race), this profile is skipped. On [IOException] the latch
+     * is reset to `false` so the next qualifying emission retries.
+     * Option B: user-opened tabs during restore are additive — the
+     * `max(0, ...)` subtraction means the restore path only tops up
+     * tabs, never closes anything.
      */
     private suspend fun restoreMissingTabs(sessions: List<Session>, memos: List<TabMemo>) {
         val byProfile = sessions.groupBy { it.profileId }
         for (memo in memos) {
             val sessionsForProfile = byProfile[memo.profileId] ?: continue
             val latch = restoreLatches.computeIfAbsent(memo.profileId) { AtomicBoolean(false) }
-            if (latch.get()) continue
+            if (!latch.compareAndSet(false, true)) continue // focus-observer claimed it first
 
             val session = sessionsForProfile.first()
             val currentPtys = _uiState.value.tabs.count { it.profileId == memo.profileId }
@@ -383,15 +382,11 @@ class TerminalViewModel @Inject constructor(
                 repeat(toOpen) {
                     openNewTabInternal(session)
                 }
-                // Latch ONLY after full completion — if openNewTabInternal
-                // threw mid-way, we skip the set() below and the next
-                // qualifying emission retries.
-                latch.set(true)
             } catch (e: IOException) {
-                // Swallow here so the outer observer coroutine stays
-                // alive; the latch is intentionally left `false` so
-                // the next emission retries the restore. The error
-                // state is already surfaced by openNewTabInternal.
+                // Reset latch so the next qualifying emission can retry.
+                latch.set(false)
+                // Swallow here so the outer observer coroutine stays alive.
+                // The error state is already surfaced by openNewTabInternal.
                 NonFatalErrorLogger.log(
                     category = "terminal-restore",
                     throwable = e,
