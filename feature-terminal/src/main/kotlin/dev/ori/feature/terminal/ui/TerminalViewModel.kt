@@ -15,6 +15,7 @@ import dev.ori.core.security.clipboard.OriClipboard
 import dev.ori.core.security.crash.NonFatalErrorLogger
 import dev.ori.core.ui.theme.TerminalBackground
 import dev.ori.core.ui.theme.TerminalText
+import dev.ori.data.di.DefaultSshClient
 import dev.ori.data.session.ResumeCoordinator
 import dev.ori.domain.model.CommandSnippet
 import dev.ori.domain.model.ServerProfile
@@ -80,7 +81,7 @@ internal fun computeActiveTabId(state: TerminalUiState, isSplitActive: Boolean):
 @HiltViewModel
 @Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
 class TerminalViewModel @Inject constructor(
-    private val sshClient: SshClient,
+    @DefaultSshClient private val sshClient: SshClient,
     private val connectionRepository: ConnectionRepository,
     private val sessionRegistry: SessionRegistry,
     private val getSnippetsUseCase: GetSnippetsUseCase,

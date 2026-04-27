@@ -27,6 +27,11 @@ import org.junit.jupiter.api.Test
 class SessionRegistryImplTest {
 
     private val sshClient = mockk<SshClient>(relaxed = true)
+    private val clients: Map<Protocol, SshClient> = mapOf(
+        Protocol.SSH to sshClient,
+        Protocol.SFTP to sshClient,
+        Protocol.SCP to sshClient,
+    )
     private val credentialStore = mockk<CredentialStore>(relaxed = true)
     private val serverProfileDao = mockk<ServerProfileDao>(relaxed = true)
     private val lifecycleBinder = mockk<SessionRegistryImpl.ServiceLifecycleBinder>(relaxed = true)
@@ -45,7 +50,7 @@ class SessionRegistryImplTest {
 
     private fun registry(dispatcher: CoroutineDispatcher? = null) =
         SessionRegistryImpl(
-            sshClient,
+            clients,
             credentialStore,
             serverProfileDao,
             lifecycleBinder,
