@@ -346,6 +346,12 @@ class SshSftpClientImpl @Inject constructor(
         }
     }
 
+    /**
+     * Opens a PTY shell channel for [sessionId]. The single-retry policy lives
+     * in [SshShellManager.openShell] — we delegate so SFTP and SCP share the
+     * same Synology-quirk handling (see Bug E: Pixel Fold + Synology DSM 7.2
+     * "Broken transport; encountered EOF" right after probeBash).
+     */
     override suspend fun openShell(
         sessionId: String,
         cols: Int,
