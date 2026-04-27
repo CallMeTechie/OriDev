@@ -64,9 +64,18 @@ class SshSftpClientImpl @Inject constructor(
 
     override suspend fun executeCommand(sessionId: String, command: String): CommandResult {
         val client = sessionStore.getSession(sessionId).client
-        val session = client.startSession()
+        // Bug K fix — `client.startSession()` may throw IllegalStateException
+        // ("Not connected") if the SSHJ Reader thread invalidated the transport
+        // between getSession's check and now. Mirror the IOException
+        // translation done in `openShell` / `withSftpClient` so the Worker's
+        // auto-reconnect path (Bug J) can recover instead of crashing.
+        val sshjSession = try {
+            client.startSession()
+        } catch (e: IllegalStateException) {
+            throw IOException("SSH session terminated mid-operation: $sessionId", e)
+        }
         return try {
-            val cmd = session.exec(command)
+            val cmd = sshjSession.exec(command)
             val stdout = cmd.inputStream.bufferedReader().readText()
             val stderr = cmd.errorStream.bufferedReader().readText()
             cmd.join()
@@ -76,7 +85,7 @@ class SshSftpClientImpl @Inject constructor(
                 stderr = stderr,
             )
         } finally {
-            session.close()
+            sshjSession.close()
         }
     }
 
@@ -170,7 +179,16 @@ class SshSftpClientImpl @Inject constructor(
             uploadResumableFromContentUri(sessionId, localPath, remotePath, offsetBytes, onProgress)
             return@withContext
         }
-        val sftp = sessionStore.getSession(sessionId).client.newSFTPClient()
+        // Bug K fix — same race-window translation as `withSftpClient`
+        // (see comment there). The Worker's drop-triggered upload path
+        // crashed with `IllegalStateException("Not connected")` when the
+        // SSHJ Reader thread pruned the transport between getSession's
+        // check and `newSFTPClient()`.
+        val sftp = try {
+            sessionStore.getSession(sessionId).client.newSFTPClient()
+        } catch (e: IllegalStateException) {
+            throw IOException("SSH session terminated mid-operation: $sessionId", e)
+        }
         try {
             val localFile = java.io.File(localPath)
             val localSize = localFile.length()
@@ -246,7 +264,14 @@ class SshSftpClientImpl @Inject constructor(
             downloadResumableToContentUri(sessionId, remotePath, localPath, offsetBytes, onProgress)
             return@withContext
         }
-        val sftp = sessionStore.getSession(sessionId).client.newSFTPClient()
+        // Bug K fix — same race-window translation as `withSftpClient`
+        // (see comment there). Mirrors the upload path so resumable
+        // downloads also surface IOException for the Worker retry.
+        val sftp = try {
+            sessionStore.getSession(sessionId).client.newSFTPClient()
+        } catch (e: IllegalStateException) {
+            throw IOException("SSH session terminated mid-operation: $sessionId", e)
+        }
         try {
             val remoteFile = sftp.open(remotePath)
             try {
@@ -367,6 +392,15 @@ class SshSftpClientImpl @Inject constructor(
      * in [SshShellManager.openShell] — we delegate so SFTP and SCP share the
      * same Synology-quirk handling (see Bug E: Pixel Fold + Synology DSM 7.2
      * "Broken transport; encountered EOF" right after probeBash).
+     *
+     * Bug K fix — `SSHClient.startSession()` (used by `SshShellManager`) calls
+     * SSHJ's private `checkConnected()` which throws
+     * [IllegalStateException]("Not connected") when the Reader thread has
+     * just torn the transport down between [SshSessionStore.getSession]'s
+     * `isConnected` check and the actual channel open. We translate that
+     * race window to [IOException] so callers (TransferWorker via
+     * `SshTransferExecutor`) take the auto-reconnect path landed in Bug J
+     * instead of crashing the app on Main.
      */
     override suspend fun openShell(
         sessionId: String,
@@ -374,7 +408,11 @@ class SshSftpClientImpl @Inject constructor(
         rows: Int,
     ): ShellHandle = withContext(Dispatchers.IO) {
         val client = sessionStore.getSession(sessionId).client
-        SshShellManager().openShell(client, cols, rows)
+        try {
+            SshShellManager().openShell(client, cols, rows)
+        } catch (e: IllegalStateException) {
+            throw IOException("SSH session terminated mid-operation: $sessionId", e)
+        }
     }
 
     /**
@@ -473,10 +511,23 @@ class SshSftpClientImpl @Inject constructor(
     // `FileManagerViewModel.viewModelScope` is `Dispatchers.Main`. That tripped
     // `NetworkOnMainThreadException` on Pixel Fold (API 36); reproduced four
     // times in oridev-error-listfiles-right-2026-04-25-22-04-*.txt.
+    //
+    // Bug K fix — `SSHClient.newSFTPClient()` calls SSHJ's private
+    // `checkConnected()` which throws [IllegalStateException]("Not connected")
+    // if the Reader thread invalidates the transport between
+    // `getSession`'s `isConnected` check and the actual channel open
+    // (race observed in oridev-crash-2026-04-27-20-28-01.txt while the
+    // Worker uploaded after a drop). Translating to [IOException] here
+    // lets the upstream Worker / `SshTransferExecutor.resolveSessionId`
+    // take the Bug J auto-reconnect path instead of crashing.
     private suspend fun <T> withSftpClient(sessionId: String, block: (SFTPClient) -> T): T =
         withContext(Dispatchers.IO) {
             val client = sessionStore.getSession(sessionId).client
-            val sftp = client.newSFTPClient()
+            val sftp = try {
+                client.newSFTPClient()
+            } catch (e: IllegalStateException) {
+                throw IOException("SSH session terminated mid-operation: $sessionId", e)
+            }
             try {
                 block(sftp)
             } finally {
