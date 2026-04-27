@@ -3,10 +3,12 @@ package dev.ori.feature.filemanager.ui
 import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
+import dev.ori.core.common.model.Protocol
 import dev.ori.domain.model.FileItem
 import dev.ori.domain.model.GrantedTree
 import dev.ori.domain.model.Session
 import dev.ori.domain.model.TabMemo
+import dev.ori.domain.model.TransferRequest
 import dev.ori.domain.preferences.SessionResumePreferences
 import dev.ori.domain.repository.BookmarkRepository
 import dev.ori.domain.repository.ConnectionRepository
@@ -355,7 +357,7 @@ class FileManagerViewModelTest {
         val focusFlow = MutableStateFlow<String?>(null)
         every { sessionRegistry.focusedSessionId } returns focusFlow
         every { sessionRegistry.openSessions } returns MutableStateFlow(
-            listOf(Session("s-A", 1L, "NAS", "nas.local", 22, 1L, dev.ori.core.common.model.Protocol.SFTP)),
+            listOf(Session("s-A", 1L, "NAS", "nas.local", 22, 1L, Protocol.SFTP)),
         )
         coEvery { remoteRepository.listFiles("/") } returns emptyList()
 
@@ -394,7 +396,7 @@ class FileManagerViewModelTest {
         val focusFlow = MutableStateFlow<String?>(null)
         every { sessionRegistry.focusedSessionId } returns focusFlow
         every { sessionRegistry.openSessions } returns MutableStateFlow(
-            listOf(Session("s1", 1L, "NAS", "nas.local", 22, 1L, dev.ori.core.common.model.Protocol.SFTP)),
+            listOf(Session("s1", 1L, "NAS", "nas.local", 22, 1L, Protocol.SFTP)),
         )
         coEvery { remoteRepository.listFiles(any()) } returns emptyList()
 
@@ -420,7 +422,7 @@ class FileManagerViewModelTest {
         val focusFlow = MutableStateFlow<String?>(null)
         every { sessionRegistry.focusedSessionId } returns focusFlow
         every { sessionRegistry.openSessions } returns MutableStateFlow(
-            listOf(Session("s42", 42L, "NAS", "nas.local", 22, 1L, dev.ori.core.common.model.Protocol.SFTP)),
+            listOf(Session("s42", 42L, "NAS", "nas.local", 22, 1L, Protocol.SFTP)),
         )
         sessionResumePrefs.remotePathsValue.value = mapOf(42L to "/persisted")
         coEvery { remoteRepository.listFiles("/persisted") } returns emptyList()
@@ -431,6 +433,41 @@ class FileManagerViewModelTest {
         testScheduler.advanceUntilIdle()
 
         assertThat(viewModel.uiState.value.rightPane.currentPath).isEqualTo("/persisted")
+    }
+
+    @Test
+    fun initiateTransfer_usesActiveSessionProfileId_notHardcoded() = runTest {
+        val activeProfileId = 42L
+        val sessionId = "active-session"
+        val focusFlow = MutableStateFlow<String?>(sessionId)
+        every { sessionRegistry.focusedSessionId } returns focusFlow
+        every { sessionRegistry.openSessions } returns MutableStateFlow(
+            listOf(Session(sessionId, activeProfileId, "NAS", "nas.local", 22, 1L, Protocol.SFTP)),
+        )
+        coEvery { remoteRepository.listFiles(any()) } returns emptyList()
+        val capturedRequests = mutableListOf<TransferRequest>()
+        coEvery { enqueueTransferUseCase(any()) } answers {
+            capturedRequests.add(firstArg())
+            1L
+        }
+
+        val viewModel = createViewModel()
+        viewModel.onEvent(FileManagerEvent.InitiateTransfer(listOf("/local/file.txt"), ActivePane.LEFT))
+
+        assertThat(capturedRequests).isNotEmpty()
+        assertThat(capturedRequests.last().serverProfileId).isEqualTo(activeProfileId)
+    }
+
+    @Test
+    fun initiateTransfer_noActiveSession_showsSnackbarAndDoesNotEnqueue() = runTest {
+        every { sessionRegistry.focusedSessionId } returns MutableStateFlow<String?>(null)
+        every { sessionRegistry.openSessions } returns MutableStateFlow(emptyList())
+
+        val viewModel = createViewModel()
+        viewModel.onEvent(FileManagerEvent.InitiateTransfer(listOf("/local/file.txt"), ActivePane.LEFT))
+
+        coVerify(exactly = 0) { enqueueTransferUseCase(any()) }
+        assertThat(viewModel.uiState.value.transferSnackbar).contains("aktive SSH-Verbindung")
     }
 
     companion object {
