@@ -4,8 +4,10 @@ import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import dev.ori.core.common.model.AuthMethod
 import dev.ori.core.common.model.Protocol
+import dev.ori.core.network.ssh.SessionDisconnectListener
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.core.network.ssh.SshSession
+import dev.ori.core.network.ssh.SshSessionStore
 import dev.ori.data.dao.ServerProfileDao
 import dev.ori.data.mapper.toEntity
 import dev.ori.domain.model.ServerProfile
@@ -37,6 +39,25 @@ class SessionRegistryImplTest {
     private val lifecycleBinder = mockk<SessionRegistryImpl.ServiceLifecycleBinder>(relaxed = true)
     private val sessionPersistence = mockk<SessionPersistencePreferences>(relaxed = true)
 
+    /**
+     * Minimal fake for [SshSessionStore] that captures the registered
+     * [SessionDisconnectListener] so tests can trigger simulated
+     * transport-EOF notifications via [simulateDisconnect].
+     */
+    private inner class FakeSshSessionStore : SshSessionStore(mockk(relaxed = true)) {
+        private var listener: SessionDisconnectListener? = null
+
+        override fun setDisconnectListener(listener: SessionDisconnectListener?) {
+            this.listener = listener
+        }
+
+        fun simulateDisconnect(sessionId: String) {
+            listener?.onSessionDisconnected(sessionId)
+        }
+    }
+
+    private val sshSessionStoreFake = FakeSshSessionStore()
+
     private val testProfile = ServerProfile(
         id = 1L,
         name = "NAS",
@@ -55,6 +76,7 @@ class SessionRegistryImplTest {
             serverProfileDao,
             lifecycleBinder,
             sessionPersistence,
+            sshSessionStoreFake,
             dispatcher ?: UnconfinedTestDispatcher(),
         )
 
@@ -332,4 +354,39 @@ class SessionRegistryImplTest {
 
         coVerify { sessionPersistence.setProfileIds(setOf(2L)) }
     }
+
+    @Test
+    fun `openSessions removes stale entry when SshSessionStore notifies transport disconnect`() =
+        runTest(UnconfinedTestDispatcher()) {
+            stubProfileA()
+            val registry = registry()
+
+            registry.connect(1L).getOrThrow()
+            assertThat(registry.openSessions.value.map { it.id }).contains("s-A")
+
+            // Simulate the SSHJ Reader thread observing EOF and calling the listener.
+            sshSessionStoreFake.simulateDisconnect("s-A")
+
+            assertThat(registry.openSessions.value.map { it.id }).doesNotContain("s-A")
+        }
+
+    @Test
+    fun `focusedSessionId falls back to next open session when disconnected session was focused`() =
+        runTest(UnconfinedTestDispatcher()) {
+            stubProfileA()
+            stubProfileB()
+            val registry = registry()
+
+            registry.connect(1L).getOrThrow()
+            registry.connect(2L).getOrThrow()
+            // After both connects, s-B (profile 2) is the focused session.
+            assertThat(registry.focusedSessionId.value).isEqualTo("s-B")
+
+            // Simulate transport EOF on the focused session.
+            sshSessionStoreFake.simulateDisconnect("s-B")
+
+            // Focus must fall back to the remaining session s-A.
+            assertThat(registry.openSessions.value.map { it.id }).containsExactly("s-A")
+            assertThat(registry.focusedSessionId.value).isEqualTo("s-A")
+        }
 }
