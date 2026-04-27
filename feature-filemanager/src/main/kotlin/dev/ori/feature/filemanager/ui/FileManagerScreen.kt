@@ -576,21 +576,35 @@ private fun PaneContent(
         onTransfer = { file ->
             onEvent(FileManagerEvent.InitiateTransfer(listOf(file.path), pane))
         },
+        // Bug G fix — the row's drag-source resolves the actual ClipData
+        // payload at drag-start time. Multi-select hands ALL selected
+        // paths over; a long-press on a non-selected file falls back to
+        // the single tapped path so users don't have to tick the
+        // checkbox first. Updating `DragState` here keeps the
+        // pane-border highlight in sync.
         onDragStart = { filePath ->
             val selectedPaths = paneState.selectedFiles.toList().ifEmpty { listOf(filePath) }
             viewModel?.setDragState(
                 DragState(isDragging = true, sourcePane = pane, draggedPaths = selectedPaths),
             )
+            selectedPaths
         },
-        onDragEnd = {
-            viewModel?.setDragState(DragState())
-        },
-        onDrop = {
+        // Bug G fix — drop on this pane: dispatch the transfer with the
+        // source pane derived from the global DragState (the source pane
+        // is whichever pane is NOT this one — but we cross-check
+        // anyway to defend against an in-pane drop that would otherwise
+        // turn into a same-pane copy with itself as the destination).
+        onDropAt = { droppedPaths ->
             viewModel?.let { vm ->
                 val dragState = vm.uiState.value.dragState
-                if (dragState.isDragging && dragState.sourcePane != null && dragState.sourcePane != pane) {
-                    onEvent(FileManagerEvent.InitiateTransfer(dragState.draggedPaths, dragState.sourcePane))
+                val sourcePane = dragState.sourcePane
+                if (sourcePane != null && sourcePane != pane && droppedPaths.isNotEmpty()) {
+                    onEvent(FileManagerEvent.InitiateTransfer(droppedPaths, sourcePane))
                 }
+                // Always clear the in-flight drag state on drop so the
+                // pane border highlight retracts even on no-op drops
+                // (intra-pane release, empty payload, etc.).
+                vm.setDragState(DragState())
             }
         },
     )
