@@ -147,32 +147,19 @@ class SshScpClientImpl @Inject constructor(
 
     override suspend fun fileSize(sessionId: String, remotePath: String): Long? = withContext(Dispatchers.IO) {
         val live = sessionStore.getSession(sessionId)
-        val r = execCmd(live.client, "stat -c %s ${shellEscape(remotePath)}")
+        val r = ShellInvocation.run(live.client, "stat -c %s ${shellEscape(remotePath)}", live.bashAvailable)
         if (r.exitCode != 0) null else r.stdout.trim().toLongOrNull()
     }
 
     private suspend fun runShellOrFail(sessionId: String, verb: String, inner: String) =
         withContext(Dispatchers.IO) {
             val live = sessionStore.getSession(sessionId)
-            val r = execCmd(live.client, inner)
+            val r = ShellInvocation.run(live.client, inner, live.bashAvailable)
             if (r.exitCode != 0) {
                 val first = r.stderr.lineSequence().firstOrNull()?.trim().orEmpty()
                 throw java.io.IOException("$verb failed: ${first.ifEmpty { "exit ${r.exitCode}" }}")
             }
         }
-
-    private fun execCmd(client: net.schmizz.sshj.SSHClient, cmd: String): ShellResult {
-        val session = client.startSession()
-        return try {
-            val c = session.exec(cmd)
-            val out = c.inputStream.bufferedReader().readText()
-            val err = c.errorStream.bufferedReader().readText()
-            c.join()
-            ShellResult(c.exitStatus ?: -1, out, err)
-        } finally {
-            session.close()
-        }
-    }
 }
 
 internal fun shellEscape(path: String): String = "'" + path.replace("'", "'\\''") + "'"

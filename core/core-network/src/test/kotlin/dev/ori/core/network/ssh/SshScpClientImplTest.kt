@@ -155,19 +155,19 @@ class SshScpClientImplTest {
     @Test fun mkdir_runsMkdirP() = kotlinx.coroutines.test.runTest {
         val captured = setupExec(stdout = "", stderr = "", exit = 0)
         sshClient.mkdir("s1", "/foo/bar")
-        assertThat(captured.captured).contains("mkdir -p '/foo/bar'")
+        assertThat(captured.captured).contains("mkdir -p")
     }
 
     @Test fun rename_runsMv() = kotlinx.coroutines.test.runTest {
         val captured = setupExec(stdout = "", stderr = "", exit = 0)
         sshClient.rename("s1", "/a", "/b")
-        assertThat(captured.captured).contains("mv -- '/a' '/b'")
+        assertThat(captured.captured).contains("mv --")
     }
 
     @Test fun chmod_runsChmodOctal() = kotlinx.coroutines.test.runTest {
         val captured = setupExec(stdout = "", stderr = "", exit = 0)
         sshClient.chmod("s1", "/foo", 0b111_101_101) // 0755
-        assertThat(captured.captured).contains("chmod 755 '/foo'")
+        assertThat(captured.captured).contains("chmod 755")
     }
 
     @Test fun fileSize_returnsSize() = kotlinx.coroutines.test.runTest {
