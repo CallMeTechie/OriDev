@@ -2,6 +2,7 @@ package dev.ori.data.session
 
 import dev.ori.core.common.model.Protocol
 import dev.ori.core.network.ssh.SshClient
+import dev.ori.core.network.ssh.SshSessionStore
 import dev.ori.data.dao.ServerProfileDao
 import dev.ori.data.mapper.toDomain
 import dev.ori.domain.model.Session
@@ -47,6 +48,7 @@ class SessionRegistryImpl(
     private val serverProfileDao: ServerProfileDao,
     private val serviceLifecycleBinder: ServiceLifecycleBinder,
     private val sessionPersistence: SessionPersistencePreferences,
+    private val sshSessionStore: SshSessionStore,
     registryDispatcher: CoroutineDispatcher,
 ) : SessionRegistry {
 
@@ -66,12 +68,14 @@ class SessionRegistryImpl(
         serverProfileDao: ServerProfileDao,
         serviceLifecycleBinder: ServiceLifecycleBinder,
         sessionPersistence: SessionPersistencePreferences,
+        sshSessionStore: SshSessionStore,
     ) : this(
         clients,
         credentialStore,
         serverProfileDao,
         serviceLifecycleBinder,
         sessionPersistence,
+        sshSessionStore,
         Dispatchers.IO,
     )
 
@@ -86,6 +90,15 @@ class SessionRegistryImpl(
 
     private val _focusedSessionId = MutableStateFlow<String?>(null)
     override val focusedSessionId: StateFlow<String?> = _focusedSessionId.asStateFlow()
+
+    init {
+        sshSessionStore.setDisconnectListener { sessionId ->
+            _openSessions.update { sessions -> sessions.filterNot { it.id == sessionId } }
+            if (_focusedSessionId.value == sessionId) {
+                _focusedSessionId.value = _openSessions.value.firstOrNull()?.id
+            }
+        }
+    }
 
     /**
      * Read-only projection of [SessionPersistencePreferences.profileIds]

@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Test
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 class SshSessionStoreTest {
     private val verifier = mockk<OriDevHostKeyVerifier>(relaxed = true)
@@ -170,6 +172,46 @@ class SshSessionStoreTest {
         listenerSlot.captured.notifyDisconnect(DisconnectReason.CONNECTION_LOST, "EOF")
 
         assertThrows(IOException::class.java) { store.getSession("eof-id") }
+    }
+
+    @Test
+    fun disconnectListener_firesOnTransportEof_alsoNotifiesUpstreamListener() {
+        val client = mockk<SSHClient>(relaxed = true)
+        val transport = mockk<Transport>(relaxed = true)
+        every { client.transport } returns transport
+        val listenerSlot = slot<DisconnectListener>()
+        every { transport.disconnectListener = capture(listenerSlot) } answers { }
+        val notified = AtomicBoolean(false)
+        val capturedSessionId = AtomicReference<String?>(null)
+        store.setDisconnectListener { sid ->
+            notified.set(true)
+            capturedSessionId.set(sid)
+        }
+        injectLive(store, "id-eof", client, Protocol.SCP)
+        invokeRegister(store, "id-eof", client)
+
+        listenerSlot.captured.notifyDisconnect(DisconnectReason.CONNECTION_LOST, "EOF")
+
+        assertThat(notified.get()).isTrue()
+        assertThat(capturedSessionId.get()).isEqualTo("id-eof")
+    }
+
+    @Test
+    fun disconnect_explicit_alsoNotifiesUpstreamListener() = kotlinx.coroutines.test.runTest {
+        val notified = AtomicBoolean(false)
+        val capturedSessionId = AtomicReference<String?>(null)
+        store.setDisconnectListener { sid ->
+            notified.set(true)
+            capturedSessionId.set(sid)
+        }
+        val client = mockk<SSHClient>(relaxed = true)
+        every { client.isConnected } returns true
+        injectLive(store, "id-explicit", client, Protocol.SFTP)
+
+        store.disconnect("id-explicit")
+
+        assertThat(notified.get()).isTrue()
+        assertThat(capturedSessionId.get()).isEqualTo("id-explicit")
     }
 
     @Test fun ensureNameCache_calledTwice_runsGetentOnlyOnce() = kotlinx.coroutines.test.runTest {
