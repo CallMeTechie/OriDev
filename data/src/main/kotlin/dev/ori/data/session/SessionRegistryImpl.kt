@@ -1,5 +1,6 @@
 package dev.ori.data.session
 
+import dev.ori.core.common.model.Protocol
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.data.dao.ServerProfileDao
 import dev.ori.data.mapper.toDomain
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -40,7 +42,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class SessionRegistryImpl(
-    private val sshClient: SshClient,
+    private val clients: Map<Protocol, @JvmSuppressWildcards SshClient>,
     private val credentialStore: CredentialStore,
     private val serverProfileDao: ServerProfileDao,
     private val serviceLifecycleBinder: ServiceLifecycleBinder,
@@ -59,13 +61,13 @@ class SessionRegistryImpl(
      */
     @Inject
     constructor(
-        sshClient: SshClient,
+        clients: Map<Protocol, @JvmSuppressWildcards SshClient>,
         credentialStore: CredentialStore,
         serverProfileDao: ServerProfileDao,
         serviceLifecycleBinder: ServiceLifecycleBinder,
         sessionPersistence: SessionPersistencePreferences,
     ) : this(
-        sshClient,
+        clients,
         credentialStore,
         serverProfileDao,
         serviceLifecycleBinder,
@@ -123,15 +125,19 @@ class SessionRegistryImpl(
         }
     }
 
+    private fun clientFor(protocol: Protocol): SshClient =
+        clients[protocol] ?: throw IOException("Protocol $protocol not supported")
+
     private suspend fun runConnect(profileId: Long): Result<Session> = runCatching {
         val profile = serverProfileDao.getById(profileId)?.toDomain()
             ?: error("Profile not found: $profileId")
         val password = credentialStore.getPassword(profile.credentialRef)
-        val sshSession = sshClient.connect(
+        val sshSession = clientFor(profile.protocol).connect(
             host = profile.host,
             port = profile.port,
             username = profile.username,
             password = password,
+            protocol = profile.protocol,
         )
         val session = Session(
             id = sshSession.sessionId,
@@ -140,6 +146,7 @@ class SessionRegistryImpl(
             host = sshSession.host,
             port = sshSession.port,
             connectedAt = sshSession.connectedAt,
+            protocol = profile.protocol,
         )
         _openSessions.update { it + session }
         _focusedSessionId.value = session.id
@@ -168,7 +175,7 @@ class SessionRegistryImpl(
     override suspend fun disconnect(sessionId: String) {
         val session = _openSessions.value.firstOrNull { it.id == sessionId } ?: return
         inFlight[session.profileId]?.cancel()
-        runCatching { sshClient.disconnect(sessionId) }
+        runCatching { clientFor(session.protocol).disconnect(sessionId) }
         _openSessions.update { list -> list.filterNot { it.id == sessionId } }
         filesUsed.remove(sessionId)
         graceJobs.remove(sessionId)?.cancel()

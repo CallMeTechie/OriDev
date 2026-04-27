@@ -6,6 +6,10 @@ For one-time setup of GitHub secrets (keystore, Play Store service account,
 ACRA backend) see **[docs/SECRETS_SETUP.md](docs/SECRETS_SETUP.md)**. That
 guide is the single source of truth for everything CI needs.
 
+## v0.34.5 (Unreleased)
+
+- SCP is now a real protocol with distinct wire behaviour, no longer a silent SFTP alias. If you previously selected SCP in a connection profile and it surprisingly stops working, switch the protocol to SFTP — the listing failure includes a hint to do so.
+
 ## Release Flow
 
 Three entry points, all handled by `.github/workflows/release.yml`:
