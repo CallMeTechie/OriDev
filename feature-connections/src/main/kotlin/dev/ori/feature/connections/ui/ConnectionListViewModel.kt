@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.ori.core.common.error.AppError
+import dev.ori.core.common.result.AppErrorException
 import dev.ori.core.common.result.getAppError
 import dev.ori.core.security.biometric.CredentialUnlockGate
 import dev.ori.core.security.crash.NonFatalErrorLogger
@@ -148,6 +149,22 @@ class ConnectionListViewModel @Inject constructor(
             result.onSuccess { session ->
                 _openEffects.emit(OpenProfileEffect(target, session.id))
             }.onFailure { cause ->
+                // Bug P fix — `sessionRegistry.connect` returns the raw
+                // SSHJ TransportException on host-key failure, with the
+                // verifier's `AppErrorException(AppError.HostKeyUnknown)`
+                // buried in the cause chain. Without this walk the user
+                // would only ever see "Unknown host key for …" as an
+                // error snackbar, never the TOFU dialog, and retrying
+                // would never persist the fingerprint — exactly the
+                // fail2ban-bait pattern the manual-connect path already
+                // guards against in `connect(profileId)` above.
+                val hostKeyError = findHostKeyError(cause)
+                if (hostKeyError != null) {
+                    _uiState.update {
+                        it.copy(hostKeyPrompt = hostKeyPromptFor(profileId, hostKeyError, target))
+                    }
+                    return@onFailure
+                }
                 val message = cause.message ?: "Verbindungsaufbau fehlgeschlagen"
                 // Surface the error to the UI first, THEN write the
                 // Downloads log — the logger touches `android.util.Log`
@@ -170,6 +187,67 @@ class ConnectionListViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    /**
+     * Walk the [Throwable.cause] chain looking for the
+     * [AppErrorException] our [dev.ori.core.network.ssh.OriDevHostKeyVerifier]
+     * raises on TOFU failure. SSHJ wraps that exception in its own
+     * `TransportException` → `SSHException` chain (see
+     * `error/oridev-error-connect-files-2026-04-27-20-37-50.txt`), so a
+     * shallow `cause as? AppErrorException` cast misses the marker.
+     * Returns the host-key [AppError] if found (either
+     * [AppError.HostKeyUnknown] or [AppError.HostKeyMismatch]), or null
+     * if the failure had a different root cause.
+     */
+    private fun findHostKeyError(throwable: Throwable?): AppError? {
+        var current: Throwable? = throwable
+        while (current != null) {
+            if (current is AppErrorException) {
+                val error = current.error
+                if (error is AppError.HostKeyUnknown || error is AppError.HostKeyMismatch) {
+                    return error
+                }
+            }
+            current = current.cause
+        }
+        return null
+    }
+
+    private fun hostKeyPromptFor(
+        profileId: Long,
+        error: AppError,
+        pendingOpenTarget: OpenTarget,
+    ): HostKeyPrompt = when (error) {
+        is AppError.HostKeyUnknown -> HostKeyPrompt(
+            profileId = profileId,
+            host = error.host,
+            port = portForHost(error.host),
+            fingerprint = error.fingerprint,
+            keyType = error.keyType,
+            pendingOpenTarget = pendingOpenTarget,
+        )
+        is AppError.HostKeyMismatch -> HostKeyPrompt(
+            profileId = profileId,
+            host = error.host,
+            port = portForHost(error.host),
+            fingerprint = error.actualFingerprint,
+            keyType = "unknown",
+            expectedFingerprint = error.expectedFingerprint,
+            pendingOpenTarget = pendingOpenTarget,
+        )
+        // The caller filters via `findHostKeyError` so anything else here
+        // is a programmer error: fall back to a placeholder prompt rather
+        // than crash. The dialog still renders something sensible, and
+        // `acceptHostKey` will short-circuit on the empty fingerprint.
+        else -> HostKeyPrompt(
+            profileId = profileId,
+            host = "",
+            port = 22,
+            fingerprint = "",
+            keyType = "unknown",
+            pendingOpenTarget = pendingOpenTarget,
+        )
     }
 
     init {
@@ -426,6 +504,17 @@ class ConnectionListViewModel @Inject constructor(
                 return@launch
             }
             _uiState.update { it.copy(hostKeyPrompt = null) }
+            // Bug P fix — when the prompt was raised by `openProfile`
+            // we MUST retry through `openProfile` so the navigation
+            // effect (`OpenProfileEffect`) still fires after the trust
+            // round-trip. Routing into `connect(profileId)` here would
+            // open the SSH session but never tell the screen to switch
+            // to Terminal/Files, leaving the user staring at the
+            // Connections list while the connection is in fact live.
+            prompt.pendingOpenTarget?.let { target ->
+                openProfile(prompt.profileId, target)
+                return@launch
+            }
             connect(prompt.profileId)
         }
     }
