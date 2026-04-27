@@ -127,6 +127,7 @@ class TransferQueueViewModelTest {
         viewModel.uiState.test {
             val state = awaitItem()
             assertThat(state.transfers).hasSize(3)
+            assertThat(state.allTransfers).hasSize(3)
             assertThat(state.isLoading).isFalse()
             cancelAndIgnoreRemainingEvents()
         }
@@ -143,6 +144,10 @@ class TransferQueueViewModelTest {
         viewModel.uiState.test {
             val state = awaitItem()
             assertThat(state.filter).isEqualTo(TransferFilter.ACTIVE)
+            assertThat(state.transfers).hasSize(1)
+            assertThat(state.transfers.map { it.status })
+                .containsExactly(TransferStatus.ACTIVE)
+            assertThat(state.allTransfers).hasSize(3)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -158,6 +163,64 @@ class TransferQueueViewModelTest {
         viewModel.uiState.test {
             val state = awaitItem()
             assertThat(state.filter).isEqualTo(TransferFilter.COMPLETED)
+            assertThat(state.transfers).hasSize(1)
+            assertThat(state.transfers.map { it.status })
+                .containsExactly(TransferStatus.COMPLETED)
+            assertThat(state.allTransfers).hasSize(3)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `setFilter from COMPLETED back to ALL restores all transfers`() = runTest {
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(TransferEvent.SetFilter(TransferFilter.COMPLETED))
+        advanceUntilIdle()
+        viewModel.onEvent(TransferEvent.SetFilter(TransferFilter.ALL))
+        advanceUntilIdle()
+
+        viewModel.uiState.test {
+            val state = awaitItem()
+            assertThat(state.filter).isEqualTo(TransferFilter.ALL)
+            assertThat(state.transfers).hasSize(3)
+            assertThat(state.allTransfers).hasSize(3)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `db re-emission preserves active filter`() = runTest {
+        val transfersFlow = MutableSharedFlow<List<TransferRequest>>(replay = 1)
+        transfersFlow.tryEmit(sampleTransfers)
+        every { getTransfersUseCase() } returns transfersFlow
+
+        val viewModel = createViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(TransferEvent.SetFilter(TransferFilter.FAILED))
+        advanceUntilIdle()
+
+        val updatedTransfers = sampleTransfers + TransferRequest(
+            id = 4L,
+            serverProfileId = 1L,
+            sourcePath = "/local/file4.txt",
+            destinationPath = "/remote/file4.txt",
+            direction = TransferDirection.UPLOAD,
+            status = TransferStatus.FAILED,
+            errorMessage = "Disk full",
+        )
+        transfersFlow.emit(updatedTransfers)
+        advanceUntilIdle()
+
+        viewModel.uiState.test {
+            val state = awaitItem()
+            assertThat(state.filter).isEqualTo(TransferFilter.FAILED)
+            assertThat(state.allTransfers).hasSize(4)
+            assertThat(state.transfers).hasSize(2)
+            assertThat(state.transfers.map { it.status })
+                .containsExactly(TransferStatus.FAILED, TransferStatus.FAILED)
             cancelAndIgnoreRemainingEvents()
         }
     }

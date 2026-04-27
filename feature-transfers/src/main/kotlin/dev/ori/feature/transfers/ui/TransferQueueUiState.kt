@@ -12,6 +12,7 @@ enum class TransferFilter {
 
 data class TransferQueueUiState(
     val transfers: List<TransferRequest> = emptyList(),
+    val allTransfers: List<TransferRequest> = emptyList(),
     val filter: TransferFilter = TransferFilter.ALL,
     val isLoading: Boolean = true,
     val error: String? = null,
