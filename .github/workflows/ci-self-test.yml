@@ -47,6 +47,7 @@ jobs:
       # and walkTopDown returned empty), the canary catches it.
       - name: Font-budget positive control (-Pfont.budget=0 must fail)
         run: |
+          set -o pipefail
           if ./gradlew :core:core-fonts:checkFontBudget -Pfont.budget=0 2>&1 | tee /tmp/font-budget.log; then
             echo "::error::Self-test FAILED: checkFontBudget did not reject -Pfont.budget=0"
             exit 2
