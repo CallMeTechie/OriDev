@@ -1063,7 +1063,7 @@ class TerminalViewModelTest {
         assertThat(sessionResumePrefs.activePaneIndexValue.value).isEqualTo(1)
     }
 
-    // --- fix(terminal): auto-open tab when ConnectionDetailSheet focuses a fresh session ---
+    // --- fix(terminal): auto-open tab when ConnectionDetailSheet focuses a fresh session (v0.35.2) ---
 
     @Test
     fun `focusShifts_toFreshSession_opensNewTab`() = runTest {
@@ -1105,12 +1105,73 @@ class TerminalViewModelTest {
         assertThat(viewModel.uiState.value.tabs).hasSize(initialTabCount)
     }
 
+    // --- fix(terminal): atomic latch prevents focus+restore observer race (PR #208 / v0.35.3) ---
+
+    @Test
+    fun `focusObserverAndRestoreObserver_dontDoubleOpen_whenBothFireConcurrently`() = runTest {
+        // Given: a session emitted into openSessions AND a persisted TabMemo for
+        // the same profile — both observers will fire when focusedSessionId flips.
+        val profileId = 99L
+        val session = makeSession(profileId = profileId, id = "race-session")
+        coEvery { sessionRegistry.connect(profileId) } returns kotlin.Result.success(session)
+        stubSshShellHandle()
+        sessionResumePrefs.tabMemosValue.value = listOf(
+            TabMemo(profileId = profileId, tabCount = 1, focusedWithinProfile = 0),
+        )
+        val viewModel = createViewModel()
+
+        // When: both flows emit, racing to open a tab.
+        openSessionsFlow.value = listOf(session)
+        focusedSessionIdFlow.value = "race-session"
+        advanceUntilIdle()
+
+        // Then: exactly one tab — not two.
+        val tabs = viewModel.uiState.value.tabs
+        assertThat(tabs).hasSize(1)
+    }
+
+    @Test
+    fun `restoreObserverFailure_resetsLatch_allowingRetry`() = runTest {
+        // First openShell call throws; second succeeds.
+        val profileId = 99L
+        val session = makeSession(profileId = profileId, id = "retry-session")
+        coEvery { sessionRegistry.connect(profileId) } returns kotlin.Result.success(session)
+        val goodHandle = ShellHandle(
+            shellId = "shell-retry",
+            inputStream = ByteArrayInputStream(ByteArray(0)),
+            outputStream = ByteArrayOutputStream(),
+            onResize = { _, _ -> },
+            onClose = {},
+        )
+        coEvery {
+            sshClient.openShell(any(), any(), any())
+        } throws java.io.IOException("flaky network") andThen goodHandle
+
+        sessionResumePrefs.tabMemosValue.value = listOf(
+            TabMemo(profileId = profileId, tabCount = 1, focusedWithinProfile = 0),
+        )
+        val viewModel = createViewModel()
+
+        // First emission — restore fails; latch is reset.
+        openSessionsFlow.value = listOf(session)
+        advanceUntilIdle()
+        assertThat(viewModel.uiState.value.tabs.filter { it.profileId == profileId }).hasSize(0)
+
+        // Re-trigger the observer by bouncing the sessions flow.
+        openSessionsFlow.value = emptyList()
+        openSessionsFlow.value = listOf(session)
+        advanceUntilIdle()
+
+        // Second try succeeds — one tab now present.
+        assertThat(viewModel.uiState.value.tabs.filter { it.profileId == profileId }).hasSize(1)
+    }
+
     /** Shared helper: stub [SshClient.openShell] with a no-op shell handle. */
     private fun stubSshShellHandle() {
         val handle = ShellHandle(
             shellId = "shell-stub",
-            inputStream = java.io.ByteArrayInputStream(ByteArray(0)),
-            outputStream = java.io.ByteArrayOutputStream(),
+            inputStream = ByteArrayInputStream(ByteArray(0)),
+            outputStream = ByteArrayOutputStream(),
             onResize = { _, _ -> },
             onClose = {},
         )
