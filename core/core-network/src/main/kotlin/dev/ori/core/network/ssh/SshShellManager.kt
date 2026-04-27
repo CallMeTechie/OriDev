@@ -23,6 +23,16 @@ class SshShellManager @Inject constructor() {
      * failed" crash to the user. Crashes were reproduced in Bug E
      * (Pixel Fold + Synology DSM 7.2): we retry exactly once after a short
      * delay so the server has time to free the slot.
+     *
+     * Bug K fix — extends the retry trigger set to [IllegalStateException]
+     * with message "Not connected". SSHJ's `SSHClient.startSession()`
+     * throws this synchronously when the Reader thread tore down the
+     * transport between `SshSessionStore.getSession`'s `isConnected`
+     * check and our `client.startSession()` call (race observed in
+     * oridev-crash-2026-04-27-20-28-01.txt). Treating it as retryable
+     * gives the Worker auto-reconnect path a chance to recover; the
+     * second attempt sees the disconnected client and re-throws which
+     * `SshSftpClientImpl.openShell` then translates to IOException.
      */
     fun openShell(
         client: net.schmizz.sshj.SSHClient,
@@ -59,6 +69,13 @@ class SshShellManager @Inject constructor() {
         } catch (first: TransportException) {
             sleepBeforeRetry(retryDelayMillis)
             retryOrRethrow(client, cols, rows, term, first)
+        } catch (first: IllegalStateException) {
+            // Bug K — race between getSession's `isConnected` check and
+            // `startSession()`'s `checkConnected()` invocation. Tag the
+            // retry with the same delay so the upstream auto-reconnect
+            // path has a moment to refresh the client reference.
+            sleepBeforeRetry(retryDelayMillis)
+            retryOrRethrow(client, cols, rows, term, first)
         }
     }
 
@@ -72,12 +89,23 @@ class SshShellManager @Inject constructor() {
         return try {
             openShellSessionOnce(client, cols, rows, term)
         } catch (second: ConnectionException) {
-            second.addSuppressed(first)
-            throw second
+            rethrowSuppressing(second, first)
         } catch (second: TransportException) {
-            second.addSuppressed(first)
-            throw second
+            rethrowSuppressing(second, first)
+        } catch (second: IllegalStateException) {
+            rethrowSuppressing(second, first)
         }
+    }
+
+    /**
+     * Attaches [first] as a suppressed exception of [second] and rethrows.
+     * Declared `Nothing`-returning so callers can use it directly in `catch`
+     * branches without exceeding the detekt ThrowsCount limit on
+     * [retryOrRethrow].
+     */
+    private fun rethrowSuppressing(second: Exception, first: Exception): Nothing {
+        second.addSuppressed(first)
+        throw second
     }
 
     private fun openShellSessionOnce(

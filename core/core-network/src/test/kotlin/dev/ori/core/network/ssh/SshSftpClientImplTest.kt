@@ -213,6 +213,115 @@ class SshSftpClientImplTest {
         assertThat(result.failed[0].second).contains("Permission denied")
     }
 
+    @Test
+    fun listFiles_clientReportsNotConnectedAtNewSftpClient_throwsIOException() = runTest {
+        // Bug K regression — race window between `SshSessionStore.getSession`'s
+        // `isConnected` check and SSHJ's private `checkConnected()` inside
+        // `newSFTPClient()`. SSHJ throws IllegalStateException("Not connected")
+        // synchronously, which previously crashed the worker on the drop path
+        // (oridev-crash-2026-04-27-20-28-01.txt). The client must translate
+        // it to IOException so the Worker (Bug J) takes the auto-reconnect
+        // path instead.
+        every { sshNetworkClient.newSFTPClient() } throws IllegalStateException("Not connected")
+
+        val ex = assertThrows(IOException::class.java) {
+            kotlinx.coroutines.runBlocking { sshClient.listFiles(sessionId, "/") }
+        }
+        // Coroutine `withContext` may copy/rewrap the IOException for context
+        // preservation, so we walk the chain instead of locking to a fixed
+        // depth. The IllegalStateException MUST be reachable as a cause —
+        // that's what proves the translation worked end-to-end.
+        assertThat(causeChain(ex).joinToString(" -> ") { it.message ?: it.javaClass.simpleName })
+            .contains("SSH session terminated mid-operation")
+        assertThat(causeChain(ex).any { it is IllegalStateException }).isTrue()
+    }
+
+    private fun causeChain(top: Throwable): List<Throwable> {
+        val seen = mutableListOf<Throwable>()
+        var t: Throwable? = top
+        while (t != null && t !in seen) {
+            seen += t
+            t = t.cause
+        }
+        return seen
+    }
+
+    @Test
+    fun uploadFileResumable_clientReportsNotConnectedAtNewSftpClient_throwsIOException(
+        @TempDir tmp: Path,
+    ) = runTest {
+        // Bug K — direct reproduction of the drop-crash trace. The file
+        // upload path bypasses `withSftpClient` and calls `newSFTPClient()`
+        // inline, so we test the inline catch here too.
+        val payload = ByteArray(8) { it.toByte() }
+        val localFile = tmp.resolve("local.bin")
+        localFile.writeBytes(payload)
+        every { sshNetworkClient.newSFTPClient() } throws IllegalStateException("Not connected")
+
+        val ex = assertThrows(IOException::class.java) {
+            kotlinx.coroutines.runBlocking {
+                sshClient.uploadFileResumable(
+                    sessionId = sessionId,
+                    localPath = localFile.toString(),
+                    remotePath = "/remote/file.bin",
+                    offsetBytes = 0L,
+                )
+            }
+        }
+        assertThat(ex.message).contains("SSH session terminated mid-operation")
+    }
+
+    @Test
+    fun downloadFileResumable_clientReportsNotConnectedAtNewSftpClient_throwsIOException(
+        @TempDir tmp: Path,
+    ) = runTest {
+        // Bug K — mirror image of the upload-resumable test for the
+        // download-resumable path.
+        val localFile = tmp.resolve("local.bin")
+        every { sshNetworkClient.newSFTPClient() } throws IllegalStateException("Not connected")
+
+        val ex = assertThrows(IOException::class.java) {
+            kotlinx.coroutines.runBlocking {
+                sshClient.downloadFileResumable(
+                    sessionId = sessionId,
+                    remotePath = "/remote/file.bin",
+                    localPath = localFile.toString(),
+                    offsetBytes = 0L,
+                )
+            }
+        }
+        assertThat(ex.message).contains("SSH session terminated mid-operation")
+    }
+
+    @Test
+    fun executeCommand_clientReportsNotConnectedAtStartSession_throwsIOException() = runTest {
+        // Bug K — `client.startSession()` calls SSHJ's private
+        // `checkConnected()` and throws IllegalStateException("Not connected")
+        // when the Reader thread invalidated the transport. We translate
+        // to IOException here too so callers see a single error type.
+        every { sshNetworkClient.startSession() } throws IllegalStateException("Not connected")
+
+        val ex = assertThrows(IOException::class.java) {
+            kotlinx.coroutines.runBlocking { sshClient.executeCommand(sessionId, "echo hi") }
+        }
+        assertThat(ex.message).contains("SSH session terminated mid-operation")
+    }
+
+    @Test
+    fun openShell_clientReportsNotConnected_throwsIOException() = runTest {
+        // Bug K — `SshShellManager.openShell` calls `client.startSession()`
+        // which can throw IllegalStateException("Not connected"). The
+        // SshSftpClientImpl wrapper must surface this as IOException so
+        // callers (TerminalViewModel.openNewTab via the SshClient interface)
+        // don't bubble the unchecked exception up to Main.
+        every { sshNetworkClient.startSession() } throws IllegalStateException("Not connected")
+
+        val ex = assertThrows(IOException::class.java) {
+            kotlinx.coroutines.runBlocking { sshClient.openShell(sessionId, cols = 80, rows = 24) }
+        }
+        assertThat(ex.message).contains("SSH session terminated mid-operation")
+    }
+
     private fun injectLive(store: SshSessionStore, id: String, c: SSHClient) {
         val f = SshSessionStore::class.java.getDeclaredField("sessions")
         f.isAccessible = true
