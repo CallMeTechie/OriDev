@@ -217,6 +217,7 @@ class TerminalViewModel @Inject constructor(
         collectKeyboardMode()
         collectDebouncedResizes()
         installRestoreObserver()
+        installFocusObserver()
         launchRestoreGate()
     }
 
@@ -323,6 +324,37 @@ class TerminalViewModel @Inject constructor(
                 sessions.map { it.profileId }.toSet() to memos
             }
             .onEach { (sessions, memos) -> restoreMissingTabs(sessions, memos) }
+            .launchIn(viewModelScope)
+    }
+
+    /**
+     * fix(terminal) — focus observer. Watches [SessionRegistry.focusedSessionId]
+     * and auto-opens a new tab when the focused session has no existing tab.
+     *
+     * This covers the "Terminal öffnen" path from ConnectionDetailSheet:
+     * the nav-host calls [SessionRegistry.focus] after connecting; if no
+     * TabMemo existed for that profile, [installRestoreObserver] is a no-op
+     * (nothing to restore), so without this observer the Terminal tab would
+     * open empty and the user would have to press `+` manually.
+     *
+     * Invariant: exactly one tab per focused session is opened when no tab
+     * already represents that session AND no restore latch is active for
+     * its profile. Duplicate-emission suppression is inherent to
+     * [StateFlow] (operator fusion) so rapid identical updates do not
+     * trigger redundant opens.
+     */
+    private fun installFocusObserver() {
+        sessionRegistry.focusedSessionId
+            .onEach { focusedId ->
+                if (focusedId == null) return@onEach
+                val session = sessionRegistry.openSessions.value
+                    .firstOrNull { it.id == focusedId } ?: return@onEach
+                val alreadyHasTab = _uiState.value.tabs.any { it.sessionId == focusedId }
+                if (alreadyHasTab) return@onEach
+                val latch = restoreLatches[session.profileId]
+                if (latch?.get() == true) return@onEach
+                openNewTab(session.profileId)
+            }
             .launchIn(viewModelScope)
     }
 

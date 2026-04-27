@@ -63,6 +63,7 @@ class TerminalViewModelTest {
     private val connectionRepository = mockk<ConnectionRepository>(relaxed = true)
     private val sessionRegistry = mockk<SessionRegistry>(relaxed = true)
     private val openSessionsFlow = MutableStateFlow<List<Session>>(emptyList())
+    private val focusedSessionIdFlow = MutableStateFlow<String?>(null)
     private val sessionResumePrefs = FakeSessionResumePreferences()
     private val getSnippetsUseCase = mockk<GetSnippetsUseCase>()
     private val addSnippetUseCase = mockk<AddSnippetUseCase>(relaxed = true)
@@ -116,6 +117,7 @@ class TerminalViewModelTest {
         every { context.packageName } returns "dev.ori.app"
         every { connectionRepository.getAllProfiles() } returns flowOf(emptyList())
         every { sessionRegistry.openSessions } returns openSessionsFlow
+        every { sessionRegistry.focusedSessionId } returns focusedSessionIdFlow
     }
 
     @AfterEach
@@ -1059,6 +1061,60 @@ class TerminalViewModelTest {
         assertThat(sessionResumePrefs.leftPaneTabIdValue.value).isNotNull()
         assertThat(sessionResumePrefs.rightPaneTabIdValue.value).isNotNull()
         assertThat(sessionResumePrefs.activePaneIndexValue.value).isEqualTo(1)
+    }
+
+    // --- fix(terminal): auto-open tab when ConnectionDetailSheet focuses a fresh session ---
+
+    @Test
+    fun `focusShifts_toFreshSession_opensNewTab`() = runTest {
+        // Given: an open session with no persisted TabMemo and no existing tab.
+        val session = makeSession(profileId = 42L, id = "s-fresh")
+        openSessionsFlow.value = listOf(session)
+        sessionResumePrefs.tabMemosValue.value = emptyList()
+        coEvery { sessionRegistry.connect(42L) } returns kotlin.Result.success(session)
+        stubSshShellHandle()
+        val viewModel = createViewModel()
+
+        // When: the focused-session id flips to s-fresh.
+        focusedSessionIdFlow.value = "s-fresh"
+        advanceUntilIdle()
+
+        // Then: a new tab is opened for profile 42L.
+        val tabs = viewModel.uiState.value.tabs
+        assertThat(tabs).hasSize(1)
+        assertThat(tabs[0].sessionId).isEqualTo("s-fresh")
+    }
+
+    @Test
+    fun `focusShifts_toSessionWithExistingTab_doesNotOpenSecondTab`() = runTest {
+        // Given: a session that already has a tab opened by the user.
+        val session = makeSession(profileId = 42L, id = "s-existing")
+        openSessionsFlow.value = listOf(session)
+        coEvery { sessionRegistry.connect(42L) } returns kotlin.Result.success(session)
+        stubSshShellHandle()
+        val viewModel = createViewModel()
+        viewModel.openNewTab(42L)
+        advanceUntilIdle()
+        val initialTabCount = viewModel.uiState.value.tabs.size
+
+        // When: the focused-session id flips to that same session.
+        focusedSessionIdFlow.value = "s-existing"
+        advanceUntilIdle()
+
+        // Then: no new tab is opened.
+        assertThat(viewModel.uiState.value.tabs).hasSize(initialTabCount)
+    }
+
+    /** Shared helper: stub [SshClient.openShell] with a no-op shell handle. */
+    private fun stubSshShellHandle() {
+        val handle = ShellHandle(
+            shellId = "shell-stub",
+            inputStream = java.io.ByteArrayInputStream(ByteArray(0)),
+            outputStream = java.io.ByteArrayOutputStream(),
+            onResize = { _, _ -> },
+            onClose = {},
+        )
+        coEvery { sshClient.openShell(any(), any(), any()) } returns handle
     }
 }
 
