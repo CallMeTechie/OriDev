@@ -10,6 +10,7 @@ internal object ScpListingParser {
     private val ISO_LOCAL = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
     private const val FIELDS_BEFORE_NAME = 6
     private const val PERMS_LEN = 10
+    private const val PERMS_LEN_WITH_SUFFIX = 11
 
     private data class ParsedFields(val perms: String, val uid: Int, val size: Long, val ts: Long)
 
@@ -36,14 +37,21 @@ internal object ScpListingParser {
         return out
     }
 
+    private fun stripAclSuffix(raw: String): String =
+        if (raw.length == PERMS_LEN_WITH_SUFFIX && (raw.last() == '+' || raw.last() == '.')) {
+            raw.dropLast(1)
+        } else {
+            raw
+        }
+
     private fun parseFields(tokens: List<String>): ParsedFields? {
-        val perms = tokens[0]
+        val perms = stripAclSuffix(tokens[0])
         if (perms.length != PERMS_LEN) return null
         val uid = tokens[2].toIntOrNull() ?: return null
         val size = tokens[4].toLongOrNull() ?: return null
         val ts = parseIso(tokens[5]) ?: return null
-        val hasGid = tokens[3].toIntOrNull() != null
-        return if (hasGid) ParsedFields(perms, uid, size, ts) else null
+        val validGid = tokens[3].toIntOrNull()
+        return if (validGid != null) ParsedFields(perms, uid, size, ts) else null
     }
 
     private fun splitNFields(line: String, n: Int): List<String>? {

@@ -72,4 +72,19 @@ class ScpListingParserTest {
         val ex = assertThrows(IOException::class.java) { ScpListingParser.parse(out, "/x", cache) }
         assertThat(ex.message).contains("GNU coreutils")
     }
+
+    @Test fun synologyAclSuffix_acceptsAndStripsSuffix() {
+        val out = "drwxrwxrwx+ 1 0 0 148 2026-03-11T09:10:02 @eaDir\n"
+        val files = ScpListingParser.parse(out, "/", cache)
+        assertThat(files).hasSize(1)
+        assertThat(files[0].name).isEqualTo("@eaDir")
+        assertThat(files[0].isDirectory).isTrue()
+        assertThat(files[0].permissions).isEqualTo("drwxrwxrwx")
+    }
+
+    @Test fun selinuxDotSuffix_acceptsAndStripsSuffix() {
+        val out = "-rw-r--r--. 1 0 0 100 2026-03-11T09:10:02 file.txt\n"
+        val files = ScpListingParser.parse(out, "/", cache)
+        assertThat(files[0].permissions).isEqualTo("-rw-r--r--")
+    }
 }
