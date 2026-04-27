@@ -78,6 +78,7 @@ fun FileListPane(
     onRename: (FileItem) -> Unit,
     onDelete: (FileItem) -> Unit,
     onChmod: (FileItem) -> Unit,
+    onTransfer: (FileItem) -> Unit = {},
     modifier: Modifier = Modifier,
     onDragStart: (String) -> Unit = {},
     onDragEnd: () -> Unit = {},
@@ -254,7 +255,7 @@ fun FileListPane(
                                     onRename = { onRename(file) },
                                     onDelete = { onDelete(file) },
                                     onChmod = { onChmod(file) },
-                                    onTransfer = { /* Transfer -- deferred to Phase 5 */ },
+                                    onTransfer = { onTransfer(file) },
                                 )
                             }
                         }

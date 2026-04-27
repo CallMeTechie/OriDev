@@ -532,6 +532,16 @@ class FileManagerViewModel @Inject constructor(
     private fun initiateTransfer(sourcePaths: List<String>, sourcePane: ActivePane) {
         if (sourcePaths.isEmpty()) return
 
+        val activeSessionId = sessionRegistry.focusedSessionId.value
+        val activeSession = sessionRegistry.openSessions.value
+            .firstOrNull { it.id == activeSessionId }
+        if (activeSession == null) {
+            _uiState.update {
+                it.copy(transferSnackbar = "Keine aktive SSH-Verbindung — Verbindung herstellen zuerst")
+            }
+            return
+        }
+
         val direction = when (sourcePane) {
             ActivePane.LEFT -> TransferDirection.UPLOAD
             ActivePane.RIGHT -> TransferDirection.DOWNLOAD
@@ -547,7 +557,7 @@ class FileManagerViewModel @Inject constructor(
                 val fileName = path.substringAfterLast('/')
                 val destFullPath = "$destinationPath/$fileName"
                 val request = TransferRequest(
-                    serverProfileId = 1L,
+                    serverProfileId = activeSession.profileId,
                     sourcePath = path,
                     destinationPath = destFullPath,
                     direction = direction,
