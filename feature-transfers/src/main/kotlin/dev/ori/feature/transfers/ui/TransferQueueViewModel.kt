@@ -8,7 +8,7 @@ import dev.ori.domain.model.TransferRequest
 import dev.ori.domain.repository.TransferConflictRepository
 import dev.ori.domain.usecase.CancelAllTransfersUseCase
 import dev.ori.domain.usecase.CancelTransferUseCase
-import dev.ori.domain.usecase.ClearCompletedTransfersUseCase
+import dev.ori.domain.usecase.ClearFinishedTransfersUseCase
 import dev.ori.domain.usecase.EnqueueTransferUseCase
 import dev.ori.domain.usecase.GetTransfersUseCase
 import dev.ori.domain.usecase.PauseAllTransfersUseCase
@@ -30,7 +30,7 @@ class TransferQueueViewModel @Inject constructor(
     private val resumeTransferUseCase: ResumeTransferUseCase,
     private val cancelTransferUseCase: CancelTransferUseCase,
     private val enqueueTransferUseCase: EnqueueTransferUseCase,
-    private val clearCompletedTransfersUseCase: ClearCompletedTransfersUseCase,
+    private val clearFinishedTransfersUseCase: ClearFinishedTransfersUseCase,
     private val conflictRepository: TransferConflictRepository,
     private val pauseAllTransfersUseCase: PauseAllTransfersUseCase,
     private val cancelAllTransfersUseCase: CancelAllTransfersUseCase,
@@ -61,7 +61,7 @@ class TransferQueueViewModel @Inject constructor(
             is TransferEvent.ResumeTransfer -> resumeTransfer(event.transferId)
             is TransferEvent.CancelTransfer -> cancelTransfer(event.transferId)
             is TransferEvent.RetryTransfer -> retryTransfer(event.transfer)
-            is TransferEvent.ClearCompleted -> clearCompleted()
+            is TransferEvent.ClearCompleted -> clearFinished()
             is TransferEvent.ClearError -> _uiState.update { it.copy(error = null) }
             is TransferEvent.ClearInfo -> _uiState.update { it.copy(infoSnackbar = null) }
             TransferEvent.PauseAll -> viewModelScope.launch {
@@ -167,17 +167,22 @@ class TransferQueueViewModel @Inject constructor(
         }
     }
 
-    private fun clearCompleted() {
+    /**
+     * Bug N — purges every terminal transfer (COMPLETED + FAILED +
+     * CANCELLED). The toolbar still exposes a single "Clear" button; this
+     * is a behaviour change to that one button rather than a new affordance.
+     */
+    private fun clearFinished() {
         viewModelScope.launch {
-            runCatching { clearCompletedTransfersUseCase() }
+            runCatching { clearFinishedTransfersUseCase() }
                 .onSuccess { count ->
                     _uiState.update {
-                        it.copy(infoSnackbar = "$count completed transfers cleared")
+                        it.copy(infoSnackbar = "$count finished transfers cleared")
                     }
                 }
                 .onFailure { e ->
                     _uiState.update {
-                        it.copy(error = e.message ?: "Failed to clear completed transfers")
+                        it.copy(error = e.message ?: "Failed to clear finished transfers")
                     }
                 }
         }

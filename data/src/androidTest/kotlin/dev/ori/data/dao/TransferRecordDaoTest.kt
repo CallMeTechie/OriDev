@@ -171,4 +171,51 @@ class TransferRecordDaoTest {
         assertThat(updated.nextRetryAt).isEqualTo(nowMillis + 10_000L)
         assertThat(updated.retryCount).isEqualTo(1)
     }
+
+    @Test
+    fun clearFinished_deletesAllTerminalStatesAndLeavesInFlightRows() = runTest {
+        // Bug N — historically clearCompleted() only purged COMPLETED rows
+        // even though the toolbar exposes a single "Clear" button. Users
+        // with retry-loops that never recovered (wrong host key / expired
+        // creds) ended up with a stale list they couldn't prune. The new
+        // contract: every terminal row goes; in-flight rows stay.
+        val completedId = dao.insert(record(status = TransferStatus.COMPLETED))
+        val failedId = dao.insert(record(status = TransferStatus.FAILED))
+        val cancelledId = dao.insert(record(status = TransferStatus.CANCELLED))
+        val queuedId = dao.insert(record(status = TransferStatus.QUEUED))
+        val activeId = dao.insert(record(status = TransferStatus.ACTIVE))
+        val pausedId = dao.insert(record(status = TransferStatus.PAUSED))
+
+        val deleted = dao.clearFinished()
+
+        assertThat(deleted).isEqualTo(3)
+        assertThat(dao.getById(completedId)).isNull()
+        assertThat(dao.getById(failedId)).isNull()
+        assertThat(dao.getById(cancelledId)).isNull()
+        assertThat(dao.getById(queuedId)).isNotNull()
+        assertThat(dao.getById(activeId)).isNotNull()
+        assertThat(dao.getById(pausedId)).isNotNull()
+    }
+
+    @Test
+    fun clearFinished_emptyTable_returnsZero() = runTest {
+        val deleted = dao.clearFinished()
+
+        assertThat(deleted).isEqualTo(0)
+    }
+
+    @Test
+    fun clearFinished_onlyInFlightRows_returnsZeroAndKeepsAllRows() = runTest {
+        dao.insert(record(status = TransferStatus.QUEUED))
+        dao.insert(record(status = TransferStatus.ACTIVE))
+        dao.insert(record(status = TransferStatus.PAUSED))
+
+        val deleted = dao.clearFinished()
+
+        assertThat(deleted).isEqualTo(0)
+        val remaining = dao.getByStatuses(
+            listOf(TransferStatus.QUEUED, TransferStatus.ACTIVE, TransferStatus.PAUSED),
+        )
+        assertThat(remaining).hasSize(3)
+    }
 }

@@ -80,7 +80,7 @@ class TransferEngineServiceTest {
             // entered regardless of the fake executor's remoteSize.
             prefs.setOverwriteMode("overwrite")
             // Make sure the database is pristine at the start of the test.
-            dao.clearCompleted()
+            dao.clearFinished()
         }
     }
 

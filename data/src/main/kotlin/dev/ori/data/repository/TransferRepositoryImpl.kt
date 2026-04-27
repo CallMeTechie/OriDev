@@ -70,7 +70,7 @@ class TransferRepositoryImpl @Inject constructor(
         engineController.cancelTransfer(transferId)
     }
 
-    override suspend fun clearCompleted(): Int = dao.clearCompleted()
+    override suspend fun clearFinished(): Int = dao.clearFinished()
 
     override suspend fun updateProgress(id: Long, transferred: Long, total: Long) {
         dao.updateProgress(id, transferred, total)
