@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +35,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import androidx.compose.ui.draganddrop.mimeTypes
+import androidx.compose.ui.draganddrop.toAndroidDragEvent
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -60,6 +65,7 @@ import dev.ori.core.ui.icons.lucide.Settings
 import dev.ori.domain.model.FileItem
 import androidx.compose.foundation.lazy.grid.items as gridItems
 
+@OptIn(ExperimentalFoundationApi::class)
 @Suppress("LongParameterList")
 @Composable
 fun FileListPane(
@@ -80,13 +86,47 @@ fun FileListPane(
     onChmod: (FileItem) -> Unit,
     onTransfer: (FileItem) -> Unit = {},
     modifier: Modifier = Modifier,
-    onDragStart: (String) -> Unit = {},
-    onDragEnd: () -> Unit = {},
-    onDrop: () -> Unit = {},
+    // Bug G fix — drag-source callback. The row hands the platform a
+    // ClipData containing the result of `onDragStart(filePath)`, which
+    // resolves "current selection or just the long-pressed file" and
+    // primes the in-memory `DragState` for the pane-border highlight.
+    onDragStart: (filePath: String) -> List<String> = { listOf(it) },
+    // Bug G fix — drop-target callback. Fires only when the user
+    // releases the drag on this pane, with the decoded list of paths
+    // from the source's ClipData. This is the part that the previous
+    // gesture-detector implementation could never deliver: the source
+    // pane's `onDragEnd` had no idea what target pane the finger
+    // landed on.
+    onDropAt: (droppedPaths: List<String>) -> Unit = {},
 ) {
     var contextMenuFile by remember { mutableStateOf<FileItem?>(null) }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    val dropTarget = remember(onDropAt) {
+        object : DragAndDropTarget {
+            override fun onDrop(event: DragAndDropEvent): Boolean {
+                val clipData = event.toAndroidDragEvent().clipData
+                val paths = decodeClipData(clipData)
+                if (paths.isEmpty()) return false
+                onDropAt(paths)
+                return true
+            }
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            // Bug G fix — accept drops on the entire pane, not on
+            // individual items. `shouldStartDragAndDrop` filters to
+            // `text/plain` payloads (the only mime type our
+            // `encodeClipData` produces) so an unrelated system drag
+            // (e.g. an image dropped from another app) doesn't
+            // accidentally fire `InitiateTransfer`.
+            .dragAndDropTarget(
+                shouldStartDragAndDrop = { event -> event.mimeTypes().containsPlainText() },
+                target = dropTarget,
+            ),
+    ) {
         // Header
         Row(
             modifier = Modifier
@@ -241,9 +281,7 @@ fun FileListPane(
                                     onShowContextMenu(file)
                                 },
                                 onToggleSelection = { onToggleSelection(file.path) },
-                                onDragStart = { onDragStart(file.path) },
-                                onDragEnd = onDragEnd,
-                                onDrop = onDrop,
+                                onDragStart = onDragStart,
                             )
 
                             if (contextMenuFile == file) {
