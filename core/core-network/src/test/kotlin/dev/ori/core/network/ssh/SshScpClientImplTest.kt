@@ -151,4 +151,78 @@ class SshScpClientImplTest {
             io.mockk.unmockkStatic(java.io.File::class)
         }
     }
+
+    @Test fun mkdir_runsMkdirP() = kotlinx.coroutines.test.runTest {
+        val captured = setupExec(stdout = "", stderr = "", exit = 0)
+        sshClient.mkdir("s1", "/foo/bar")
+        assertThat(captured.captured).contains("mkdir -p '/foo/bar'")
+    }
+
+    @Test fun rename_runsMv() = kotlinx.coroutines.test.runTest {
+        val captured = setupExec(stdout = "", stderr = "", exit = 0)
+        sshClient.rename("s1", "/a", "/b")
+        assertThat(captured.captured).contains("mv -- '/a' '/b'")
+    }
+
+    @Test fun chmod_runsChmodOctal() = kotlinx.coroutines.test.runTest {
+        val captured = setupExec(stdout = "", stderr = "", exit = 0)
+        sshClient.chmod("s1", "/foo", 0b111_101_101) // 0755
+        assertThat(captured.captured).contains("chmod 755 '/foo'")
+    }
+
+    @Test fun fileSize_returnsSize() = kotlinx.coroutines.test.runTest {
+        setupExec(stdout = "12345\n", stderr = "", exit = 0)
+        assertThat(sshClient.fileSize("s1", "/foo")).isEqualTo(12345L)
+    }
+
+    @Test fun fileSize_statFails_returnsNull() = kotlinx.coroutines.test.runTest {
+        setupExec(stdout = "", stderr = "stat: cannot stat '/missing'\n", exit = 1)
+        assertThat(sshClient.fileSize("s1", "/missing")).isNull()
+    }
+
+    @Test fun mkdir_exitNonZero_throwsWithStderrFirstLine() = kotlinx.coroutines.test.runTest {
+        // Decision 11 contract: non-zero exit must surface, not silently succeed.
+        setupExec(stdout = "", stderr = "mkdir: cannot create directory '/root/x': Permission denied\n", exit = 1)
+        val ex = assertThrows(java.io.IOException::class.java) {
+            kotlinx.coroutines.runBlocking { sshClient.mkdir("s1", "/root/x") }
+        }
+        assertThat(ex.message).contains("mkdir failed")
+        assertThat(ex.message).contains("Permission denied")
+    }
+
+    @Test fun rename_exitNonZero_throws() = kotlinx.coroutines.test.runTest {
+        setupExec(stdout = "", stderr = "mv: cannot move '/a' to '/b': Operation not permitted\n", exit = 1)
+        val ex = assertThrows(java.io.IOException::class.java) {
+            kotlinx.coroutines.runBlocking { sshClient.rename("s1", "/a", "/b") }
+        }
+        assertThat(ex.message).contains("rename failed")
+        assertThat(ex.message).contains("Operation not permitted")
+    }
+
+    @Test fun chmod_exitNonZero_throws() = kotlinx.coroutines.test.runTest {
+        setupExec(stdout = "", stderr = "chmod: changing permissions of '/x': Operation not permitted\n", exit = 1)
+        val ex = assertThrows(java.io.IOException::class.java) {
+            kotlinx.coroutines.runBlocking { sshClient.chmod("s1", "/x", 0b111_101_101) }
+        }
+        assertThat(ex.message).contains("chmod failed")
+    }
+
+    private fun setupExec(stdout: String, stderr: String, exit: Int): io.mockk.CapturingSlot<String> {
+        val client = mockk<net.schmizz.sshj.SSHClient>(relaxed = true)
+        every { store.getSession("s1") } returns LiveSession(
+            client,
+            Protocol.SCP,
+            false,
+            java.util.concurrent.atomic.AtomicReference(NameCache.empty()),
+        )
+        val s = mockk<net.schmizz.sshj.connection.channel.direct.Session>(relaxed = true)
+        val c = mockk<net.schmizz.sshj.connection.channel.direct.Session.Command>(relaxed = true)
+        every { client.startSession() } returns s
+        val captured = io.mockk.slot<String>()
+        every { s.exec(capture(captured)) } returns c
+        every { c.inputStream } returns java.io.ByteArrayInputStream(stdout.toByteArray())
+        every { c.errorStream } returns java.io.ByteArrayInputStream(stderr.toByteArray())
+        every { c.exitStatus } returns exit
+        return captured
+    }
 }

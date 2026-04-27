@@ -132,15 +132,47 @@ class SshScpClientImpl @Inject constructor(
         onProgress: suspend (Long, Long) -> Unit,
     ): Unit = throw UnsupportedOperationException("SCP does not support resume")
 
-    override suspend fun mkdir(sessionId: String, path: String) = TODO("Task 13")
+    override suspend fun mkdir(sessionId: String, path: String) =
+        runShellOrFail(sessionId, "mkdir", "mkdir -p ${shellEscape(path)}")
 
-    override suspend fun rename(sessionId: String, oldPath: String, newPath: String) = TODO("Task 13")
+    override suspend fun rename(sessionId: String, oldPath: String, newPath: String) =
+        runShellOrFail(sessionId, "rename", "mv -- ${shellEscape(oldPath)} ${shellEscape(newPath)}")
 
-    override suspend fun chmod(sessionId: String, path: String, permissions: Int) = TODO("Task 13")
+    override suspend fun chmod(sessionId: String, path: String, permissions: Int) {
+        val asOctal = Integer.toOctalString(permissions).padStart(3, '0')
+        runShellOrFail(sessionId, "chmod", "chmod $asOctal ${shellEscape(path)}")
+    }
 
     override suspend fun delete(sessionId: String, paths: List<String>): DeleteResult = TODO("Task 14")
 
-    override suspend fun fileSize(sessionId: String, remotePath: String): Long? = TODO("Task 13")
+    override suspend fun fileSize(sessionId: String, remotePath: String): Long? = withContext(Dispatchers.IO) {
+        val live = sessionStore.getSession(sessionId)
+        val r = execCmd(live.client, "stat -c %s ${shellEscape(remotePath)}")
+        if (r.exitCode != 0) null else r.stdout.trim().toLongOrNull()
+    }
+
+    private suspend fun runShellOrFail(sessionId: String, verb: String, inner: String) =
+        withContext(Dispatchers.IO) {
+            val live = sessionStore.getSession(sessionId)
+            val r = execCmd(live.client, inner)
+            if (r.exitCode != 0) {
+                val first = r.stderr.lineSequence().firstOrNull()?.trim().orEmpty()
+                throw java.io.IOException("$verb failed: ${first.ifEmpty { "exit ${r.exitCode}" }}")
+            }
+        }
+
+    private fun execCmd(client: net.schmizz.sshj.SSHClient, cmd: String): ShellResult {
+        val session = client.startSession()
+        return try {
+            val c = session.exec(cmd)
+            val out = c.inputStream.bufferedReader().readText()
+            val err = c.errorStream.bufferedReader().readText()
+            c.join()
+            ShellResult(c.exitStatus ?: -1, out, err)
+        } finally {
+            session.close()
+        }
+    }
 }
 
 internal fun shellEscape(path: String): String = "'" + path.replace("'", "'\\''") + "'"
