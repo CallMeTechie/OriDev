@@ -1,5 +1,6 @@
 package dev.ori.core.network.ssh
 
+import android.content.Context
 import com.google.common.truth.Truth.assertThat
 import dev.ori.core.common.model.Protocol
 import io.mockk.every
@@ -49,7 +50,7 @@ class SshSftpClientImplTest {
     @BeforeEach
     fun setUp() {
         sessionStore = SshSessionStore(mockk(relaxed = true))
-        sshClient = SshSftpClientImpl(sessionStore)
+        sshClient = SshSftpClientImpl(sessionStore, mockk<Context>(relaxed = true))
         sshNetworkClient = mockk(relaxed = true)
         sftp = mockk(relaxed = true)
         every { sshNetworkClient.isConnected } returns true

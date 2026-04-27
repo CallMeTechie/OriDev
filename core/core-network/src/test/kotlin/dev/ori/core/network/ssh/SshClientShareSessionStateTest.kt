@@ -1,5 +1,6 @@
 package dev.ori.core.network.ssh
 
+import android.content.Context
 import com.google.common.truth.Truth.assertThat
 import dev.ori.core.common.model.Protocol
 import io.mockk.every
@@ -38,7 +39,7 @@ class SshClientShareSessionStateTest {
         (sessionsField.get(sharedStore) as ConcurrentHashMap<String, LiveSession>)["shared-id"] =
             LiveSession(client, Protocol.SCP, false, AtomicReference(NameCache.empty()))
 
-        val sftp = SshSftpClientImpl(sharedStore)
+        val sftp = SshSftpClientImpl(sharedStore, mockk<Context>(relaxed = true))
         val scp = SshScpClientImpl(sharedStore)
 
         // Act + Assert: both impls see the session as connected.
