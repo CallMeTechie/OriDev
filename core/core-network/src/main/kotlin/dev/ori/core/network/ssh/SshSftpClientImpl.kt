@@ -1,31 +1,22 @@
 package dev.ori.core.network.ssh
 
+import dev.ori.core.common.model.Protocol
+import dev.ori.core.network.model.DeleteResult
 import dev.ori.core.network.model.RemoteFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import net.schmizz.sshj.SSHClient
 import net.schmizz.sshj.sftp.SFTPClient
-import net.schmizz.sshj.transport.DisconnectListener
-import net.schmizz.sshj.userauth.keyprovider.PKCS8KeyFile
-import java.io.ByteArrayInputStream
-import java.io.IOException
-import java.io.InputStreamReader
 import java.io.RandomAccessFile
-import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class SshClientImpl @Inject constructor(
-    private val hostKeyVerifier: OriDevHostKeyVerifier,
-    private val shellManager: SshShellManager,
+class SshSftpClientImpl @Inject constructor(
+    private val sessionStore: SshSessionStore,
 ) : SshClient {
 
-    private val sessions = ConcurrentHashMap<String, SSHClient>()
-
     /**
-     * See [SshClient.connect] for the security contract — this implementation
+     * See [SshClient.connect] for the security contract — [SshSessionStore]
      * zero-fills [password] in a `try/finally` on both success and failure
      * paths. The intermediate `String(password)` passed to SSHJ's
      * `authPassword` is a limitation of the SSHJ API and is tracked as a
@@ -37,65 +28,15 @@ class SshClientImpl @Inject constructor(
         username: String,
         password: CharArray?,
         privateKey: ByteArray?,
-    ): SshSession = withContext(Dispatchers.IO) {
-        // SSHJ's SocketClient.connect() does blocking network I/O —
-        // without this switch it raises NetworkOnMainThreadException
-        // on API 11+ (we caught it on Pixel Fold API 36 via the
-        // NonFatalErrorLogger). All other SshClientImpl methods
-        // already route through Dispatchers.IO; this one was the
-        // outlier.
-        try {
-            val client = SSHClient()
-            client.addHostKeyVerifier(hostKeyVerifier)
-            client.connect(host, port)
-
-            try {
-                when {
-                    privateKey != null -> {
-                        val keyProvider = PKCS8KeyFile()
-                        keyProvider.init(InputStreamReader(ByteArrayInputStream(privateKey)))
-                        client.authPublickey(username, keyProvider)
-                    }
-                    password != null -> {
-                        // SSHJ's authPassword takes a String internally — we cannot avoid the
-                        // transient JVM String allocation. The caller's CharArray IS wiped in
-                        // the outer `finally`.
-                        client.authPassword(username, String(password))
-                    }
-                    else -> {
-                        throw IllegalArgumentException("Either password or private key must be provided")
-                    }
-                }
-
-                client.connection.keepAlive.keepAliveInterval = KEEPALIVE_INTERVAL_SECONDS
-
-                val sessionId = UUID.randomUUID().toString()
-                sessions[sessionId] = client
-                registerDisconnectCleanup(sessionId, client)
-
-                return@withContext SshSession(
-                    sessionId = sessionId,
-                    profileId = 0,
-                    host = host,
-                    port = port,
-                    connectedAt = System.currentTimeMillis(),
-                )
-            } catch (e: Exception) {
-                client.close()
-                throw e
-            }
-        } finally {
-            password?.fill('\u0000')
-        }
-    }
+        protocol: Protocol,
+    ): SshSession = sessionStore.connect(host, port, username, password, privateKey, protocol)
 
     override suspend fun disconnect(sessionId: String) {
-        sessions.remove(sessionId)?.close()
+        sessionStore.disconnect(sessionId)
     }
 
-    override suspend fun isConnected(sessionId: String): Boolean {
-        return sessions[sessionId]?.isConnected == true
-    }
+    override suspend fun isConnected(sessionId: String): Boolean =
+        sessionStore.isConnected(sessionId)
 
     override suspend fun listFiles(sessionId: String, path: String): List<RemoteFile> {
         return withSftpClient(sessionId) { sftp ->
@@ -114,7 +55,7 @@ class SshClientImpl @Inject constructor(
     }
 
     override suspend fun executeCommand(sessionId: String, command: String): CommandResult {
-        val client = getClient(sessionId)
+        val client = sessionStore.getSession(sessionId).client
         val session = client.startSession()
         return try {
             val cmd = session.exec(command)
@@ -217,7 +158,7 @@ class SshClientImpl @Inject constructor(
         offsetBytes: Long,
         onProgress: suspend (transferred: Long, total: Long) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
-        val sftp = getClient(sessionId).newSFTPClient()
+        val sftp = sessionStore.getSession(sessionId).client.newSFTPClient()
         try {
             val localFile = java.io.File(localPath)
             val localSize = localFile.length()
@@ -289,7 +230,7 @@ class SshClientImpl @Inject constructor(
         offsetBytes: Long,
         onProgress: suspend (transferred: Long, total: Long) -> Unit,
     ): Unit = withContext(Dispatchers.IO) {
-        val sftp = getClient(sessionId).newSFTPClient()
+        val sftp = sessionStore.getSession(sessionId).client.newSFTPClient()
         try {
             val remoteFile = sftp.open(remotePath)
             try {
@@ -337,10 +278,54 @@ class SshClientImpl @Inject constructor(
             }
         }
 
-    override suspend fun deleteFile(sessionId: String, path: String) {
-        withSftpClient(sessionId) { sftp ->
-            sftp.rm(path)
+    override suspend fun delete(sessionId: String, paths: List<String>): DeleteResult =
+        withContext(Dispatchers.IO) {
+            val ok = mutableListOf<String>()
+            val bad = mutableListOf<Pair<String, String>>()
+            withSftpClient(sessionId) { sftp ->
+                for (p in paths) {
+                    try {
+                        sftp.rm(p)
+                        ok += p
+                    } catch (e: Exception) {
+                        bad += p to (e.message ?: e.javaClass.simpleName)
+                    }
+                }
+            }
+            DeleteResult(ok, bad)
         }
+
+    override suspend fun uploadFile(
+        sessionId: String,
+        sourceUri: android.net.Uri,
+        remotePath: String,
+        contentResolver: android.content.ContentResolver,
+        onProgress: (Long, Long) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        val length = try {
+            contentResolver.openFileDescriptor(sourceUri, "r")?.use { it.statSize } ?: 0L
+        } catch (_: Exception) {
+            0L
+        }
+        val src = SafSourceFile(
+            sourceUri,
+            contentResolver,
+            length,
+            sourceUri.lastPathSegment ?: "upload",
+        )
+        withSftpClient(sessionId) { sftp -> sftp.fileTransfer.upload(src, remotePath) }
+    }
+
+    // mirror downloadFile, also streamed via SafDestFile per Decision 10
+    override suspend fun downloadFile(
+        sessionId: String,
+        remotePath: String,
+        destUri: android.net.Uri,
+        contentResolver: android.content.ContentResolver,
+        onProgress: (Long, Long) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        val dst = SafDestFile(destUri, contentResolver, destUri.lastPathSegment ?: "download")
+        withSftpClient(sessionId) { sftp -> sftp.fileTransfer.download(remotePath, dst) }
     }
 
     override suspend fun rename(sessionId: String, oldPath: String, newPath: String) {
@@ -366,46 +351,15 @@ class SshClientImpl @Inject constructor(
         cols: Int,
         rows: Int,
     ): ShellHandle = withContext(Dispatchers.IO) {
-        val client = getClient(sessionId)
-        shellManager.openShell(client, cols, rows)
+        val client = sessionStore.getSession(sessionId).client
+        SshShellManager().openShell(client, cols, rows)
     }
 
-    // Defense-in-depth alongside `registerDisconnectCleanup`: if the SSHJ
-    // Reader thread observed EOF but the cleanup callback hasn't run yet
-    // (or fired before listFiles arrived on a stale handle), reject the
-    // dead client up front instead of letting SSHJ raise the much vaguer
-    // `IllegalStateException: Not connected` deep inside `newSFTPClient()`.
-    // Reproduced 3× in oridev-error-listfiles-right-2026-04-25-22-03/04*.
+    // Defense-in-depth: `SshSessionStore.getSession` already rejects disconnected
+    // clients, but we also gate here so every SFTP operation gets the same
+    // IOException (not SSHJ's internal IllegalStateException) if the session
+    // was already cleaned up before we reach `newSFTPClient()`.
     //
-    // Throws `IOException` (not `IllegalStateException`) so the existing
-    // `catch (e: IOException)` blocks in TerminalViewModel.openNewTab and
-    // ListFilesUseCase route this through the same UI-error channel as
-    // SSHJ's own ConnectionException (the parent type). Until v0.34.3 we
-    // threw IllegalStateException, which slipped past those catches and
-    // crashed the app on Main with "No active session with id: …" —
-    // reproduced 2× in oridev-crash-2026-04-26-19-{19,25}-*.txt.
-    private fun getClient(sessionId: String): SSHClient {
-        val client = sessions[sessionId]
-            ?: throw IOException("No active SSH session: $sessionId")
-        if (!client.isConnected) {
-            sessions.remove(sessionId, client)
-            runCatching { client.close() }
-            throw IOException("SSH session terminated: $sessionId")
-        }
-        return client
-    }
-
-    // Registered immediately after the SSHJ handshake succeeds. Fires from
-    // the Reader thread the moment the transport observes EOF or any
-    // disconnect reason, so a subsequent `connect()` for the same profile
-    // doesn't have to wait for the old (dead) handle to be reaped from
-    // the map.
-    private fun registerDisconnectCleanup(sessionId: String, client: SSHClient) {
-        client.transport.disconnectListener = DisconnectListener { _, _ ->
-            sessions.remove(sessionId, client)
-        }
-    }
-
     // SSHJ's `newSFTPClient()` opens a fresh SFTP channel which writes to the
     // socket synchronously, and every `SFTPClient` op below similarly does
     // blocking network I/O. Without the explicit IO switch all eight callers
@@ -416,7 +370,7 @@ class SshClientImpl @Inject constructor(
     // times in oridev-error-listfiles-right-2026-04-25-22-04-*.txt.
     private suspend fun <T> withSftpClient(sessionId: String, block: (SFTPClient) -> T): T =
         withContext(Dispatchers.IO) {
-            val client = getClient(sessionId)
+            val client = sessionStore.getSession(sessionId).client
             val sftp = client.newSFTPClient()
             try {
                 block(sftp)
@@ -426,7 +380,6 @@ class SshClientImpl @Inject constructor(
         }
 
     companion object {
-        private const val KEEPALIVE_INTERVAL_SECONDS = 15
         private const val TRANSFER_BUFFER_SIZE = 32_768
         private const val CHUNK_SIZE = 32 * 1024
     }

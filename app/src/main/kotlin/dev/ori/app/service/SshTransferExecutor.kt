@@ -1,6 +1,7 @@
 package dev.ori.app.service
 
 import dev.ori.core.network.ssh.SshClient
+import dev.ori.data.di.DefaultSshClient
 import dev.ori.domain.repository.ConnectionRepository
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,7 +20,7 @@ import javax.inject.Singleton
  */
 @Singleton
 internal class SshTransferExecutor @Inject constructor(
-    private val sshClient: SshClient,
+    @DefaultSshClient private val sshClient: SshClient,
     private val connectionRepository: ConnectionRepository,
 ) : TransferExecutor {
 

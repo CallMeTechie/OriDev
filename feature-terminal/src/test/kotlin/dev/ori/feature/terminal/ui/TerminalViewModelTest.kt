@@ -156,6 +156,7 @@ class TerminalViewModelTest {
         host = "host-$profileId",
         port = 22,
         connectedAt = 0L,
+        protocol = dev.ori.core.common.model.Protocol.SSH,
     )
 
     private fun stubSshConnection() {
@@ -181,6 +182,7 @@ class TerminalViewModelTest {
                 host = "192.168.1.1",
                 port = 22,
                 connectedAt = System.currentTimeMillis(),
+                protocol = dev.ori.core.common.model.Protocol.SSH,
             ),
         )
         coEvery { sshClient.openShell(any(), any(), any()) } returns shellHandle
@@ -225,12 +227,14 @@ class TerminalViewModelTest {
             Session(
                 id = "session-1", profileId = 1L, profileName = "Server 1",
                 host = "h1", port = 22, connectedAt = 0L,
+                protocol = dev.ori.core.common.model.Protocol.SSH,
             ),
         )
         coEvery { sessionRegistry.connect(2L) } returns kotlin.Result.success(
             Session(
                 id = "session-2", profileId = 2L, profileName = "Server 2",
                 host = "h2", port = 22, connectedAt = 0L,
+                protocol = dev.ori.core.common.model.Protocol.SSH,
             ),
         )
         val shellInputStream = ByteArrayInputStream(ByteArray(0))

@@ -2,6 +2,7 @@ package dev.ori.data.repository
 
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.data.dao.ServerProfileDao
+import dev.ori.data.di.DefaultSshClient
 import dev.ori.data.mapper.toDomain
 import dev.ori.data.mapper.toEntity
 import dev.ori.domain.model.Connection
@@ -32,7 +33,7 @@ import javax.inject.Singleton
 @Singleton
 class ConnectionRepositoryImpl @Inject constructor(
     private val serverProfileDao: ServerProfileDao,
-    @Suppress("unused") private val sshClient: SshClient,
+    @DefaultSshClient @Suppress("unused") private val sshClient: SshClient,
     private val credentialStore: CredentialStore,
     private val sessionRegistry: SessionRegistry,
 ) : ConnectionRepository {

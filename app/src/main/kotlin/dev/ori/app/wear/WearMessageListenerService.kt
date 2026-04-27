@@ -5,15 +5,18 @@ import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
 import com.google.android.gms.wearable.WearableListenerService
 import dagger.hilt.android.AndroidEntryPoint
+import dev.ori.core.common.model.Protocol
 import dev.ori.core.network.ssh.SshClient
 import dev.ori.domain.model.WearPaths
 import dev.ori.domain.repository.ConnectionRepository
+import dev.ori.domain.repository.SessionRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.io.IOException
 import java.nio.ByteBuffer
 import javax.inject.Inject
 
@@ -35,7 +38,9 @@ class WearMessageListenerService : WearableListenerService() {
 
     @Inject lateinit var connectionRepository: ConnectionRepository
 
-    @Inject lateinit var sshClient: SshClient
+    @Inject lateinit var sessionRegistry: SessionRegistry
+
+    @Inject lateinit var clients: Map<Protocol, @JvmSuppressWildcards SshClient>
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -75,8 +80,17 @@ class WearMessageListenerService : WearableListenerService() {
             return
         }
 
+        val protocol = sessionRegistry.openSessions.value
+            .firstOrNull { it.id == sessionId }?.protocol
+        if (protocol == null) {
+            sendResponse(event.sourceNodeId, requestId, EXIT_CODE_ERROR, "", "Session not in registry", false)
+            return
+        }
+
         runCatching {
-            val result = sshClient.executeCommand(sessionId, command)
+            val client = clients[protocol]
+                ?: throw IOException("Protocol $protocol not supported")
+            val result = client.executeCommand(sessionId, command)
             val stdout = result.stdout.take(STDOUT_LIMIT)
             val stderr = result.stderr.take(STDERR_LIMIT)
             val truncated = result.stdout.length > STDOUT_LIMIT || result.stderr.length > STDERR_LIMIT

@@ -197,6 +197,7 @@ class ConnectionListViewModelTest {
                 host = testProfile.host,
                 port = testProfile.port,
                 connectedAt = 1_000L,
+                protocol = testProfile.protocol,
             ),
         )
 
@@ -253,6 +254,7 @@ class ConnectionListViewModelTest {
                         host = testProfile.host,
                         port = testProfile.port,
                         connectedAt = 1_000L,
+                        protocol = testProfile.protocol,
                     ),
                 )
                 assertThat(awaitItem().map { it.id }).containsExactly(1L)
@@ -272,6 +274,7 @@ class ConnectionListViewModelTest {
                 host = testProfile.host,
                 port = testProfile.port,
                 connectedAt = 1_000L,
+                protocol = testProfile.protocol,
             )
             every { sessionRegistry.openSessions } returns
                 MutableStateFlow(listOf(session)).asStateFlow()
@@ -312,6 +315,7 @@ class ConnectionListViewModelTest {
                     host = testProfile.host,
                     port = testProfile.port,
                     connectedAt = 1_000L,
+                    protocol = testProfile.protocol,
                 ),
             ),
         )
@@ -370,6 +374,7 @@ class ConnectionListViewModelTest {
                 host = "x.local",
                 port = 22,
                 connectedAt = 1L,
+                protocol = testProfile.protocol,
             ),
         )
 

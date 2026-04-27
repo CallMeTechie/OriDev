@@ -355,7 +355,7 @@ class FileManagerViewModelTest {
         val focusFlow = MutableStateFlow<String?>(null)
         every { sessionRegistry.focusedSessionId } returns focusFlow
         every { sessionRegistry.openSessions } returns MutableStateFlow(
-            listOf(Session("s-A", 1L, "NAS", "nas.local", 22, 1L)),
+            listOf(Session("s-A", 1L, "NAS", "nas.local", 22, 1L, dev.ori.core.common.model.Protocol.SFTP)),
         )
         coEvery { remoteRepository.listFiles("/") } returns emptyList()
 
@@ -394,7 +394,7 @@ class FileManagerViewModelTest {
         val focusFlow = MutableStateFlow<String?>(null)
         every { sessionRegistry.focusedSessionId } returns focusFlow
         every { sessionRegistry.openSessions } returns MutableStateFlow(
-            listOf(Session("s1", 1L, "NAS", "nas.local", 22, 1L)),
+            listOf(Session("s1", 1L, "NAS", "nas.local", 22, 1L, dev.ori.core.common.model.Protocol.SFTP)),
         )
         coEvery { remoteRepository.listFiles(any()) } returns emptyList()
 
@@ -420,7 +420,7 @@ class FileManagerViewModelTest {
         val focusFlow = MutableStateFlow<String?>(null)
         every { sessionRegistry.focusedSessionId } returns focusFlow
         every { sessionRegistry.openSessions } returns MutableStateFlow(
-            listOf(Session("s42", 42L, "NAS", "nas.local", 22, 1L)),
+            listOf(Session("s42", 42L, "NAS", "nas.local", 22, 1L, dev.ori.core.common.model.Protocol.SFTP)),
         )
         sessionResumePrefs.remotePathsValue.value = mapOf(42L to "/persisted")
         coEvery { remoteRepository.listFiles("/persisted") } returns emptyList()
