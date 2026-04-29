@@ -2,8 +2,8 @@ package dev.ori.feature.filemanager.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.draganddrop.dragAndDropSource
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +26,7 @@ import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -68,21 +69,21 @@ fun FileItemRow(
         modifier = modifier
             .fillMaxWidth()
             .background(backgroundColor)
-            // Bug K fix — switch from `combinedClickable` (single + long) to a
-            // plain `clickable` that handles only the single-tap. The
-            // long-press is exclusively claimed by `dragAndDropSource` below;
-            // running both gesture detectors over the same row meant
-            // `dragAndDropSource` swallowed the down-event before
-            // `combinedClickable.onClick` could see the up-event, so on a
-            // Pixel Fold + remote SSH-pane the user reported "Klick passiert
-            // nichts". Long-press now starts the drag, and the
-            // explicit 3-dot menu button at the end of the row replaces the
-            // old long-press → context menu shortcut.
-            //
-            // `clickable` MUST come BEFORE `dragAndDropSource` so the
-            // platform's tap recogniser is the first to consume the up-event;
-            // the drag source only fires on long-press anyway.
-            .clickable(onClick = onClick)
+            // Bug R fix — single-tap on a row was still swallowed in List
+            // mode under v0.35.10/0.35.11 even after the Bug-K-Click fix
+            // that swapped `combinedClickable` for `clickable`. Compose-
+            // Foundation 2026.03's `dragAndDropSource` installs an internal
+            // pointer-input modifier that races the platform tap-recogniser
+            // for the down-event on Pixel Fold; the previous fix only moved
+            // the long-press out of `combinedClickable` but did not restore
+            // priority on the down-event itself. Switching to an explicit
+            // `pointerInput` + `detectTapGestures` puts the tap detector
+            // first in the modifier chain so the up-event lands on us
+            // before `dragAndDropSource` can claim the gesture. Tile mode
+            // (`FileItemCell`) is unaffected because it has no DnD source.
+            .pointerInput(file.path) {
+                detectTapGestures(onTap = { onClick() })
+            }
             .semantics(mergeDescendants = true) {
                 contentDescription = rowDescription
                 stateDescription = selectionState

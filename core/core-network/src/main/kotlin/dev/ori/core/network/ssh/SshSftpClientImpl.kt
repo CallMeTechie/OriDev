@@ -365,7 +365,7 @@ class SshSftpClientImpl @Inject constructor(
             sourceUri,
             contentResolver,
             length,
-            sourceUri.lastPathSegment ?: "upload",
+            safDisplayName(sourceUri, contentResolver, fallback = "upload"),
         )
         withSftpClient(sessionId) { sftp -> sftp.fileTransfer.upload(src, remotePath) }
     }
@@ -378,7 +378,7 @@ class SshSftpClientImpl @Inject constructor(
         contentResolver: android.content.ContentResolver,
         onProgress: (Long, Long) -> Unit,
     ) = withContext(Dispatchers.IO) {
-        val dst = SafDestFile(destUri, contentResolver, destUri.lastPathSegment ?: "download")
+        val dst = SafDestFile(destUri, contentResolver, safDisplayName(destUri, contentResolver, fallback = "download"))
         withSftpClient(sessionId) { sftp -> sftp.fileTransfer.download(remotePath, dst) }
     }
 
@@ -475,7 +475,7 @@ class SshSftpClientImpl @Inject constructor(
             sourceUri,
             resolver,
             length,
-            sourceUri.lastPathSegment ?: "upload",
+            safDisplayName(sourceUri, resolver, fallback = "upload"),
         )
         onProgress(0L, length)
         withSftpClient(sessionId) { sftp -> sftp.fileTransfer.upload(src, remotePath) }
@@ -506,7 +506,7 @@ class SshSftpClientImpl @Inject constructor(
         }
         val destUri = Uri.parse(localPath)
         val resolver = contentResolver
-        val dst = SafDestFile(destUri, resolver, destUri.lastPathSegment ?: "download")
+        val dst = SafDestFile(destUri, resolver, safDisplayName(destUri, resolver, fallback = "download"))
         val total = withSftpClient(sessionId) { sftp ->
             try {
                 sftp.stat(remotePath).size
