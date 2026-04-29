@@ -6,6 +6,7 @@ import dev.ori.core.common.model.Protocol
 import dev.ori.core.network.model.DeleteResult
 import dev.ori.core.network.model.RemoteFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.UUID
 import javax.inject.Inject
@@ -32,8 +33,14 @@ class SshScpClientImpl @Inject constructor(
 
     override suspend fun openShell(sessionId: String, cols: Int, rows: Int): ShellHandle =
         withContext(Dispatchers.IO) {
-            val client = sessionStore.getSession(sessionId).client
-            val session = client.startSession()
+            // Bug Q fix — serialise via channelOpenMutex (see
+            // SshSftpClientImpl.openShell). Concurrent shell-opens on the
+            // same SSHClient drove SSHJ's Reader thread into a state where
+            // the transport tore down with a local-side EOF.
+            val live = sessionStore.getSession(sessionId)
+            val session = live.channelOpenMutex.withLock {
+                live.client.startSession()
+            }
             session.allocatePTY("xterm", cols, rows, 0, 0, emptyMap())
             val shell = session.startShell()
             val shellSession = SshShellSession(session, shell)
