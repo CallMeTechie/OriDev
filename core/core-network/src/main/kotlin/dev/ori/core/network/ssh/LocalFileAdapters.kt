@@ -2,12 +2,47 @@ package dev.ori.core.network.ssh
 
 import android.content.ContentResolver
 import android.net.Uri
+import android.provider.OpenableColumns
 import net.schmizz.sshj.xfer.LocalDestFile
 import net.schmizz.sshj.xfer.LocalFileFilter
 import net.schmizz.sshj.xfer.LocalSourceFile
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+
+/**
+ * Resolves the user-facing display name for a SAF [Uri].
+ *
+ * Bug R — `Uri.lastPathSegment` returns the URL-encoded last segment of
+ * the URI (e.g. `raw:%2Fstorage%2Femulated%2F0%2FDocuments%2Fpfad%2Fzur%2Fdatei.txt`),
+ * which leaks the percent-encoded `%2F` separators into uploaded
+ * filenames — users observed remote files named like
+ * `pfad%zur%datei.txt`. The correct path is to query the
+ * [ContentResolver] for [OpenableColumns.DISPLAY_NAME] which the SAF
+ * provider returns as the human-readable name; fall back to the raw
+ * last segment only if the provider doesn't supply a display name
+ * (very rare — non-Openable URIs).
+ */
+internal fun safDisplayName(
+    uri: Uri,
+    resolver: ContentResolver,
+    fallback: String,
+): String = queryDisplayName(uri, resolver) ?: uri.lastPathSegment ?: fallback
+
+private fun queryDisplayName(uri: Uri, resolver: ContentResolver): String? = try {
+    resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+        readDisplayNameRow(cursor)
+    }
+} catch (@Suppress("TooGenericExceptionCaught") _: Exception) {
+    null
+}
+
+private fun readDisplayNameRow(cursor: android.database.Cursor): String? {
+    if (!cursor.moveToFirst()) return null
+    val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+    if (idx < 0) return null
+    return cursor.getString(idx)?.takeIf { it.isNotBlank() }
+}
 
 internal class SafSourceFile(
     private val uri: Uri,

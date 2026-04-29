@@ -96,7 +96,12 @@ class SshScpClientImpl @Inject constructor(
         val length = try {
             contentResolver.openFileDescriptor(sourceUri, "r")?.use { it.statSize } ?: 0L
         } catch (_: Exception) { 0L }
-        val src = SafSourceFile(sourceUri, contentResolver, length, sourceUri.lastPathSegment ?: "upload")
+        val src = SafSourceFile(
+            sourceUri,
+            contentResolver,
+            length,
+            safDisplayName(sourceUri, contentResolver, fallback = "upload"),
+        )
         client.newSCPFileTransfer().upload(src, remotePath)
     }
 
@@ -119,7 +124,7 @@ class SshScpClientImpl @Inject constructor(
         onProgress: (Long, Long) -> Unit,
     ) = withContext(Dispatchers.IO) {
         val client = sessionStore.getSession(sessionId).client
-        val dst = SafDestFile(destUri, contentResolver, destUri.lastPathSegment ?: "download")
+        val dst = SafDestFile(destUri, contentResolver, safDisplayName(destUri, contentResolver, fallback = "download"))
         client.newSCPFileTransfer().download(remotePath, dst)
     }
 
