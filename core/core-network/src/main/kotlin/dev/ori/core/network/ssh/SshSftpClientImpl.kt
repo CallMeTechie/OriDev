@@ -8,6 +8,7 @@ import dev.ori.core.common.model.Protocol
 import dev.ori.core.network.model.DeleteResult
 import dev.ori.core.network.model.RemoteFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.schmizz.sshj.sftp.SFTPClient
 import java.io.IOException
@@ -63,16 +64,20 @@ class SshSftpClientImpl @Inject constructor(
     }
 
     override suspend fun executeCommand(sessionId: String, command: String): CommandResult {
-        val client = sessionStore.getSession(sessionId).client
+        val live = sessionStore.getSession(sessionId)
         // Bug K fix — `client.startSession()` may throw IllegalStateException
         // ("Not connected") if the SSHJ Reader thread invalidated the transport
         // between getSession's check and now. Mirror the IOException
         // translation done in `openShell` / `withSftpClient` so the Worker's
         // auto-reconnect path (Bug J) can recover instead of crashing.
-        val sshjSession = try {
-            client.startSession()
-        } catch (e: IllegalStateException) {
-            throw IOException("SSH session terminated mid-operation: $sessionId", e)
+        // Bug Q fix — also serialise via channelOpenMutex so concurrent
+        // executeCommand + openShell on the same client cannot collide.
+        val sshjSession = live.channelOpenMutex.withLock {
+            try {
+                live.client.startSession()
+            } catch (e: IllegalStateException) {
+                throw IOException("SSH session terminated mid-operation: $sessionId", e)
+            }
         }
         return try {
             val cmd = sshjSession.exec(command)
@@ -184,10 +189,14 @@ class SshSftpClientImpl @Inject constructor(
         // crashed with `IllegalStateException("Not connected")` when the
         // SSHJ Reader thread pruned the transport between getSession's
         // check and `newSFTPClient()`.
-        val sftp = try {
-            sessionStore.getSession(sessionId).client.newSFTPClient()
-        } catch (e: IllegalStateException) {
-            throw IOException("SSH session terminated mid-operation: $sessionId", e)
+        // Bug Q fix — serialise via channelOpenMutex (see openShell).
+        val live = sessionStore.getSession(sessionId)
+        val sftp = live.channelOpenMutex.withLock {
+            try {
+                live.client.newSFTPClient()
+            } catch (e: IllegalStateException) {
+                throw IOException("SSH session terminated mid-operation: $sessionId", e)
+            }
         }
         try {
             val localFile = java.io.File(localPath)
@@ -267,10 +276,14 @@ class SshSftpClientImpl @Inject constructor(
         // Bug K fix — same race-window translation as `withSftpClient`
         // (see comment there). Mirrors the upload path so resumable
         // downloads also surface IOException for the Worker retry.
-        val sftp = try {
-            sessionStore.getSession(sessionId).client.newSFTPClient()
-        } catch (e: IllegalStateException) {
-            throw IOException("SSH session terminated mid-operation: $sessionId", e)
+        // Bug Q fix — serialise via channelOpenMutex (see openShell).
+        val live = sessionStore.getSession(sessionId)
+        val sftp = live.channelOpenMutex.withLock {
+            try {
+                live.client.newSFTPClient()
+            } catch (e: IllegalStateException) {
+                throw IOException("SSH session terminated mid-operation: $sessionId", e)
+            }
         }
         try {
             val remoteFile = sftp.open(remotePath)
@@ -407,11 +420,19 @@ class SshSftpClientImpl @Inject constructor(
         cols: Int,
         rows: Int,
     ): ShellHandle = withContext(Dispatchers.IO) {
-        val client = sessionStore.getSession(sessionId).client
-        try {
-            SshShellManager().openShell(client, cols, rows)
-        } catch (e: IllegalStateException) {
-            throw IOException("SSH session terminated mid-operation: $sessionId", e)
+        val live = sessionStore.getSession(sessionId)
+        // Bug Q — serialise channel-opens on the same SSHClient. Without the
+        // mutex, two concurrent `openShell` calls (observed during foldable-
+        // split restore on Pixel Fold, see crash reports 2026-04-29 16:24
+        // and 16:51) raced inside SSHJ and tore the transport down with a
+        // local-side EOF — even though the server log shows the connection
+        // is still alive.
+        live.channelOpenMutex.withLock {
+            try {
+                SshShellManager().openShell(live.client, cols, rows)
+            } catch (e: IllegalStateException) {
+                throw IOException("SSH session terminated mid-operation: $sessionId", e)
+            }
         }
     }
 
@@ -522,11 +543,17 @@ class SshSftpClientImpl @Inject constructor(
     // take the Bug J auto-reconnect path instead of crashing.
     private suspend fun <T> withSftpClient(sessionId: String, block: (SFTPClient) -> T): T =
         withContext(Dispatchers.IO) {
-            val client = sessionStore.getSession(sessionId).client
-            val sftp = try {
-                client.newSFTPClient()
-            } catch (e: IllegalStateException) {
-                throw IOException("SSH session terminated mid-operation: $sessionId", e)
+            val live = sessionStore.getSession(sessionId)
+            // Bug Q fix — serialise via channelOpenMutex (see openShell). The
+            // mutex protects only the channel-open RTT; the block itself
+            // runs unlocked so SFTP operations can still proceed in
+            // parallel once the channel is established.
+            val sftp = live.channelOpenMutex.withLock {
+                try {
+                    live.client.newSFTPClient()
+                } catch (e: IllegalStateException) {
+                    throw IOException("SSH session terminated mid-operation: $sessionId", e)
+                }
             }
             try {
                 block(sftp)
