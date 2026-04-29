@@ -33,3 +33,8 @@ secrets.properties
 
 # Git worktrees (Phase 11 mockup fidelity work happens in isolated worktrees)
 .worktrees/
+
+# Crash/error reports pulled from devices — may contain hostnames, paths, or
+# user data; analysed locally and not part of the source tree.
+error/
+.claude/
