@@ -52,7 +52,7 @@ play-services-ads = "23.6.0"
 wear-compose = "1.6.1"
 wear-tiles = "1.6.0"
 play-services-wearable = "19.0.0"
-horologist = "0.6.22"
+horologist = "0.7.15"
 
 # Testing
 junit5 = "5.11.4"
